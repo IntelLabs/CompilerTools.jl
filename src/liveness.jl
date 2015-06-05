@@ -465,6 +465,46 @@ function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
     (new_bb, new_goto_stmt)
 end
 
+function insertat!(a, value, idx)
+   splice!(a, idx:idx, [value, a[idx]])
+end
+
+function insertStatementAfter(bl :: BlockLiveness, block, stmt_idx, new_stmt)
+    insertStatementInternal(bl, block, stmt_idx, new_stmt, true)
+end
+
+function insertStatementBefore(bl :: BlockLiveness, block, stmt_idx, new_stmt)
+    insertStatementInternal(bl, block, stmt_idx, new_stmt, false)
+end
+
+function insertStatementInternal(bl :: BlockLiveness, block, stmt_idx, new_stmt, after :: Bool)
+    temp_bb = BasicBlock(-9999999999)
+    live_res = expr_state()
+    live_res.basic_blocks = bl.basic_blocks
+    live_res.cur_bb = temp_bb
+    live_res.top_level_number = getDistinctStatementNum(bl)
+    from_expr(new_stmt, 1, live_res, true, not_handled, nothing)
+
+    assert(length(temp_bb.statements) == 1)
+    stmt = temp_bb.statements[1]
+
+    for bb in bl.basic_blocks
+      stmts = bb[2].statements
+      # Scan each statement in this block for a matching statement number.
+      for j = 1:length(stmts)
+        if stmts[j].index == stmt_idx
+          if after
+            insertat!(stmts, stmt, j+1)
+          else
+            insertat!(stmts, stmt, j)
+          end
+          return nothing
+        end
+      end
+    end
+    assert(0) 
+end
+
 function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
     live_res = expr_state()
     live_res.basic_blocks = bl.basic_blocks
