@@ -27,7 +27,7 @@ end
 
 type optPass
     func :: Function
-    lowered :: Bool   # uses code_lowered form
+    lowered :: Bool   # uses unoptimized code_typed form
 
     function optPass(f, l)
       new (f, l)
@@ -63,9 +63,10 @@ end
 type memoizeState
   mapNameFuncInfo :: Dict{Any, Any}   # tracks the mapping from unoptimized function name to optimized function name
   trampolineSet   :: Set{Any}         # tracks whether we've previously created a trampoline for a given function name and signature
+  per_site_opt_set
 
   function memoizeState()
-    new (Dict{Any,Any}(), Set{Any}())
+    new (Dict{Any,Any}(), Set{Any}(), nothing)
   end
 end
 
@@ -200,10 +201,10 @@ function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
   return eval_new_func
 end
 
-function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
+function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args, per_site_opt_set)
   fetyp = typeof(func_expr)
 
-  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr, call_sig_arg_tuple), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args)
+  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr, call_sig_arg_tuple), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args, " opt_set = ", per_site_opt_set)
   func = eval(func_expr)
   dprintln(3,"func = ", func, " type = ", typeof(func))
 
@@ -214,10 +215,20 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
   end
   assert(ftyp == Function || ftyp == IntrinsicFunction || ftyp == LambdaStaticData)
 
+  # If per site opt set has not been provided then use the global default.
+  if per_site_opt_set == nothing
+    per_site_opt_set = optPasses
+  else
+    assert(isa(per_site_opt_set, Array))
+    for s in per_site_opt_set
+      assert(typeof(s) == optPass)
+    end
+  end
+
   if ftyp == Function
     #fs = (func, call_sig_arg_tuple)
 
-    if length(optPasses) == 0
+    if length(per_site_opt_set) == 0
       throw(string("There are no registered optimization passes."))
     end
 
@@ -229,7 +240,7 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     #new_func = deepcopy(func)
 
-    last_lowered = optPasses[1].lowered
+    last_lowered = per_site_opt_set[1].lowered
 
     # Get the AST on which the first optimization pass wants to work.
     if last_lowered == true
@@ -243,22 +254,22 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args)
 
     dprintln(3,"Initial code to optimize = ", cur_ast)
 
-    for i = 1:length(optPasses)
-      if optPasses[i].lowered != last_lowered
+    for i = 1:length(per_site_opt_set)
+      if per_site_opt_set[i].lowered != last_lowered
         cur_ast = loweredToTyped(new_func, cur_ast, call_sig_arg_tuple)
       end
-      last_lowered = optPasses[i].lowered
+      last_lowered = per_site_opt_set[i].lowered
       assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
       assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
 
-      cur_ast = optPasses[i].func(cur_ast, call_sig_arg_tuple, call_sig_args)
+      cur_ast = per_site_opt_set[i].func(cur_ast, call_sig_arg_tuple, call_sig_args)
 
       assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
       assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
 
       if typeof(cur_ast) == Function
         dprintln(3,"Optimization pass returned a function.")
-        if i != length(optPasses)
+        if i != length(per_site_opt_set)
           dprintln(0,"A non-final optimization pass returned a Function so later optimization passes will not run.")
         end
         return cur_ast
@@ -324,18 +335,19 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
       # Form a tuple of the function name and arguments.
       # FIX?  These are the actual arguments so it is likely this won't memoize anything.
       tmtup = (call_expr, call_sig_args)
-      if !in(tmtup, state.trampolineSet)
+#      if !in(tmtup, state.trampolineSet)
         # We haven't created a trampoline for this function call yet.
         dprintln(3,"Creating new trampoline for ", call_expr)
         # Remember that we've created a trampoline for this pair.
-        push!(state.trampolineSet, tmtup)
+#        push!(state.trampolineSet, tmtup)
         dprintln(2, new_func_sym)
         for i = 1:length(call_sig_args)
           dprintln(2, "    ", call_sig_args[i])
         end
+        per_site_opt_set = state.per_site_opt_set 
  
        # Define the trampoline.
-       @eval function ($new_func_sym)(orig_func, $(call_sig_args...))
+       @eval function ($new_func_sym)(orig_func, per_site_opt_set, $(call_sig_args...))
               # Create a tuple of the actual argument types for this invocation.
               call_sig = Expr(:tuple)
               call_sig.args = map(typeOfOpr, Any[ $(call_sig_args...) ]) 
@@ -343,7 +355,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
               #println(call_sig_arg_tuple)
 
               # Create a tuple of function and argument types.
-              fs = ($new_func_sym, call_sig_arg_tuple)
+              fs = ($new_func_sym, call_sig_arg_tuple, per_site_opt_set)
               dprintln(1, "running ", $new_func_name, " fs = ", fs)
 
               # If we have previously optimized this function and type combination ...
@@ -352,7 +364,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
                 func_to_call = gOptFrameworkState.mapNameFuncInfo[fs]
               else
                 # ... else see if we can optimize it.
-                process_res = processFuncCall(orig_func, call_sig_arg_tuple, $call_sig_args)
+                process_res = processFuncCall(orig_func, call_sig_arg_tuple, $call_sig_args, per_site_opt_set)
 
                 if process_res != nothing
                   # We did optimize it in some way we will call the optimized version.
@@ -374,12 +386,12 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
               #dprintln(3,"Code to call after = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
               ret
             end
-      end
+#      end
 
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
       resolved_name = @eval OptFramework.$new_func_sym
-      x.args = [ resolved_name; call_expr; x.args[2:end] ]
+      x.args = [ resolved_name; call_expr; per_site_opt_set; x.args[2:end] ]
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
@@ -399,9 +411,16 @@ function convert_expr(ast)
   return esc(res[1])
 end
 
-
-macro acc(ast)
-  convert_expr(ast)
+macro acc(ast1, ast2...)
+  if isempty(ast2)
+#    println("old acc code")
+    gOptFrameworkState.per_site_opt_set = nothing
+    return convert_expr(ast1)
+  else
+#    println("new acc code")
+    gOptFrameworkState.per_site_opt_set = ast1
+    return convert_expr(ast2[1]) 
+  end
 end
 
 
