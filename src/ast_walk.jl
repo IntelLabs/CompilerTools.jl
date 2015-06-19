@@ -237,6 +237,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     #skip
   elseif asttyp == Nothing
     #skip
+  elseif asttyp == Function
+    #skip
   #elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
   elseif isbits(asttyp)
     #skip
@@ -252,6 +254,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
   elseif asttyp == NewvarNode
     #skip
   else
+    println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
     throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
   end
   return [ast]
