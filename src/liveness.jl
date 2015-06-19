@@ -35,7 +35,7 @@ function TypedExpr(typ, rest...)
     res
 end
 
-export from_exprs, set_debug_level, BlockLiveness, DomLoops, Loop, find_bb_for_statement
+export from_exprs, set_debug_level, BlockLiveness, DomLoops, Loop, find_bb_for_statement, show
 
 type Access
     sym
@@ -51,6 +51,36 @@ type TopLevelStatement
     expr
 
     TopLevelStatement(i, ex) = new(i,Set(),Set(),Set(),Set(), ex)
+end
+
+function show(io::IO, tls::TopLevelStatement)
+    print(io, "TLS ", tls.index)
+
+    print(io, " Def = (")
+    for i in tls.def
+      print(io, i, " ")
+    end
+    print(io, ") ")
+
+    print(io, "Use = (")
+    for i in tls.use
+      print(io, i, " ")
+    end
+    print(io, ") ")
+
+    print(io, "LiveIn = (")
+    for i in tls.live_in
+      print(io, i, " ")
+    end
+    print(io, ") ")
+
+    print(io, "LiveOut = (")
+    for i in tls.live_out
+      print(io, i, " ")
+    end
+    print(io, ") ")
+
+    println(io, "Expr: ", tls.expr)
 end
 
 type AccessSummary
