@@ -89,6 +89,48 @@ function findLoopInvariants(l :: Loop,
         end
     end
 
+    changed = true
+    while(changed)
+        changed = false
+        dprintln(0,"starting changed loop")
+        non_invariant = Set()
+        invariant     = Set()
+
+        for i in l.members
+            bb = bl.basic_blocks[i]  # get the basic block from its index
+            for stmt in bb.statements
+                if !isempty(stmt.def)
+                    # Compute symbols used in the statement that aren't invariant.
+                    non_invariants = setdiff(stmt.use, all_uses)
+                    dprintln(0,"Def statement use = ", stmt.use, " all_uses = ", all_uses, " non_invariants = ", non_invariants, " stmt = ", stmt)
+                    if isempty(non_invariants)
+                        # def could be invariants if they aren't non_invariant elsewhere.
+                        for def in stmt.def
+                            if !in(def, non_invariant) && !in(def, all_uses)
+                                push!(invariant, def)
+                            end
+                        end 
+                    else
+                        # def isn't invariant so remove from invariant if a prior statement that was invariant was added.
+                        for def in stmt.def
+                            if in(def, invariant)
+                                delete!(invariant, def)
+                            end
+                            push!(non_invariant, def)
+                        end 
+                    end
+                    dprintln(0,"non_invariant set = ", non_invariant, " invariant set = ", invariant)
+                end
+            end
+        end
+
+        if !isempty(invariant)
+            dprintln(0,"Found some new invariants = ", invariant)
+            changed = true
+            all_uses = union(all_uses, invariant)
+        end
+    end
+
     return all_uses
 end
 
