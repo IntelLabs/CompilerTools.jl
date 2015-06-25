@@ -7,10 +7,6 @@ import Base.show
 # This controls the debug print level.  0 prints nothing.  At the moment, 2 prints everything.
 DEBUG_LVL=0
 
-#if !isdefined(:GetfieldNode)
-#    typealias GetfieldNode GlobalRef
-#end
-
 function set_debug_level(x)
     global DEBUG_LVL = x
 end
@@ -35,7 +31,7 @@ function TypedExpr(typ, rest...)
     res
 end
 
-export from_exprs, set_debug_level, BlockLiveness, DomLoops, Loop, find_bb_for_statement, show
+export from_exprs, set_debug_level, BlockLiveness, find_bb_for_statement, show
 
 type Access
     sym
@@ -670,111 +666,6 @@ function compute_dfn(basic_blocks)
         throw(string("Problem with depth first basic block ordering.  Some dfn entry was not set."))
     end
     bbs_df_order
-end
-
-type Loop
-    head :: Int
-    back_edge :: Int
-    members :: Set{Int}
-
-    function Loop(h :: Int, b :: Int, m :: Set{Int})
-      new (h, b, m)
-    end
-end
-
-type DomLoops
-    dom_dict :: Dict{Int,Set}
-    loops :: Array{Loop,1}
-end
-
-function flm_internal(cur_bb, members, bbs)
-    if !in(cur_bb, members)
-        bb = bbs[cur_bb]
-        push!(members, cur_bb)
-
-        for pred in bb.preds
-            flm_internal(pred.label, members, bbs)
-        end
-    end
-    members
-end
-
-function findLoopMembers(head, back_edge, bbs)
-    members = Set(head)
-    flm_internal(back_edge, members, bbs)
-end
-
-function compute_dom_loops(bl::BlockLiveness)
-    change_found = true
-    bbs_df_order = bl.depth_first_numbering
-    num_bb = length(bl.basic_blocks)
-    assert(num_bb == length(bbs_df_order))
-
-    all_set = Set()
-    for i in collect(keys(bl.basic_blocks))
-        push!(all_set, i)
-    end
-    dom_dict = Dict{Int,Set}()
-    for i in collect(keys(bl.basic_blocks))
-        if i == -1
-            dom_dict[i] = Set(-1)
-        else
-            dom_dict[i] = deepcopy(all_set)
-        end
-    end
-
-    count = 0;
-
-    while(change_found)
-        dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
-
-        count = count + 1
-        if count > 1000
-            throw(string("Probable infinite loop in compute_dom_loops."))
-        end
-
-        change_found = false
-
-        for i = 1:num_bb
-            bb_index = bbs_df_order[i]
-            bb = bl.basic_blocks[bb_index]
-
-            if bb_index != -1
-                if length(bb.preds) != 0
-                    pred_array = collect(bb.preds)
-                    vb = deepcopy(dom_dict[pred_array[1].label])
-                    for j = 2:length(pred_array)
-                        vb = intersect(vb, dom_dict[pred_array[j].label])
-                    end
-                    push!(vb, bb_index)
-                    if vb != dom_dict[bb_index]
-                        dom_dict[bb_index] = vb
-                        change_found = true
-                    end
-                end
-            end
-        end
-    end
-
-    loops = Loop[]
-
-    for i = 1:num_bb
-        bb_index = bbs_df_order[i]
-        bb = bl.basic_blocks[bb_index]
-        succ_array = collect(bb.succs)
-        for j in succ_array
-            local succ_id = j.label
-            if in(succ_id, dom_dict[bb_index])
-                members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
-                dprintln(3,"loop members = ", members, " type = ", typeof(members))
-                new_loop = Loop(succ_id, bb_index, members)
-                dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
-                push!(loops, new_loop)
-            end
-        end
-    end
-
-    DomLoops(dom_dict, loops)
 end
 
 function recompute_live_ranges(state, dfn)
