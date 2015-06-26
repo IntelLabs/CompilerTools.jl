@@ -36,6 +36,7 @@ function from_lambda(ast::Array{Any,1}, depth, callback, cbdata, top_level_numbe
 
   dprintln(3,"from_lambda pre-convert param = ", param, " typeof(param) = ", typeof(param))
   for i = 1:length(param)
+    dprintln(3,"from_lambda param[i] = ", param[i], " typeof(param[i]) = ", typeof(param[i]))
     param[i] = get_one(from_expr(param[i], depth, callback, cbdata, top_level_number, false, read))
   end
   dprintln(3,"from_lambda post-convert param = ", param, " typeof(param) = ", typeof(param))
@@ -143,7 +144,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
         assert(length(args) == 2)
         dprintln(3, ":: args[1] = ", args[1])
         dprintln(3, ":: args[2] = ", args[2])
-        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
+        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, read))
     elseif head == :return
         args = from_exprs(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :call
