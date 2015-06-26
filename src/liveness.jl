@@ -950,37 +950,38 @@ function removeUselessBlocks(bbs)
 
     for i in bbs
       bb = i[2]
-      # eliminate basic blocks with only one successor and no statements.
-      if length(bb.succs) == 1 && length(bb.statements) == 0
-        succ = first(bb.succs)
-        if succ.label != -2
-          delete!(succ.preds, bb)
-
-          for j in bb.preds
-            replaceSucc(j, bb, succ)
-            push!(succ.preds, j)
-          end
-
-          dprintln(3,"Removing block with no statements and one successor. ", bb)
-          delete!(bbs, i[1])
-          found_change = true
-        end
-      elseif length(bb.preds) == 1 && length(bb.succs) == 1
-        pred = first(bb.preds)
-        succ = first(bb.succs)
-        if length(pred.succs) == 1 && succ.label != -2
-            replaceSucc(pred, bb, succ) 
-            delete!(succ.preds, bb)
-            push!(succ.preds, pred)
-            append!(pred.statements, bb.statements)
-            used_in_pred = union(pred.def, pred.use)
-            pred.def = union(pred.def, setdiff(bb.def, used_in_pred))
-            pred.use = union(pred.use, setdiff(bb.use, used_in_pred))
-            dprintln(3,"Removing block with only one predecessor and successor. ", bb)
-            delete!(bbs, i[1])
-            found_change = true
-        end
-      elseif length(bb.preds) == 0 && bb.label != -1
+#      # eliminate basic blocks with only one successor and no statements.
+#      if length(bb.succs) == 1 && length(bb.statements) == 0
+#        succ = first(bb.succs)
+#        if succ.label != -2
+#          delete!(succ.preds, bb)
+#
+#          for j in bb.preds
+#            replaceSucc(j, bb, succ)
+#            push!(succ.preds, j)
+#          end
+#
+#          dprintln(3,"Removing block with no statements and one successor. ", bb)
+#          delete!(bbs, i[1])
+#          found_change = true
+#        end
+#      elseif length(bb.preds) == 1 && length(bb.succs) == 1
+#        pred = first(bb.preds)
+#        succ = first(bb.succs)
+#        if length(pred.succs) == 1 && succ.label != -2
+#            replaceSucc(pred, bb, succ) 
+#            delete!(succ.preds, bb)
+#            push!(succ.preds, pred)
+#            append!(pred.statements, bb.statements)
+#            used_in_pred = union(pred.def, pred.use)
+#            pred.def = union(pred.def, setdiff(bb.def, used_in_pred))
+#            pred.use = union(pred.use, setdiff(bb.use, used_in_pred))
+#            dprintln(3,"Removing block with only one predecessor and successor. ", bb)
+#            delete!(bbs, i[1])
+#            found_change = true
+#        end
+#      elseif length(bb.preds) == 0 && bb.label != -1
+      if length(bb.preds) == 0 && bb.label != -1
         # dead code
         for j in bb.succs
           delete!(j.preds, bb)
@@ -1020,9 +1021,11 @@ function from_expr(ast::Any, callback, cbdata)
   from_expr(ast, 1, live_res, false, callback, cbdata)
   connect_finish(live_res)
 # This is buggy and not adding any real value so I'm removing it for now.
-#  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
-#  removeUselessBlocks(live_res.basic_blocks)
-#  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+# I simplifed removeUselessBlocks to just get rid of dead blocks (i.e., no predecessor)
+  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+  removeUselessBlocks(live_res.basic_blocks)
+  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+
   dfn = compute_dfn(live_res.basic_blocks)
   dprintln(3,"dfn = ", dfn)
   compute_live_ranges(live_res, dfn)
