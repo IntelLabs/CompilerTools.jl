@@ -204,6 +204,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     elseif head == :vcat
 	    dprintln(3,"in vcat head")
 	    #skip
+    elseif head == :ref
+	    #skip
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
