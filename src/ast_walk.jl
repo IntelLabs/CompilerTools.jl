@@ -199,8 +199,11 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
           args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
         end
     elseif head == :function
-	  dprintln(2,"in function head")
+	  dprintln(3,"in function head")
 	  args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
+    elseif head == :vcat
+	    dprintln(3,"in vcat head")
+	    #skip
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
