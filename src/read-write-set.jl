@@ -113,7 +113,7 @@ function from_assignment(ast::Array{Any,1},depth,rws, callback, cbdata)
   elseif lhs_type == SymbolNode
     push!(rws.writeSet.scalars,lhs.name)
   else
-    assert(0)
+    assert(false)
   end
   from_expr(rhs,depth,rws, callback, cbdata)
 end

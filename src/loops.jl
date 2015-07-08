@@ -151,7 +151,7 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-function compute_dom_loops(bl::CompilerTools.LivenessAnalysis.BlockLiveness)
+function compute_dom_loops(bl::CompilerTools.CFGs.CFG)
     change_found = true
     bbs_df_order = bl.depth_first_numbering
     num_bb = length(bl.basic_blocks)

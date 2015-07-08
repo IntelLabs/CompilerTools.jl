@@ -1,6 +1,7 @@
 module LivenessAnalysis
 
 using CompilerTools.AstWalker
+using CompilerTools.CFGs
 
 import Base.show
 
@@ -39,18 +40,18 @@ type Access
 end
 
 type TopLevelStatement
-    index
+    tls :: CFGs.TopLevelStatement
+
     def
     use
     live_in
     live_out
-    expr
 
-    TopLevelStatement(i, ex) = new(i,Set(),Set(),Set(),Set(), ex)
+    TopLevelStatement(t) = new(t, Set(), Set(), Set(), Set())
 end
 
 function show(io::IO, tls::TopLevelStatement)
-    print(io, "TLS ", tls.index)
+    print(io, "TLS ", tls.tls.index)
 
     print(io, " Def = (")
     for i in tls.def
@@ -76,7 +77,7 @@ function show(io::IO, tls::TopLevelStatement)
     end
     print(io, ") ")
 
-    println(io, "Expr: ", tls.expr)
+    println(io, "Expr: ", tls.tls.expr)
 end
 
 type AccessSummary
@@ -85,45 +86,19 @@ type AccessSummary
 end
 
 type BasicBlock
-    label
+    cfgbb :: CFGs.BasicBlock
     def
     use
-    preds :: Set{BasicBlock}
-    succs :: Set{BasicBlock}
-    fallthrough_succ
     live_in
     live_out
-    depth_first_number
     statements :: Array{TopLevelStatement,1}
  
-    BasicBlock(label) = new(label,Set(),Set(),Set{BasicBlock}(),Set{BasicBlock}(),nothing,Set(),Set(),nothing,TopLevelStatement[])
-end
-
-function addStatement(top_level, state, ast)
-    dprintln(3, "addStatement ", ast, " ", top_level, " ", state.cur_bb == nothing)
-    if top_level && state.cur_bb != nothing
-        dprintln(3,"liveness adding statement number ", state.top_level_number)
-        for i in state.cur_bb.statements
-          if i.index == state.top_level_number
-            throw(string("statement number already there"))
-          end
-        end
-        push!(state.cur_bb.statements,TopLevelStatement(state.top_level_number, ast))
-        return true
-    end
-    return false
+    BasicBlock(bb) = new(bb, Set(),Set(), Set(), Set(), TopLevelStatement[])
 end
 
 function show(io::IO, bb::BasicBlock)
-    print(io, "BasicBlock ", bb.label, ": Pred(")
-    for j in bb.preds
-        print(io," ",j.label)
-    end
-    print(io," ) Succ(")
-    for j in bb.succs
-        print(io," ",j.label)
-    end
-    print(io," ) fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label, " Defs(")
+    print(io, bb.cfgbb)
+    print(io," Defs(")
     for j in bb.def
         print(io, " ", j)
     end
@@ -140,18 +115,12 @@ function show(io::IO, bb::BasicBlock)
         print(io, " ", j)
     end
 
-    if bb.depth_first_number != nothing
-        println(io, " ) depth_first=", bb.depth_first_number)
-    else
-        println(io, " )")
-    end
-
     tls = bb.statements
     if length(tls) == 0
         println(io,"Basic block without any statements.")
     end
     for j = 1:length(tls)
-        print(io, "    ",tls[j].index, "  ", tls[j].expr)
+        print(io, "    ",tls[j].tls.index, "  ", tls[j].tls.expr)
         if(DEBUG_LVL >= 5)
             print(io,"  Defs(")
             for k in tls[j].def
@@ -177,18 +146,13 @@ end
 
 import Base.show
 
-function add_access(bb, sym, read, top_level_index)
-    dprintln(3,"add_access ", sym, " ", read, " ", typeof(bb), " ", top_level_index)
+function add_access(bb, sym, read)
+    dprintln(3,"add_access ", sym, " ", read, " ", typeof(bb), " ")
     if bb == nothing
         return nothing
     end
 
     assert(length(bb.statements) != 0)
-    if bb.statements[end].index != top_level_index
-      dprintln(0,bb.statements[end])
-      assert(bb.statements[end].index == top_level_index)
-    end
-
     tls = bb.statements[end]
     dprintln(3, "tls = ", tls)
     write = !read
@@ -234,362 +198,43 @@ function add_access(bb, sym, read, top_level_index)
         push!(bb.def, sym)
     end
 
-if false
-    if in(sym, tls.use)
-        if !read
-            dprintln(3, "sym already in tls.use so adding to def")
-            push!(tls.def, sym)
-        end
-
-        dprintln(3, "sym already in tls.use")
-        return nothing
-    end
-
-    if read
-        dprintln(3, "adding sym to tls.use")
-        push!(tls.use, sym)
-    else
-        dprintln(3, "adding sym to tls.def")
-        push!(tls.def, sym)
-    end
-
-    if in(sym, bb.def) || in(sym, bb.use)
-        return nothing
-    end
-
-    if read
-        push!(bb.use, sym)
-    else
-        push!(bb.def, sym)
-    end
-end
-
     nothing
 end
 
-function connect(from, to, fallthrough)
-    if from != nothing
-        push!(from.succs,to)
-        push!(to.preds,from)
-        if fallthrough
-          from.fallthrough_succ = to
-        end
-    end
-end
-
 type expr_state
-    basic_blocks :: Dict{Int,BasicBlock}
+    cfg :: CFGs.CFG
+    map :: Dict{CFGs.BasicBlock, BasicBlock}
     cur_bb
-    next_if :: Int
     read
-    top_level_number :: Int
     ref_params :: Array{Symbol, 1}
 
-    function expr_state()
-        start  = BasicBlock(-1)
-        finish = BasicBlock(-2)
-        init   = Dict{Any,BasicBlock}
-        bbs = Dict{Int,BasicBlock}()
-        bbs[-1] = start
-        bbs[-2] = finish
-        new(bbs, start, -3, true, 0, Symbol[])
+    function expr_state(cfg)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[])
     end
 end
 
 type BlockLiveness
-    basic_blocks :: Dict{Int,BasicBlock}
-    depth_first_numbering
+    basic_blocks :: Dict{CFGs.BasicBlock, BasicBlock}
+    cfg :: CFGs.CFG
 
-    function BlockLiveness(bb, dfn)
-      new (bb, dfn)
+    function BlockLiveness(bb, cfg)
+      new (bb, cfg)
     end
 end
 
 function show(io::IO, bl::BlockLiveness)
     println(io)
-    body_order = getBbBodyOrder(bl)
+    body_order = CFGs.getBbBodyOrder(bl.cfg)
     for i = 1:length(body_order)
-      bb = bl.basic_blocks[body_order[i]]
-      show(io, bb)
-      println(io)
-    end
-end
-
-function getMaxBB(bl::BlockLiveness)
-    dprintln(3,"getMaxBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
-    maximum(collect(keys(bl.basic_blocks)))
-end
-
-function getMinBB(bl::BlockLiveness)
-    dprintln(3,"getMinBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
-    minimum(collect(keys(bl.basic_blocks)))
-end
-
-type UpdateLabelState
-    old_label
-    new_label
-    changed
-
-    function UpdateLabelState(oldl, newl)
-      new(oldl, newl, false)
-    end
-end
-
-function update_label(x, state :: UpdateLabelState, top_level_number, is_top_level, read)
-    asttype = typeof(x)
-    
-    if asttype == Expr
-      head = x.head
-      args = x.args
-      if head == :gotoifnot
-        else_label = args[2]
-        dprintln(3,"else_label = ", else_label, " old = ", state.old_label, " new = ", state.new_label)
-        assert(else_label == state.old_label)
-        x.args[2] = state.new_label
-        state.changed = true
-        return x
-      end
-    elseif asttype == GotoNode
-      assert(x.label == state.old_label)
-      state.changed = true
-      return GotoNode(state.new_label)
-    end
-
-    return nothing
-end
-
-function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
-    state = UpdateLabelState(after.label, new_bb.label)
-    dprintln(2, "changeEndingLabel ", bb.statements[end].expr)
-    new_last_stmt = AstWalker.AstWalk(bb.statements[end].expr, update_label, state)
-    assert(state.changed)
-    assert(isa(new_last_stmt,Array))
-    assert(length(new_last_stmt) == 1)
-    bb.statements[end].expr = new_last_stmt[1]
-end
-
-# TODO: Todd, should not we update loop member info as well?
-function insertBefore(bl::BlockLiveness, after :: Int, excludeBackEdge :: Bool = false, back_edge = nothing)
-    dprintln(2,"insertBefore ", after)
-    assert(haskey(bl.basic_blocks, after))
-    dump_bb(bl)
-
-    bb_after = bl.basic_blocks[after]
-
-    if after < -2
-      new_bb_id = getMinBB(bl) - 1
-    else 
-      new_bb_id = getMaxBB(bl) + 1
-    end
-
-    dprintln(2,"new_bb_id = ", new_bb_id)
-
-    # Create the new basic block.
-    new_bb = BasicBlock(new_bb_id)
-    push!(new_bb.succs, bb_after)
-    
-    for pred in bb_after.preds
-        if !excludeBackEdge || pred.label != back_edge
-            push!(new_bb.preds, pred)
-        end
-    end
-    new_bb.live_in = copy(bb_after.live_in)
-    new_bb.live_out = copy(new_bb.live_in)
-    bl.basic_blocks[new_bb_id] = new_bb
-
-    # Since new basic block id is positive and the successor basic block is also positive, we
-    # need to jump at the end of the new basic block to its successor.
-    new_goto_stmt = nothing
-    if after > -2
-      new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
-    end
-
-    bb_after.preds  = Set{BasicBlock}()
-    push!(bb_after.preds, new_bb)
-
-    # Sanity check that if a block has multiple incoming edges that it must have a positive label.
-    if length(new_bb.preds) > 1
-      assert(after > -2)
-    end
-
-    for pred in new_bb.preds
-      dprintln(2,"pred = ", pred.label)
-      replaceSucc(pred, bb_after, new_bb)
-    end
-
-    bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
-    dump_bb(bl)
-    (new_bb, new_goto_stmt)
-end
-
-function getMaxStatementNum(bb :: BasicBlock)
-    res = 0
-
-    for s in bb.statements
-      res = max(res, s.index)
-    end
-
-    return res
-end
-
-function getDistinctStatementNum(bl :: BlockLiveness)
-    res = 0
-
-    for bb in values(bl.basic_blocks)
-      res = max(res, getMaxStatementNum(bb))
-    end
-
-    return res + 1
-end
-
-# TODO: Todd, should not we update loop member info as well?
-function insertBetween(bl::BlockLiveness, before :: Int, after :: Int)
-    dprintln(2,"insertBetween before = ", before, " after = ", after)
-    assert(haskey(bl.basic_blocks, before))
-    assert(haskey(bl.basic_blocks, after))
-    dump_bb(bl)
-
-    bb_before = bl.basic_blocks[before]
-    bb_after  = bl.basic_blocks[after]
-
-    if after < -2
-      new_bb_id = getMinBB(bl) - 1
-    else 
-      new_bb_id = getMaxBB(bl) + 1
-    end
-
-    after_is_fallthrough = (bb_before.fallthrough_succ.label == after)
-    dprintln(2,"new_bb_id = ", new_bb_id, " after is fallthrough = ", after_is_fallthrough)
-
-    # Create the new basic block.
-    new_bb = BasicBlock(new_bb_id)
-    push!(new_bb.preds, bb_before)
-    push!(new_bb.succs, bb_after)
-    if after_is_fallthrough
-      new_bb.fallthrough_succ = bb_after
-    end
-    new_bb.live_in  = bb_before.live_out
-    new_bb.live_out = new_bb.live_in
-    bl.basic_blocks[new_bb_id] = new_bb
-
-    # Hook up the new basic block id in the preds and succs of the before and after basic blocks.
-    replaceSucc(bb_before, bb_after, new_bb)
-    delete!(bb_after.preds, bb_before)
-    push!(bb_after.preds, new_bb)
-
-    # Since new basic block id is positive and the successor basic block is also positive, we
-    # need to jump at the end of the new basic block to its successor.
-    new_goto_stmt = nothing
-    if after > -2 && !after_is_fallthrough
-      new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
-    end
-
-    bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
-    
-    dump_bb(bl)
-
-    (new_bb, new_goto_stmt)
-end
-
-function insertat!(a, value, idx)
-   splice!(a, idx:idx, [value, a[idx]])
-end
-
-function insertStatementAfter(bl :: BlockLiveness, block, stmt_idx, new_stmt)
-    insertStatementInternal(bl, block, stmt_idx, new_stmt, true)
-end
-
-function insertStatementBefore(bl :: BlockLiveness, block, stmt_idx, new_stmt)
-    insertStatementInternal(bl, block, stmt_idx, new_stmt, false)
-end
-
-function insertStatementInternal(bl :: BlockLiveness, block, stmt_idx, new_stmt, after :: Bool)
-    temp_bb = BasicBlock(-9999999999)
-    live_res = expr_state()
-    live_res.basic_blocks = bl.basic_blocks
-    live_res.cur_bb = temp_bb
-    live_res.top_level_number = getDistinctStatementNum(bl)
-    from_expr(new_stmt, 1, live_res, true, not_handled, nothing)
-
-    assert(length(temp_bb.statements) == 1)
-    stmt = temp_bb.statements[1]
-
-    for bb in bl.basic_blocks
-      stmts = bb[2].statements
-      # Scan each statement in this block for a matching statement number.
-      for j = 1:length(stmts)
-        if stmts[j].index == stmt_idx
-          if after
-            insertat!(stmts, stmt, j+1)
-          else
-            insertat!(stmts, stmt, j)
-          end
-          return nothing
-        end
+      cfgbb = bl.cfg.basic_blocks[body_order[i]]
+      if !haskey(bl.basic_blocks, cfgbb)
+        println(io,"Could not find LivenessAnalysis basic block for CFG basic block = ", cfgbb)
+      else
+        bb = bl.basic_blocks[bl.cfg.basic_blocks[body_order[i]]]
+        show(io, bb)
+        println(io)
       end
     end
-    assert(0) 
-end
-
-function addStatementToEndOfBlock(bl :: BlockLiveness, block, stmt)
-    live_res = expr_state()
-    live_res.basic_blocks = bl.basic_blocks
-    live_res.cur_bb = block
-    live_res.top_level_number = getDistinctStatementNum(bl)
-    from_expr(stmt, 1, live_res, true, not_handled, nothing)
-end
-
-function getBbBodyOrder(bl :: BlockLiveness)
-    res = Int64[]
-
-    for i = 1:length(bl.depth_first_numbering)
-      cur = bl.depth_first_numbering[i]
-      if !in(cur, res)
-        push!(res, cur)
-        cur_bb = bl.basic_blocks[cur]
-        if cur_bb.fallthrough_succ != nothing
-          fallthrough_id = cur_bb.fallthrough_succ.label
-          assert(!in(fallthrough_id, res))
-          push!(res, fallthrough_id) 
-        end
-      end
-    end
-
-    return res
-end
-
-function createFunctionBody(bl :: BlockLiveness)
-    res = Any[]
-
-    dprintln(2,"createFunctionBody, dfn = ", bl.depth_first_numbering)
-
-    to_be_processed = deepcopy(bl.depth_first_numbering)
-
-    while length(to_be_processed) != 0
-      cur_block = shift!(to_be_processed)  # pop from front
-      bb = bl.basic_blocks[cur_block]
-      dprintln(2,"dumping basic block ", cur_block, " fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label, " to_be_processed = ", to_be_processed)
-
-      # Add label to the code.
-      if cur_block >= 0
-        push!(res, LabelNode(cur_block))
-      end
-
-      # Add the basic block's statements to the body.
-      for i = 1:length(bb.statements)
-        push!(res, bb.statements[i].expr) 
-      end
-
-      if bb.fallthrough_succ != nothing
-        fallthrough_id = bb.fallthrough_succ.label
-        assert(in(fallthrough_id, to_be_processed))
-        filter!(x -> x != fallthrough_id, to_be_processed)
-        unshift!(to_be_processed, fallthrough_id)    # push to the front of the dequeue
-        dprintln(2,"moving fallthrough ", fallthrough_id, " to front, to_be_processed = ", to_be_processed)
-      end
-    end
-
-    return res
 end
 
 function isDef(x, live_info)
@@ -603,7 +248,7 @@ function find_top_number(top_number::Int, bl::BlockLiveness)
     stmts = bb[2].statements
     # Scan each statement in this block for a matching statement number.
     for j = 1:length(stmts)
-      if stmts[j].index == top_number
+      if stmts[j].tls.index == top_number
         return stmts[j]
       end
     end
@@ -620,8 +265,8 @@ function find_bb_for_statement(top_number::Int, bl::BlockLiveness)
     stmts = bb[2].statements
     # Scan each statement in this block for a matching statement number.
     for j = 1:length(stmts)
-      if stmts[j].index == top_number
-        return bb[1]
+      if stmts[j].tls.index == top_number
+        return bb[1].label
       end
     end
   end
@@ -637,35 +282,6 @@ function find_bb_for_statement(top_number::Int, bl::BlockLiveness)
 
 #  throw(string("find_bb_for_statement: could not find top_number :", top_number))
   nothing
-end
-
-function compute_dfn_internal(basic_blocks, cur_bb, cur_dfn, visited, bbs_df_order)
-    push!(visited, cur_bb)
-
-    bb = basic_blocks[cur_bb]
-
-    for i in bb.succs
-        if !in(i.label, visited)
-            cur_dfn = compute_dfn_internal(basic_blocks, i.label, cur_dfn, visited, bbs_df_order)
-        end
-    end
-
-    bbs_df_order[cur_dfn] = cur_bb
-    bb.depth_first_number = cur_dfn
-    cur_dfn - 1
-end
-
-function compute_dfn(basic_blocks)
-    visited = Set()
-    num_bb = length(basic_blocks)
-    impossible_bb = -(num_bb + 3)
-    bbs_df_order = [impossible_bb for i = 1:num_bb]
-    compute_dfn_internal(basic_blocks, -1, num_bb, visited, bbs_df_order)
-    if in(impossible_bb, bbs_df_order)
-        dprintln(0,"bbs_df_order = ", bbs_df_order)
-        throw(string("Problem with depth first basic block ordering.  Some dfn entry was not set."))
-    end
-    bbs_df_order
 end
 
 function recompute_live_ranges(state, dfn)
@@ -685,7 +301,7 @@ end
 
 function compute_live_ranges(state, dfn)
     found_change = true
-    bbs = state.basic_blocks
+    bbs = state.cfg.basic_blocks
 
     # Compute the inter-block live ranges.
     while found_change
@@ -693,7 +309,7 @@ function compute_live_ranges(state, dfn)
 
         for i = length(dfn):-1:1
             bb_index = dfn[i]
-            bb = bbs[bb_index]
+            bb = state.map[bbs[bb_index]]
 
             accum = Set()
             if bb_index == -2
@@ -702,8 +318,8 @@ function compute_live_ranges(state, dfn)
               accum = Set{Symbol}(state.ref_params)
               dprintln(3,"Final block live_out = ", accum)
             else
-              for j in bb.succs
-                  accum = union(accum, j.live_in)
+              for j in bb.cfgbb.succs
+                accum = union(accum, state.map[j].live_in)
               end
             end
 
@@ -724,7 +340,7 @@ function compute_live_ranges(state, dfn)
     # Compute the intra-block live ranges.
     # For each basic block.
     for i = 1:length(dfn)
-        bb = bbs[dfn[i]]
+        bb = state.map[bbs[dfn[i]]]
 
         tls = bb.statements
 
@@ -742,28 +358,24 @@ function compute_live_ranges(state, dfn)
     nothing
 end
 
-function connect_finish(state)
-    connect(state.cur_bb, state.basic_blocks[-2], true)
-end
-
 function dump_bb(bl :: BlockLiveness)
     if DEBUG_LVL >= 4
       f = open("bbs.dot","w")
       println(f, "digraph bbs {")
     end
 
-    body_order = getBbBodyOrder(bl)
+    body_order = CFGs.getBbBodyOrder(bl.cfg)
     if DEBUG_LVL >= 3
       println("body_order = ", body_order)
     end
 
     for i = 1:length(body_order)
-        bb = bl.basic_blocks[body_order[i]]
+        bb = bl.basic_blocks[bl.cfg.basic_blocks[body_order[i]]]
         dprint(2,bb)
 
         if DEBUG_LVL >= 4
-            for j in bb.succs
-                println(f, bb.label, " -> ", j.label, ";")
+            for j in bb.cfgbb.succs
+                println(f, bb.cfgbb.label, " -> ", j.label, ";")
             end
         end
     end
@@ -818,23 +430,16 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local body  = ast[3]
   state.ref_params = get_ref_params(param, meta[2])
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
-  from_expr(body, depth, state, false, callback, cbdata)
 end
 
 # sequence of expressions
 # ast = [ expr, ... ]
 function from_exprs(ast::Array{Any,1}, depth, state, callback, cbdata)
   local len = length(ast)
-  top_level = (state.top_level_number == 0)
   for i = 1:len
-    if top_level
-        state.top_level_number = i
-        dprintln(2,"Processing top-level ast #",i," depth=",depth)
-    else
-        dprintln(2,"Processing ast #",i," depth=",depth)
-    end
+    dprintln(2,"Processing ast #",i," depth=",depth)
     dprintln(3,"ast[", i, "] = ", ast[i])
-    from_expr(ast[i], depth, state, top_level, callback, cbdata)
+    from_expr(ast[i], depth, state, callback, cbdata)
   end
   nothing
 end
@@ -849,11 +454,11 @@ function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
   if isa(rhs, Expr) && rhs.head == :lambda
     # skip handling rhs lambdas
   else
-    from_expr(rhs, depth, state, false, callback, cbdata)
+    from_expr(rhs, depth, state, callback, cbdata)
   end
   dprintln(3,"liveness from_assignment handling lhs")
   state.read = false
-  from_expr(lhs, depth, state, false, callback, cbdata)
+  from_expr(lhs, depth, state, callback, cbdata)
   state.read = true
   dprintln(3,"liveness from_assignment done handling lhs")
 end
@@ -903,7 +508,7 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
   
   # symbols don't need to be translated
   if typeof(fun) != Symbol
-      from_expr(fun, depth, state, false, callback, cbdata)
+      from_expr(fun, depth, state, callback, cbdata)
   end
 
   for i = 1:length(args)
@@ -911,86 +516,22 @@ function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
     dprintln(2,"cur arg = ", args[i], " type = ", argtyp)
 
     if(argtyp == Symbol)
-      from_expr(args[i], depth+1, state, false, callback, cbdata)
+      from_expr(args[i], depth+1, state, callback, cbdata)
     elseif argtyp == SymbolNode
       if isbits(args[i].typ)
-        from_expr(args[i], depth+1, state, false, callback, cbdata)
+        from_expr(args[i], depth+1, state, callback, cbdata)
       else
-        from_expr(args[i], depth+1, state, false, callback, cbdata)
+        from_expr(args[i], depth+1, state, callback, cbdata)
         if unmodified_args[i] == 1
-          from_expr(args[i], depth+1, state, false, callback, cbdata)
+          from_expr(args[i], depth+1, state, callback, cbdata)
         else
           state.read = false
-          from_expr(args[i], depth+1, state, false, callback, cbdata)
+          from_expr(args[i], depth+1, state, callback, cbdata)
           state.read = true
         end
       end
     else
-      from_expr(args[i], depth+1, state, false, callback, cbdata)
-    end
-  end
-end
-
-function replaceSucc(cur_bb, orig_succ, new_succ)
-  delete!(cur_bb.succs, orig_succ)   # delete the original successor from the set of successors
-  push!(cur_bb.succs, new_succ)      # add the new successor to the set of successors
-
-  if cur_bb.fallthrough_succ == orig_succ
-    cur_bb.fallthrough_succ = new_succ
-  else
-    changeEndingLabel(cur_bb, orig_succ, new_succ)
-  end
-end
-
-function removeUselessBlocks(bbs)
-  found_change = true
-
-  while found_change
-    found_change = false
-
-    for i in bbs
-      bb = i[2]
-#      # eliminate basic blocks with only one successor and no statements.
-#      if length(bb.succs) == 1 && length(bb.statements) == 0
-#        succ = first(bb.succs)
-#        if succ.label != -2
-#          delete!(succ.preds, bb)
-#
-#          for j in bb.preds
-#            replaceSucc(j, bb, succ)
-#            push!(succ.preds, j)
-#          end
-#
-#          dprintln(3,"Removing block with no statements and one successor. ", bb)
-#          delete!(bbs, i[1])
-#          found_change = true
-#        end
-#      elseif length(bb.preds) == 1 && length(bb.succs) == 1
-#        pred = first(bb.preds)
-#        succ = first(bb.succs)
-#        if length(pred.succs) == 1 && succ.label != -2
-#            replaceSucc(pred, bb, succ) 
-#            delete!(succ.preds, bb)
-#            push!(succ.preds, pred)
-#            append!(pred.statements, bb.statements)
-#            used_in_pred = union(pred.def, pred.use)
-#            pred.def = union(pred.def, setdiff(bb.def, used_in_pred))
-#            pred.use = union(pred.use, setdiff(bb.use, used_in_pred))
-#            dprintln(3,"Removing block with only one predecessor and successor. ", bb)
-#            delete!(bbs, i[1])
-#            found_change = true
-#        end
-#      elseif length(bb.preds) == 0 && bb.label != -1
-      if length(bb.preds) == 0 && bb.label != -1
-        # dead code
-        for j in bb.succs
-          delete!(j.preds, bb)
-        end
-
-        dprintln(3,"Removing dead block. ", bb)
-        delete!(bbs, i[1])
-        found_change = true
-      end
+      from_expr(args[i], depth+1, state, callback, cbdata)
     end
   end
 end
@@ -1010,58 +551,42 @@ function countSymbolDefs(s, lives)
 end
 
 # ENTRY
-function from_expr(ast::Any)
-  from_expr(ast, not_handled, nothing)
+function from_expr(ast::Any, callback=not_handled, cbdata=nothing)
+  assert(typeof(ast) == Expr)
+  assert(ast.head == :lambda)
+  cfg = CFGs.from_ast(ast)
+  live_res = expr_state(cfg)
+  # Just to process the lambda.
+  from_expr(ast, 1, live_res, callback, cbdata)
+  fromCFG(live_res, cfg, callback, cbdata)
 end
 
-function from_expr(ast::Any, callback, cbdata)
-  dprintln(2,"from_expr Any")
-  dprintln(3,ast)
-  live_res = expr_state()
-  from_expr(ast, 1, live_res, false, callback, cbdata)
-  connect_finish(live_res)
-# This is buggy and not adding any real value so I'm removing it for now.
-# I simplifed removeUselessBlocks to just get rid of dead blocks (i.e., no predecessor)
-  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
-  removeUselessBlocks(live_res.basic_blocks)
-  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+function fromCFG(live_res, cfg :: CFGs.CFG, callback, cbdata)
+  dprintln(2,"fromCFG")
+  CFGs.dump_bb(cfg)
 
-  dfn = compute_dfn(live_res.basic_blocks)
-  dprintln(3,"dfn = ", dfn)
-  compute_live_ranges(live_res, dfn)
+  for bb in cfg.basic_blocks
+    live_res.map[bb[2]] = BasicBlock(bb[2])
+    live_res.cur_bb = live_res.map[bb[2]]
+
+    for i = 1:length(bb[2].statements)
+       cur_stmt = bb[2].statements[i]
+       push!(live_res.cur_bb.statements, TopLevelStatement(cur_stmt)) 
+       dprintln(3,"fromCFG stmt = ", cur_stmt.expr)
+       from_expr(cur_stmt.expr, 1, live_res, callback, cbdata)
+    end
+  end
+
+  compute_live_ranges(live_res, cfg.depth_first_numbering)
   dprintln(2,"Dumping basic block info from_expr.")
-  ret = BlockLiveness(live_res.basic_blocks, dfn)
+  ret = BlockLiveness(live_res.map, cfg)
   dump_bb(ret)
   return ret
-end
-
-function from_label(label, state, callback, cbdata)
-    dprintln(2,"LabelNode: ", label)
-    if !haskey(state.basic_blocks,label)
-        state.basic_blocks[label] = BasicBlock(label)
-    end
-    connect(state.cur_bb, state.basic_blocks[label], true)
-    state.cur_bb = state.basic_blocks[label] 
-    nothing
-end
-
-function from_goto(label, state, callback, cbdata)
-    dprintln(2,"GotoNode: ", label)
-    if !haskey(state.basic_blocks,label)
-        state.basic_blocks[label] = BasicBlock(label)
-    end
-    connect(state.cur_bb, state.basic_blocks[label], false)
-    state.cur_bb = nothing
-    # The next statement should be a label so cur_bb will be set there.
-    nothing
 end
 
 function from_return(args, depth, state, callback, cbdata)
     dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
-    # connect this basic block to the finish pseudo-basic block
-    connect(state.cur_bb, state.basic_blocks[-2], false)
-    state.cur_bb = nothing
     nothing
 end
 
@@ -1070,33 +595,13 @@ function from_if(args, depth, state, callback, cbdata)
     assert(length(args) == 2)
     # The first index is the conditional.
     if_clause  = args[1]
-    # The second index is the label of the else section.
-    else_label = args[2]
 
     # Process the conditional as part of the current basic block.
-    from_expr(if_clause, depth, state, false, callback, cbdata)
-
-    implied = state.next_if
-    # Prepare this for the next if part basic block.
-    state.next_if = state.next_if - 1
-
-    # Use negative number for the implicit block after the conditional.
-    # Create the basic block for the if part and make that the current basic block.
-    state.basic_blocks[implied] = BasicBlock(implied)
-
-    if haskey(state.basic_blocks,else_label) == false
-        # Create a basic block for the else portion.
-        state.basic_blocks[else_label] = BasicBlock(else_label)
-    end
-
-    connect(state.cur_bb, state.basic_blocks[implied], true)
-    connect(state.cur_bb, state.basic_blocks[else_label], false)
-
-    state.cur_bb = state.basic_blocks[implied]
+    from_expr(if_clause, depth, state, callback, cbdata)
     nothing
 end
 
-function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
+function from_expr(ast::Any, depth, state, callback, cbdata)
   if typeof(ast) == LambdaStaticData
       # ast = uncompressed_ast(ast)
       # skip processing LambdaStaticData
@@ -1107,7 +612,7 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
 
   handled = callback(ast, cbdata)
   if handled != nothing
-    addStatement(top_level, state, ast)
+#    addStatement(top_level, state, ast)
     if length(handled) > 0
       dprintln(3,"Processing expression from callback for ", ast)
       dprintln(3,handled)
@@ -1119,10 +624,10 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
 
   if isa(ast, Tuple)
     for i = 1:length(ast)
-        from_expr(ast[i], depth, state, false, callback, cbdata)
+        from_expr(ast[i], depth, state, callback, cbdata)
     end
   elseif asttyp == Expr
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
 
     dprint(2,"Expr ")
     local head = ast.head
@@ -1132,7 +637,8 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     if head == :lambda
         from_lambda(args, depth, state, callback, cbdata)
     elseif head == :body
-        from_exprs(args, depth+1, state, callback, cbdata)
+        dprintln(0,":body found in from_expr")
+        throw(string(":body found in from_expr"))
     elseif head == :(=)
         from_assignment(args,depth,state, callback, cbdata)
     elseif head == :return
@@ -1159,12 +665,12 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     elseif head == :copyast
         dprintln(2,"copyast type")
         # skip
-    elseif head == :assertEqShape
+#    elseif head == :assertEqShape
         #addStatement(top_level, state, ast)
-        assert(length(args) == 2)
+#        assert(length(args) == 2)
         #dprintln(3,"liveness: assertEqShape ", args[1], " ", args[2], " ", typeof(args[1]), " ", typeof(args[2]))
-        add_access(state.cur_bb, args[1].name, state.read, state.top_level_number)
-        add_access(state.cur_bb, args[2].name, state.read, state.top_level_number)
+#        add_access(state.cur_bb, args[1].name, state.read)
+#        add_access(state.cur_bb, args[2].name, state.read)
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
     elseif head == :new
@@ -1183,61 +689,63 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
         throw(string("from_expr: unknown Expr head :", head))
     end
   elseif asttyp == LabelNode
-    from_label(ast.label, state, callback, cbdata)
-#    addStatement(top_level, state, ast)
+    assert(false)
+#    from_label(ast.label, state, callback, cbdata)
   elseif asttyp == GotoNode
-    addStatement(top_level, state, ast)
-    from_goto(ast.label, state, callback, cbdata)
+#    addStatement(top_level, state, ast)
+#    from_goto(ast.label, state, callback, cbdata)
+#     assert(false)
+#    INTENTIONALLY DO NOTHING
   elseif asttyp == Symbol
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     dprintln(2,"Symbol type ", ast)
-    add_access(state.cur_bb, ast, state.read, state.top_level_number)
+    add_access(state.cur_bb, ast, state.read)
   elseif asttyp == LineNumberNode
     #skip
   elseif asttyp == SymbolNode # name, typ
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
-    add_access(state.cur_bb, ast.name, state.read, state.top_level_number)
+    add_access(state.cur_bb, ast.name, state.read)
   elseif asttyp == TopNode    # name
     #skip
   elseif isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     dprintln(3,"GetfieldNode type ",typeof(ast.value), " ", ast)
   elseif isdefined(:GlobalRef) && asttyp == GlobalRef
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     dprintln(3,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
   elseif asttyp == QuoteNode
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     local value = ast.value
     #TODO: fields: value
     dprintln(3,"QuoteNode type ",typeof(value))
   # elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
   elseif isbits(asttyp)
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     #skip
   elseif asttyp.name == Array.name
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
     dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
     for i = 1:length(ast)
       from_expr(ast[i], depth, state, false, callback, cbdata)
     end
   elseif asttyp == DataType
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
   elseif asttyp == ()
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
   elseif asttyp == ASCIIString
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
   elseif asttyp == NewvarNode
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
   elseif asttyp == Nothing
-    addStatement(top_level, state, ast)
+    #addStatement(top_level, state, ast)
   elseif asttyp == AccessSummary
     dprintln(3, "Incorporating AccessSummary")
     for i in ast.use
-      add_access(state.cur_bb, i, true, state.top_level_number)
+      add_access(state.cur_bb, i, true)
     end
     for i in ast.def
-      add_access(state.cur_bb, i, false, state.top_level_number)
+      add_access(state.cur_bb, i, false)
     end  
   elseif asttyp == Module
     #skip
