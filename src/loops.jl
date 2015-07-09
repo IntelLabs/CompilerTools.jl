@@ -33,7 +33,7 @@ type Loop
     members :: Set{Int}
 
     function Loop(h :: Int, b :: Int, m :: Set{Int})
-      new (h, b, m)
+      new(h, b, m)
     end
 end
 

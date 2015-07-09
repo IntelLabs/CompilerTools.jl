@@ -30,7 +30,7 @@ type optPass
     lowered :: Bool   # uses unoptimized code_typed form
 
     function optPass(f, l)
-      new (f, l)
+      new(f, l)
     end
 end
 
@@ -66,7 +66,7 @@ type memoizeState
   per_site_opt_set
 
   function memoizeState()
-    new (Dict{Any,Any}(), Set{Any}(), nothing)
+    new(Dict{Any,Any}(), Set{Any}(), nothing)
   end
 end
 
@@ -76,7 +76,7 @@ type lmstate
   last_was_label
 
   function lmstate()
-    new (Dict{Int64,Int64}(), 0, false)
+    new(Dict{Int64,Int64}(), 0, false)
   end
 end
 

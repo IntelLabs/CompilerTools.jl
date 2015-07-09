@@ -129,7 +129,7 @@ type CFG
     depth_first_numbering
 
     function CFG(bb, dfn)
-      new (bb, dfn)
+      new(bb, dfn)
     end
 end
 

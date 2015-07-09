@@ -218,7 +218,7 @@ type BlockLiveness
     cfg :: CFGs.CFG
 
     function BlockLiveness(bb, cfg)
-      new (bb, cfg)
+      new(bb, cfg)
     end
 end
 
