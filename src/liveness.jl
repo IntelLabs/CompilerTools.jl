@@ -428,6 +428,8 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   local param = ast[1]
   local meta  = ast[2]
   local body  = ast[3]
+  dprintln(3,"param = ", param)
+  dprintln(3,"meta  = ", meta)
   state.ref_params = get_ref_params(param, meta[2])
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
