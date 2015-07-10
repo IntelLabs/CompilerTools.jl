@@ -219,6 +219,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
     for pred in bb_after.preds
         if !excludeBackEdge || pred.label != back_edge
             push!(new_bb.preds, pred)
+            delete!(bb_after.preds, pred)
         end
     end
     bl.basic_blocks[new_bb_id] = new_bb
@@ -230,7 +231,6 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
       new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
     end
 
-    bb_after.preds  = Set{BasicBlock}()
     push!(bb_after.preds, new_bb)
 
     # Sanity check that if a block has multiple incoming edges that it must have a positive label.
