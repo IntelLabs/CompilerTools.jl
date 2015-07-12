@@ -206,6 +206,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
 	    #skip
     elseif head == :ref
 	    #skip
+    elseif head == :meta
+	    # ignore :meta for now. TODO: we might need to walk its args.
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
@@ -215,6 +217,9 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     ast.typ = typ
   elseif asttyp == Symbol
     dprintln(2,"Symbol type")
+    #skip
+  elseif asttyp == GenSym
+    dprintln(2,"GenSym type")
     #skip
   elseif asttyp == SymbolNode # name, typ
     dprintln(2,"SymbolNode type")
