@@ -33,13 +33,23 @@ type Loop
     members :: Set{Int}
 
     function Loop(h :: Int, b :: Int, m :: Set{Int})
-      new(h, b, m)
+        new(h, b, m)
     end
 end
 
 type DomLoops
     dom_dict :: Dict{Int,Set}
     loops    :: Array{Loop,1}
+end
+
+function isInLoop(dl :: DomLoops, bb :: Int)
+    for i in dl.loops
+        if in(bb, i.members)
+            return true
+        end
+    end
+
+    return false
 end
 
 function findLoopInvariants(l :: Loop, 
