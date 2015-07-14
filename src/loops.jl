@@ -42,6 +42,16 @@ type DomLoops
     loops    :: Array{Loop,1}
 end
 
+function isInLoop(dl :: DomLoops, bb :: Int)
+    for i in dl.loops
+        if in(bb, i.members)
+            return true
+        end
+    end
+
+    return false
+end
+
 function findLoopInvariants(l :: Loop, 
                             udinfo :: Dict{CompilerTools.LivenessAnalysis.BasicBlock,CompilerTools.UDChains.UDInfo}, 
                             bl :: CompilerTools.LivenessAnalysis.BlockLiveness)
