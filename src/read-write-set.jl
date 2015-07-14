@@ -258,10 +258,10 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
   elseif asttyp == ASCIIString
     dprintln(3,"RWS ASCIIString type")
     #skip
-  elseif asttyp == GetfieldNode
-    local mod = ast.value
+  elseif asttyp == GlobalRef 
+    local mod = ast.mod
     local name = ast.name
-    dprintln(3,"RWS GetfieldNode type ",typeof(mod))
+    dprintln(3,"RWS GlobalRef type ",typeof(mod))
     #warn(string("from_expr: GetfieldNode typeof(mod)=", typeof(mod)))
   elseif asttyp == DataType
     # skip
