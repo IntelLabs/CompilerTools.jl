@@ -56,8 +56,19 @@ end
 
 function createVarDict(x :: Array{Any, 1})
   ret = Dict{Symbol,VarDef}()
+  dprintln(1,"createVarDict ", x)
   for i = 1:length(x)
-    ret[x[i][1]] = VarDef(x[i][1], x[i][2], x[i][3])
+    dprintln(1,"x[i] = ", x[i])
+    name = x[i][1]
+    typ  = x[i][2]
+    desc = x[i][3]
+    if typeof(name) != Symbol
+      dprintln(0, "name is not of type symbol ", name, " type = ", typeof(name))
+    end
+    if typeof(desc) != Int64
+      dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
+    end
+    ret[name] = VarDef(name, typ, desc)
   end
   return ret
 end
@@ -70,8 +81,9 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   ret.input_params = createVarSet(lambda.args[1]) 
   # We call the second part of the lambda metadata.
   meta = lambda.args[2]
+  dprintln(1,"meta = ", meta)
   # Create a searchable dictionary mapping symbols to their VarDef information.
-  ret.var_defs     = createVarDict(meta[1])
+  ret.var_defs = createVarDict(meta[1])
   ret.captured_outer_vars = meta[2]
   ret.gen_syms = meta[3]
   ret.static_parameter_names = meta[4]
