@@ -1,6 +1,6 @@
 module LivenessAnalysis
 
-using CompilerTools.AstWalker
+using CompilerTools
 using CompilerTools.CFGs
 
 import Base.show
@@ -389,48 +389,11 @@ end
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
-function get_ref_params(input_vars, var_types)
-  ret = Symbol[]
-        
-  dprintln(3,"input_vars = ", input_vars)
-  dprintln(3,"var_types = ", var_types)
-    
-  for i = 1:length(input_vars)
-    iv = input_vars[i]
-    dprintln(3,"iv = ", iv, " type = ", typeof(iv))
-    found = false
-    for j = 1:length(var_types)
-      dprintln(3,"vt = ", var_types[j][1], " type = ", typeof(var_types[j][1]))
-      if iv == var_types[j][1]
-        dprintln(3,"Found matching name.")
-        #if var_types[j][2].name == Array.name
-        #  dprintln(3,"Parameter is an Array.")
-        if !isbits(var_types[j][2])
-          dprintln(3,"Parameter is not a bits type.")
-          push!(ret, iv)
-        end
-        found = true
-        break
-      end
-    end
-    if !found
-      throw(string("Didn't find parameter variable in type list."))
-    end
-  end
-
-  ret
-end
-
 # :lambda expression
 # ast = [ parameters, meta (local, types, etc), body ]
-function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
-  assert(length(ast) == 3)
-  local param = ast[1]
-  local meta  = ast[2]
-  local body  = ast[3]
-  dprintln(3,"param = ", param)
-  dprintln(3,"meta  = ", meta)
-  state.ref_params = get_ref_params(param, meta[2])
+function from_lambda(ast, depth, state, callback, cbdata)
+  lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
+  state.ref_params = CompilerTools.LambdaHandling.getRefParams(lambdaInfo)
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
@@ -637,7 +600,7 @@ function from_expr(ast::Any, depth, state, callback, cbdata)
     local typ  = ast.typ
     dprintln(2,head, " ", args)
     if head == :lambda
-        from_lambda(args, depth, state, callback, cbdata)
+        from_lambda(ast, depth, state, callback, cbdata)
     elseif head == :body
         dprintln(0,":body found in from_expr")
         throw(string(":body found in from_expr"))
