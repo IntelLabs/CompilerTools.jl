@@ -32,7 +32,7 @@ function TypedExpr(typ, rest...)
     res
 end
 
-export from_exprs, set_debug_level, BlockLiveness, find_bb_for_statement, show
+export set_debug_level, BlockLiveness, find_bb_for_statement, show
 
 type Access
     sym
@@ -220,6 +220,44 @@ type BlockLiveness
     function BlockLiveness(bb, cfg)
       new(bb, cfg)
     end
+end
+
+function get_info_internal(x, bl :: BlockLiveness, field)
+    if typeof(x) == BasicBlock
+        return getfield(x, field)
+    elseif typeof(x) == CFGs.BasicBlock
+        bb = bl.basic_blocks[x]
+        return getfield(bb, field)
+    elseif typeof(x) == TopLevelStatement
+        return getfield(x, field)
+    elseif typeof(x) == CFGs.TopLevelStatement
+        for i in bl.basic_blocks
+          for j in i.statements
+            if x == j.tls
+              return getfield(j, field)
+            end
+          end
+        end
+        throw(string("Couldn't find liveness statement corresponding to cfg statement. "))
+    else
+      throw(string("get_info_internal called with non-BB and non-TopLevelStatement input."))
+    end
+end
+
+function live_in(x, bl :: BlockLiveness)
+    get_info_internal(x, bl, :live_in)
+end
+
+function live_out(x, bl :: BlockLiveness)
+    get_info_internal(x, bl, :live_out)
+end
+
+function def(x, bl :: BlockLiveness)
+    get_info_internal(x, bl, :def)
+end
+
+function use(x, bl :: BlockLiveness)
+    get_info_internal(x, bl, :use)
 end
 
 function show(io::IO, bl::BlockLiveness)
