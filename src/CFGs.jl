@@ -163,7 +163,7 @@ type UpdateLabelState
     end
 end
 
-function update_label(x, state :: UpdateLabelState, top_level_number, is_top_level)
+function update_label(x, state :: UpdateLabelState, top_level_number, is_top_level, read)
     asttype = typeof(x)
     
     if asttype == Expr
