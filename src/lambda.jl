@@ -72,6 +72,70 @@ type LambdaInfo
 end
 
 @doc """
+Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
+"""
+function getType(x, li :: LambdaInfo)
+  if typeof(x) == Symbol
+    return li.var_defs[x].typ
+  elseif typeof(x) == GenSym
+    return li.gen_syms[x.id + 1]
+  else
+    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
+  end
+end
+
+@doc """
+Returns the VarDef for a Symbol in LambdaInfo in "li"
+"""
+function getVarDef(s :: Symbol, li :: LambdaInfo)
+  return li.var_defs[s]
+end
+
+@doc """
+Returns true if the Symbol in "s" is an input parameter in LambdaInfo in "li".
+"""
+function isInputParameter(s :: Symbol, li :: LambdaInfo)
+  return in(s, li.input_params)
+end
+
+@doc """
+Returns true if the Symbol in "s" is a local variable in LambdaInfo in "li".
+"""
+function isLocalVariable(s :: Symbol, li :: LambdaInfo)
+  return haskey(li.var_defs, s) && !isInputParameter(s, li)
+end
+
+@doc """
+Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaInfo "li".
+Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
+"""
+function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
+  assert(!isInputParameter(s, li))
+  # If it is already a local variable then just update its type and desc.
+  if haskey(li.var_defs, s)
+    var_def      = li.var_defs[s]
+    dprintln(3,"addLocalVariable ", s, " already exists with type ", var_def.typ)
+    var_def.typ  = typ
+    var_def.desc = desc
+    return true
+  end
+
+  li.var_defs[s] = VarDef(s, typ, desc)
+  dprintln(3,"addLocalVariable = ", s)
+
+  return false
+end
+
+@doc """
+Add a new GenSym to the LambdaInfo in "li" with the given type in "typ".
+Returns the new GenSym.
+"""
+function addGenSym(typ, li :: LambdaInfo)
+  push!(li.gen_syms, typ)
+  return GenSym(length(li.gen_syms) - 1) 
+end
+
+@doc """
 Convert the lambda expression's args[1] from array of any to Set of Symbol to be stored in LambdaInfo.
 We make sure that each element of the array is indeed a Symbol.
 """
