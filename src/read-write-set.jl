@@ -231,6 +231,8 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     elseif head == :new
         from_exprs(args,depth+1,rws, callback, cbdata)
     elseif head == :gotoifnot
+        from_expr(args[1], depth, rws, callback, cbdata)
+    elseif head == :meta
         # skip
     else
         #println("from_expr: unknown Expr head :", head)
