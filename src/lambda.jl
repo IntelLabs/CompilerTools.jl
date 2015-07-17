@@ -36,6 +36,13 @@ function dprintln(level,msgs...)
     end
 end
 
+# Possible values of VarDef descriptor that can be OR'ed together.
+const ISCAPTURED = 1
+const ISASSIGNED = 2
+const ISASSIGNEDBYINNERFUNCTION = 4
+const ISCONST = 8
+const ISASSIGNEDONCE = 16
+
 @doc """
 Represents the triple stored in a lambda's args[2][1].
 The triple is 1) the Symbol of an input parameter or local variable, 2) the type of that Symbol, and 3) a descriptor for that symbol.
@@ -177,6 +184,7 @@ The input is asserted to be an expression whose head is :lambda.
 """
 function lambdaExprToLambdaInfo(lambda :: Expr)
   assert(lambda.head == :lambda)
+  assert(length(lambda.args) == 3)
 
   ret = LambdaInfo()
   # Convert array of input parameters in lambda.args[1] into a searchable Set.
@@ -236,6 +244,31 @@ This body can be a body expression or you can pass "nothing" if you want but the
 """
 function lambdaInfoToLambdaExpr(lambdaInfo :: LambdaInfo, body)
   return Expr(:lambda, setToArray(lambdaInfo.input_params), createMeta(lambdaInfo), body)
+end
+
+@doc """
+Update the descriptor part of the VarDef dealing with whether the variable is assigned or not in the function.
+Takes the lambdaInfo and a dictionary that maps symbols names to the number of times they are statically assigned in the function.
+"""
+function updateAssignedDesc(lambdaInfo :: LambdaInfo, symbol_assigns :: Dict{Symbol,Int})
+  # For each VarDef
+  for i in lambdaInfo.var_defs
+    # If that VarDef's symbol is in the dictionary.
+    if haskey(symbol_assigns, i[1])
+      var_def = i[2]
+      # Get how many times the symbol is assigned to.
+      num_assigns = symbol_assigns[var_def.name]
+      # Remove the parts of the descriptor dealing with the number of assignments.
+      var_def.desc = var_def.desc & (~ (ISASSIGNED | ISASSIGNEDONCE)) 
+      if num_assigns > 1
+        # If more than one assignment then OR on ISASSIGNED.
+        var_def.desc = var_def.desc | ISASSIGNED
+      elseif num_assigns == 1
+        # If exactly one assignment then OR on ISASSIGNED and ISASSIGNEDONCE
+        var_def.desc = var_def.desc | ISASSIGNED | ISASSIGNEDONCE
+      end
+    end
+  end
 end
 
 @doc """
