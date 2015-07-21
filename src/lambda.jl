@@ -2,6 +2,14 @@ module LambdaHandling
 
 import Base.show
 
+export VarDef, LambdaInfo
+export getType, getVarDef, isInputParameter, isLocalVariable, isLocalGenSym
+export addLocalVariable, addEscapingVariable, addGenSym
+export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
+export getRefParams, updateAssignedDesc, lambdaTypeinf
+export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
+
+
 # This controls the debug print level.  0 prints nothing.  3 print everything.
 DEBUG_LVL=0
 
@@ -67,14 +75,14 @@ The GenSym part (args[2][3]) is stored as an array since GenSym's are indexed.
 Captured_outer_vars and static_parameter_names are stored as arrays for now since we don't expect them to be changed much.
 """
 type LambdaInfo
-  input_params :: Set{Symbol}
-  var_defs     :: Dict{Symbol,VarDef}
-  gen_syms     :: Array{Any,1}
-  captured_outer_vars :: Array{Any,1}
+  input_params  :: Set{Symbol}
+  var_defs      :: Dict{Symbol,VarDef}
+  gen_syms      :: Array{Any,1}
+  escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
 
   function LambdaInfo()
-    new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Any[], Any[])
+    new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[])
   end
 end
 
@@ -113,6 +121,20 @@ function isLocalVariable(s :: Symbol, li :: LambdaInfo)
 end
 
 @doc """
+Returns true if the Symbol in "s" is an escaping variable in LambdaInfo in "li".
+"""
+function isEscapingVariable(s :: Symbol, li :: LambdaInfo)
+  return haskey(li.escaping_defs, s) && !isInputParameter(s, li)
+end
+
+@doc """
+Returns true if the GenSym in "s" is a GenSym in LambdaInfo in "li".
+"""
+function isLocalGenSym(s :: GenSym, li :: LambdaInfo)
+  return s.id >= 0 && s.id < size(li.gen_syms, 1)
+end
+
+@doc """
 Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
@@ -129,6 +151,27 @@ function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
 
   li.var_defs[s] = VarDef(s, typ, desc)
   dprintln(3,"addLocalVariable = ", s)
+
+  return false
+end
+
+@doc """
+Adds a new escaping variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaInfo "li".
+Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
+"""
+function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
+  assert(!isInputParameter(s, li))
+  # If it is already a local variable then just update its type and desc.
+  if haskey(li.escaping_defs, s)
+    var_def      = li.var_defs[s]
+    dprintln(3,"addEscapingVariable ", s, " already exists with type ", var_def.typ)
+    var_def.typ  = typ
+    var_def.desc = desc
+    return true
+  end
+
+  li.escaping_defs[s] = VarDef(s, typ, desc)
+  dprintln(3,"addEscapingVariable = ", s)
 
   return false
 end
@@ -194,18 +237,33 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   dprintln(1,"meta = ", meta)
   # Create a searchable dictionary mapping symbols to their VarDef information.
   ret.var_defs = createVarDict(meta[1])
-  ret.captured_outer_vars = meta[2]
-  ret.gen_syms = meta[3]
+  ret.escaping_defs = createVarDict(meta[2])
+  if !isa(meta[3], Array) 
+    ret.gen_syms = Any[]
+  else
+    ret.gen_syms = meta[3]
+  end
   ret.static_parameter_names = meta[4]
 
   return ret
 end
 
 @doc """
+Force type inference on a LambdaStaticData object.
+Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
+and the inferred return type of the input method.
+"""
+function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Type)
+  (tree, ty) = Core.Inference.typeinf(lambda, typs, Core.svec())
+  lambda.ast = tree
+  return Base.uncompressed_ast(lambda), ty
+end
+
+@doc """
 Convert the set of Symbols corresponding to the input parameters back to an array for inclusion in a new lambda expression.
 """
 function setToArray(x :: Set{Symbol})
-  ret = Symbol[]
+  ret = Any[]
   for s in x
     push!(ret, s)
   end
@@ -217,7 +275,7 @@ Convert the Dict{Symbol,VarDef} internal storage format from a dictionary back i
 """
 function dictToArray(x :: Dict{Symbol,VarDef})
   ret = Any[]
-  for s in x
+  for (k, s) in x
     push!(ret, [s.name; s.typ; s.desc])
   end
   return ret
@@ -230,9 +288,9 @@ function createMeta(lambdaInfo :: LambdaInfo)
   ret = Any[]
 
   push!(ret, dictToArray(lambdaInfo.var_defs))
-  push!(ret, captured_outer_vars)
-  push!(ret, gen_syms)
-  push!(ret, static_parameter_names)
+  push!(ret, dictToArray(lambdaInfo.escaping_defs))
+  push!(ret, lambdaInfo.gen_syms)
+  push!(ret, lambdaInfo.static_parameter_names)
 
   return ret
 end
