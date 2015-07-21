@@ -98,7 +98,7 @@ type memoizeState
   per_site_opt_set
 
   function memoizeState()
-    new(Dict{Any,Any}(), Set{Any}(), nothing)
+    new(Dict{Any,Any}(), nothing)
   end
 end
 
