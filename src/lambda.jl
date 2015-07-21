@@ -86,6 +86,16 @@ type LambdaInfo
   end
 end
 
+function addInputParameter(s :: Symbol, li :: LambdaInfo)
+  push!(li.input_params, s)
+end
+
+function addInputParameters(s :: Array{Symbol, 1}, li :: LambdaInfo)
+  for i in s
+    addInputParameter(i, li)
+  end
+end
+
 @doc """
 Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
 """
@@ -97,6 +107,13 @@ function getType(x, li :: LambdaInfo)
   else
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
   end
+end
+
+@doc """
+Returns the descriptor for a local variable or input parameter "x" from LambdaInfo in "li".
+"""
+function getDesc(x :: Symbol, li :: LambdaInfo)
+  return li.var_defs[x].desc
 end
 
 @doc """
@@ -132,6 +149,35 @@ Returns true if the GenSym in "s" is a GenSym in LambdaInfo in "li".
 """
 function isLocalGenSym(s :: GenSym, li :: LambdaInfo)
   return s.id >= 0 && s.id < size(li.gen_syms, 1)
+end
+
+@doc """
+Add multiple local variables from some collection type.
+"""
+function addLocalVariables(collection, li :: LambdaInfo)
+  for i in collection
+    addLocalVariable(i, li)
+  end
+end
+
+@doc """
+Adds a local variable from a VarDef to the given LambdaInfo.
+"""
+function addLocalVariable(vd :: VarDef, li :: LambdaInfo)
+  addLocalVariable(vd.name, vd.typ, vd.desc, li)
+end
+
+@doc """
+Add one or more bitfields in "desc_flag" to the descriptor for a variable.
+"""
+function addDescFlag(s :: Symbol, desc_flag :: Int64, li :: LambdaInfo)
+  if haskey(li.var_defs, s)
+    var_def      = li.var_defs[s]
+    var_def.desc = var_def.desc | desc_flag
+    return true
+  else
+    return false
+  end
 end
 
 @doc """
@@ -186,6 +232,43 @@ function addGenSym(typ, li :: LambdaInfo)
 end
 
 @doc """
+Add a local variable to the function corresponding to LambdaInfo in "li" with name (as String), type and descriptor.
+Returns true if variable already existed and was updated, false otherwise.
+"""
+function addLocalVar(name :: String, typ, desc :: Int64, li :: LambdaInfo)
+  addLocalVar(Symbol(name), typ, desc, li)
+end
+
+@doc """
+Add a local variable to the function corresponding to LambdaInfo in "li" with name (as Symbol), type and descriptor.
+Returns true if variable already existed and was updated, false otherwise.
+"""
+function addLocalVar(name :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
+  if haskey(li.var_defs, name)
+    var_def = li.var_defs[name]
+    var_def.typ  = typ
+    var_def.desc = desc
+    return true
+  end
+
+  li.var_defs[name] = VarDef(name, typ, desc)
+  return false
+end
+
+@doc """
+Remove a local variable from lambda "li" given the variable's "name".
+Returns true if the variable existed and it was removed, false otherwise.
+"""
+function removeLocalVar(name :: Symbol, li :: LambdaInfo)
+  if haskey(li.var_defs, name)
+    delete!(li.var_defs, name)
+    return true
+  else
+    return false
+  end
+end
+
+@doc """
 Convert the lambda expression's args[1] from array of any to Set of Symbol to be stored in LambdaInfo.
 We make sure that each element of the array is indeed a Symbol.
 """
@@ -219,6 +302,17 @@ function createVarDict(x :: Array{Any, 1})
     ret[name] = VarDef(name, typ, desc)
   end
   return ret
+end
+
+@doc """
+Merge "inner" lambdaInfo into "outer".
+"""
+function mergeLambdaInfo(outer :: lambdaInfo, inner :: lambdaInfo)
+  for i in inner.var_defs
+    if !in(outer.var_defs, i[1])
+      outer.var_defs[i[1]] = i[2] 
+    end
+  end
 end
 
 @doc """
