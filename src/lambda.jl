@@ -313,7 +313,7 @@ end
 @doc """
 Merge "inner" lambdaInfo into "outer".
 """
-function mergeLambdaInfo(outer :: lambdaInfo, inner :: lambdaInfo)
+function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   for i in inner.var_defs
     if !in(outer.var_defs, i[1])
       outer.var_defs[i[1]] = i[2] 
