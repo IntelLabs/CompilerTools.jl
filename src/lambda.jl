@@ -89,15 +89,16 @@ end
 @doc """
 Add Symbol "s" as input parameter to LambdaInfo "li".
 """
-function addInputParameter(s :: Symbol, li :: LambdaInfo)
-  push!(li.input_params, s)
+function addInputParameter(vd :: VarDef, li :: LambdaInfo)
+  push!(li.input_params, vd.name)
+  addLocalVariable(vd, li)
 end
 
 @doc """
-Add all variable in collection "s" as input parameters to LambdaInfo "li".
+Add all variable in "collection" as input parameters to LambdaInfo "li".
 """
-function addInputParameters(s, li :: LambdaInfo)
-  for i in s
+function addInputParameters(collection, li :: LambdaInfo)
+  for i in collection
     addInputParameter(i, li)
   end
 end
