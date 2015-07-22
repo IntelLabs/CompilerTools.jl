@@ -277,13 +277,16 @@ end
 
 @doc """
 Convert the lambda expression's args[1] from array of any to Set of Symbol to be stored in LambdaInfo.
-We make sure that each element of the array is indeed a Symbol.
+We make sure that each element of the array is indeed a Symbol. 
 """
 function createVarSet(x :: Array{Any,1})
   ret = Set{Symbol}()
   for i = 1:length(x)
-    assert(typeof(x[i]) == Symbol)
-    push!(ret, x[i])
+    # turns out some lambda has Expr in parameter array...
+    s = x[i]
+    if isa(s, Expr) assert(is(s.head, :(::))); s = s.args[1] end
+    assert(isa(s, Symbol))
+    push!(ret, s)
   end
   return ret
 end
