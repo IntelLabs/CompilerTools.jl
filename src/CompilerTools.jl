@@ -8,5 +8,6 @@ include("liveness.jl")
 include("OptFramework.jl")
 include("udchains.jl")
 include("loops.jl")
+include("constant_fold.jl")
 
 end # module

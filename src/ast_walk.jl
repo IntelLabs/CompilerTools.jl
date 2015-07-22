@@ -208,6 +208,24 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
 	    #skip
     elseif head == :meta
 	    # ignore :meta for now. TODO: we might need to walk its args.
+    elseif head == :comprehension
+	    # args are either Expr or Symbol
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :typed_comprehension
+	    # args are either Expr or Symbol
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :(:)
+	    # args are either Expr or Symbol
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :const
+	    dump(ast,1000)
+	    # ignore :const for now. 
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
