@@ -606,7 +606,7 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
   elseif func == :SpMV
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
   else
-    addUnmodifiedParams(func, arg_type_tuple, map(x -> isbits(x) ? 1 : 0, arg_type_tuple))
+    addUnmodifiedParams(func, arg_type_tuple, Int64[isbits(x) ? 1 : 0 for x in arg_type_tuple])
     #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
 
