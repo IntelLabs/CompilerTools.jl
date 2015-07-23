@@ -578,7 +578,7 @@ end
 @doc """
 Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
 """
-params_not_modified = Dict{Any, Array{Int32,1}}()
+params_not_modified = Dict{Any, Array{Int64,1}}()
 
 @doc """
 Add an entry the dictionary of which arguments can be modified by which functions.
@@ -602,12 +602,12 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
 
   if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
      func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
-    addUnmodifiedParams(func, arg_type_tuple, ones(Int32, length(args))) 
+    addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args))) 
   elseif func == :SpMV
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
   else
     addUnmodifiedParams(func, arg_type_tuple, map(x -> isbits(x) ? 1 : 0, arg_type_tuple))
-    #addUnmodifiedParams(func, arg_type_tuple, zeros(Int32, length(args))) 
+    #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
 
   return params_not_modified[fs]
@@ -858,6 +858,9 @@ function from_expr(ast::Any, depth, state, callback, cbdata)
     #addStatement(top_level, state, ast)
     dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read)
+  elseif asttyp == GenSym
+    dprintln(2,"GenSym type ", ast)
+    add_access(state.cur_bb, ast, state.read)
   elseif asttyp == TopNode    # name
     #skip
   elseif isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
