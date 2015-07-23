@@ -77,7 +77,7 @@ Captured_outer_vars and static_parameter_names are stored as arrays for now sinc
 type LambdaInfo
   input_params  :: Set{Symbol}
   var_defs      :: Dict{Symbol,VarDef}
-  gen_syms      :: Array{Any,1}
+  gen_sym_typs  :: Array{Any,1}
   escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
 
@@ -110,7 +110,7 @@ function getType(x, li :: LambdaInfo)
   if typeof(x) == Symbol
     return li.var_defs[x].typ
   elseif typeof(x) == GenSym
-    return li.gen_syms[x.id + 1]
+    return li.gen_sym_typs[x.id + 1]
   else
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
   end
@@ -155,7 +155,7 @@ end
 Returns true if the GenSym in "s" is a GenSym in LambdaInfo in "li".
 """
 function isLocalGenSym(s :: GenSym, li :: LambdaInfo)
-  return s.id >= 0 && s.id < size(li.gen_syms, 1)
+  return s.id >= 0 && s.id < size(li.gen_sym_typs, 1)
 end
 
 @doc """
@@ -234,8 +234,8 @@ Add a new GenSym to the LambdaInfo in "li" with the given type in "typ".
 Returns the new GenSym.
 """
 function addGenSym(typ, li :: LambdaInfo)
-  push!(li.gen_syms, typ)
-  return GenSym(length(li.gen_syms) - 1) 
+  push!(li.gen_sym_typs, typ)
+  return GenSym(length(li.gen_sym_typs) - 1) 
 end
 
 @doc """
@@ -315,14 +315,65 @@ function createVarDict(x :: Array{Any, 1})
 end
 
 @doc """
-Merge "inner" lambdaInfo into "outer".
+Replace the symbols in an expression "expr" with those defined in the dictionary "dict".
+Return the result expression, which may share part of the input expression, but the input 
+is not changed. 
+Note that we do not recurse down nested lambda expressions (i.e., LambdaStaticData or
+DomainLambda or any other none Expr objects are left unchanged). If such lambdas have
+escaping names that are to be replaced, then the result will be wrong.
 """
-function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
-  for i in inner.var_defs
-    if !in(outer.var_defs, i[1])
-      outer.var_defs[i[1]] = i[2] 
+function replaceExprWithDict(expr::Any, dict::Dict{Union{Symbol,GenSym}, Any})
+  function traverse(expr)       # traverse expr to find the places where arrSym is refernced
+    if isa(expr, Symbol) || isa(expr, GenSym)
+      if haskey(dict, expr)
+        return dict[expr]
+      end
+      return expr
+    elseif isa(expr, SymbolNode)
+      if haskey(dict, expr.name)
+        return dict[expr.name]
+      end
+      return expr
+    elseif isa(expr, Array)
+      Any[ traverse(e) for e in expr ]
+    elseif isa(expr, Expr)
+      local head = expr.head
+      local args = copy(expr.args)
+      local typ  = expr.typ
+      for i = 1:length(args)
+        args[i] = traverse(args[i])
+      end
+      expr = Expr(expr.head, args...)
+      expr.typ = typ
+      return expr
+    else
+      expr
     end
   end
+  expr=traverse(expr)
+  return expr
+end
+
+@doc """
+Merge "inner" lambdaInfo into "outer", and "outer" is changed as result.
+Note that the input_params and static_parameter_names of "outer" do not change,
+other fields are merged. The GenSyms in "inner" will need to adjust their 
+indices as a result of this merge. We return a dictionary that maps
+from old GenSym to new GenSym for "inner", which can be used to adjust
+the body Expr of "inner" lambda using "replaceExprWithDict".
+"""
+function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
+  outer.var_defs = merge(outer.var_defs, inner.var_defs)
+  outer.escaping_defs = merge(outer.escaping_defs, inner.escaping_defs)
+  n = length(outer.gen_sym_typs)
+  dict = Dict{Union{Symbol, GenSym}, Any}()
+  for i = 1:length(inner.gen_sym_typs)
+    push!(outer.gen_sym_typs, inner.gen_sym_typs[i])
+    old_sym = GenSym(i)
+    new_sym = GenSym(n + i)
+    dict[old_sym] = new_sym
+  end
+  return dict
 end
 
 @doc """
@@ -343,9 +394,9 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   ret.var_defs = createVarDict(meta[1])
   ret.escaping_defs = createVarDict(meta[2])
   if !isa(meta[3], Array) 
-    ret.gen_syms = Any[]
+    ret.gen_sym_typs = Any[]
   else
-    ret.gen_syms = meta[3]
+    ret.gen_sym_typs = meta[3]
   end
   ret.static_parameter_names = meta[4]
 
@@ -393,7 +444,7 @@ function createMeta(lambdaInfo :: LambdaInfo)
 
   push!(ret, dictToArray(lambdaInfo.var_defs))
   push!(ret, dictToArray(lambdaInfo.escaping_defs))
-  push!(ret, lambdaInfo.gen_syms)
+  push!(ret, lambdaInfo.gen_sym_typs)
   push!(ret, lambdaInfo.static_parameter_names)
 
   return ret
