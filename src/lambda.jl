@@ -107,12 +107,16 @@ end
 Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
 """
 function getType(x, li :: LambdaInfo)
-  if typeof(x) == Symbol
+  xtyp = typeof(x)
+
+  if xtyp == Symbol
     return li.var_defs[x].typ
-  elseif typeof(x) == GenSym
+  elseif xtyp == SymbolNode
+    return x.typ
+  elseif xtyp == GenSym
     return li.gen_sym_typs[x.id + 1]
   else
-    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
+    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", xtyp))
   end
 end
 
@@ -192,7 +196,6 @@ Adds a new local variable with the given Symbol "s", type "typ", descriptor "des
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
 function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
-  assert(!isInputParameter(s, li))
   # If it is already a local variable then just update its type and desc.
   if haskey(li.var_defs, s)
     var_def      = li.var_defs[s]

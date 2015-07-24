@@ -56,6 +56,8 @@ type Access
     read
 end
 
+SymGen = Union{Symbol, GenSym}
+
 @doc """
 Liveness information for a TopLevelStatement in the CFG.
 Contains a pointer to the corresponding CFG TopLevelStatement.
@@ -64,12 +66,12 @@ Contains def, use, live_in, and live_out for the current statement.
 type TopLevelStatement
     tls :: CFGs.TopLevelStatement
 
-    def
-    use
-    live_in
-    live_out
+    def      :: Set{SymGen}
+    use      :: Set{SymGen}
+    live_in  :: Set{SymGen}
+    live_out :: Set{SymGen}
 
-    TopLevelStatement(t) = new(t, Set(), Set(), Set(), Set())
+    TopLevelStatement(t) = new(t, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}())
 end
 
 @doc """
@@ -122,13 +124,15 @@ Contains an array of liveness information for the top level statements in this b
 """
 type BasicBlock
     cfgbb :: CFGs.BasicBlock
-    def
-    use
-    live_in
-    live_out
+
+    def      :: Set{SymGen}
+    use      :: Set{SymGen}
+    live_in  :: Set{SymGen}
+    live_out :: Set{SymGen}
+
     statements :: Array{TopLevelStatement,1}
  
-    BasicBlock(bb) = new(bb, Set(),Set(), Set(), Set(), TopLevelStatement[])
+    BasicBlock(bb) = new(bb, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), TopLevelStatement[])
 end
 
 @doc """
@@ -355,8 +359,8 @@ end
 @doc """
 Query if the symbol in argument "x" is defined in live_info which can be a BasicBlock or TopLevelStatement.
 """
-function isDef(x, live_info)
-  in(x,live_info.def)
+function isDef(x :: SymGen, live_info)
+  in(x, live_info.def)
 end
 
 @doc """
@@ -420,7 +424,7 @@ end
 @doc """
 Compute the live_in and live_out information for each basic block and statement.
 """
-function compute_live_ranges(state, dfn)
+function compute_live_ranges(state :: expr_state, dfn)
     found_change = true
     bbs = state.cfg.basic_blocks
 
@@ -434,11 +438,11 @@ function compute_live_ranges(state, dfn)
             bb_index = dfn[i]
             bb = state.map[bbs[bb_index]]
 
-            accum = Set()
+            accum = Set{SymGen}()
             if bb_index == -2
               # Special case for final block.
               # Treat input arrays as live at end of function.
-              accum = Set{Symbol}(state.ref_params)
+              accum = Set{SymGen}(state.ref_params)
               dprintln(3,"Final block live_out = ", accum)
             else
               # The live_out of this block is the union of the live_in of every successor block.

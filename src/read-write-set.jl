@@ -36,13 +36,15 @@ function dprintln(level,msgs...)
     end
 end
 
+SymGen = Union{Symbol, GenSym}
+
 @doc """
 Holds which scalars and which array are accessed and for array which index expressions are used.
 """
 type AccessSet
-    scalars :: Set
-    arrays  :: Dict{Symbol,Array{Array{Any,1},1}}
-    AccessSet() = new(Set(),Dict{Symbol,Array{Array{Any,1},1}}())
+    scalars :: Set{SymGen}
+    arrays  :: Dict{SymGen, Array{Array{Any,1},1}}
+    AccessSet() = new(Set{SymGen}(), Dict{SymGen, Array{Array{Any,1},1}}())
 end
 
 @doc """
@@ -59,7 +61,7 @@ export from_exprs, ReadWriteSetType, AccessSet, set_debug_level, isRead, isWritt
 @doc """
 Return true if some symbol in "sym" is read either as a scalar or array within the computed ReadWriteSetType.
 """
-function isRead(sym :: Symbol, rws :: ReadWriteSetType)
+function isRead(sym :: SymGen, rws :: ReadWriteSetType)
     if in(sym, rws.readSet.scalars)
         return true
     elseif haskey(rws.readSet.arrays, sym)
@@ -72,7 +74,7 @@ end
 @doc """
 Return true if some symbol in "sym" is written either as a scalar or array within the computed ReadWriteSetType.
 """
-function isWritten(sym :: Symbol, rws :: ReadWriteSetType)
+function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
     if in(sym, rws.writeSet.scalars)
         return true
     elseif haskey(rws.writeSet.arrays, sym)
@@ -169,6 +171,23 @@ function from_coloncolon(ast::Array, depth,rws, callback, cbdata)
 end
 
 @doc """
+In various places we need a SymGen type which is the union of Symbol and GenSym.
+This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
+"""
+function toSymGen(x)
+  xtyp = typeof(x)
+  if xtyp == Symbol
+    return x
+  elseif xtyp == SymbolNode
+    return x.name
+  elseif xtyp == GenSym
+    return x
+  else
+    throw(string("Found object type ", xtyp, " for object ", x, " in toSymGen and don't know what to do with it."))
+  end
+end
+
+@doc """
 Process an assignment AST node.
 The left-hand side of the assignment is added to the writeSet.
 """
@@ -177,13 +196,7 @@ function from_assignment(ast::Array{Any,1}, depth,rws, callback, cbdata)
   local lhs = ast[1]
   local rhs = ast[2]
   lhs_type = typeof(lhs)
-  if lhs_type == Symbol
-    push!(rws.writeSet.scalars, lhs)
-  elseif lhs_type == SymbolNode
-    push!(rws.writeSet.scalars, lhs.name)
-  else
-    assert(false)
-  end
+  push!(rws.writeSet.scalars, toSymGen(lhs))
   from_expr(rhs, depth,rws, callback, cbdata)
 end
 
@@ -194,11 +207,11 @@ Makes sure there is an entry in the dictionary for this array and adds the index
 """
 function addIndexExpr!(this_dict, array_name, index_expr)
   dprintln(2,"addIndexExpr! ", typeof(array_name), " index_expr = ", index_expr, " typeof(index_expr) = ", typeof(index_expr))
-  assert(typeof(array_name) == Symbol)
-  if(!haskey(this_dict,array_name))
-    this_dict[array_name] = Array{Any,1}[]
+  key = toSymGen(array_name)
+  if(!haskey(this_dict, key))
+    this_dict[key] = Array{Any,1}[]
   end
-  push!(this_dict[array_name],index_expr)
+  push!(this_dict[key], index_expr)
 end
 
 @doc """
@@ -219,7 +232,7 @@ function from_call(ast::Array{Any,1}, depth, rws, callback, cbdata)
     assert(length(args) >= 2)
     indices = args[2:end]
     dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
-    addIndexExpr!(rws.readSet.arrays, args[1].name, indices)
+    addIndexExpr!(rws.readSet.arrays, args[1], indices)
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
     end
@@ -231,7 +244,7 @@ function from_call(ast::Array{Any,1}, depth, rws, callback, cbdata)
     assert(length(args) >= 3)
     indices = args[3:end]
     dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
-    addIndexExpr!(rws.writeSet.arrays, args[1].name, indices)
+    addIndexExpr!(rws.writeSet.arrays, args[1], indices)
     from_expr(args[2], depth, rws, callback, cbdata)
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
@@ -326,13 +339,14 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
   elseif asttyp == LineNumberNode
     # skip
   elseif asttyp == Symbol
-    push!(rws.readSet.scalars,ast)
+    push!(rws.readSet.scalars, ast)
     dprintln(3,"RWS Symbol type")
-    #skip
   elseif asttyp == SymbolNode # name, typ
-    push!(rws.readSet.scalars,ast.name)
+    push!(rws.readSet.scalars, ast.name)
     dprintln(3,"RWS SymbolNode type")
-    #skip
+  elseif asttyp == GenSym
+    push!(rws.readSet.scalars, ast)
+    dprintln(3,"RWS GenSym type")
   elseif asttyp == TopNode    # name
     dprintln(3,"RWS TopNode type")
     #skip
@@ -340,7 +354,7 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     dprintln(3,"RWS ASCIIString type")
     #skip
   elseif asttyp == GlobalRef 
-    local mod = ast.mod
+    local mod  = ast.mod
     local name = ast.name
     dprintln(3,"RWS GlobalRef type ",typeof(mod))
     #warn(string("from_expr: GetfieldNode typeof(mod)=", typeof(mod)))

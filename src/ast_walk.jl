@@ -63,6 +63,11 @@ function from_lambda(ast::Array{Any,1}, depth, callback, cbdata, top_level_numbe
   dprintln(3,"from_lambda pre-convert body = ", body, " typeof(body) = ", typeof(body))
   body = get_one(from_expr(body, depth, callback, cbdata, top_level_number, false, read))
   dprintln(3,"from_lambda post-convert body = ", body, " typeof(body) = ", typeof(body))
+  if typeof(body) != Expr || body.head != :body
+    dprintln(0,"AstWalk from_lambda got a non-body returned from procesing body")
+    dprintln(0,body)
+    throw(string("big problem"))
+  end
 
   ast[1] = param
   ast[2] = meta
@@ -91,7 +96,9 @@ function from_exprs(ast::Array{Any,1}, depth, callback, cbdata, top_level_number
         dprintln(2,"Processing ast #",i," depth=",depth)
     end
 
+    dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
     new_exprs = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
+    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_exprs)
     assert(isa(new_exprs,Array))
     append!(body, new_exprs)
   end
@@ -105,7 +112,9 @@ Recursively process the left and right hand sides with AstWalk.
 """
 function from_assignment(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
 #  assert(length(ast) == 2)
+  dprintln(3,"from_assignment, lhs = ", ast[1])
   ast[1] = get_one(from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false))
+  dprintln(3,"from_assignment, rhs = ", ast[2])
   ast[2] = get_one(from_expr(ast[2], depth, callback, cbdata, top_level_number, false, read))
   return ast
 end
@@ -164,6 +173,15 @@ function get_one(ast)
 end
 
 @doc """
+Return one element array with element x.
+"""
+function asArray(x)
+  ret = Any[]
+  push!(ret, x)
+  return ret
+end
+
+@doc """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
@@ -178,7 +196,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
   ret = callback(ast, cbdata, top_level_number, is_top_level, read)
   dprintln(2,"callback ret = ",ret)
   if ret != nothing
-      return [ret]
+      return ret
   end
 
   asttyp = typeof(ast)
@@ -191,7 +209,9 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     if head == :lambda
         args = from_lambda(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :body
+        dprintln(2,"Processing :body Expr in AstWalker.from_expr")
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
+        dprintln(2,"Done processing :body Expr in AstWalker.from_expr")
     elseif head == :block
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
     elseif head == :(.)
@@ -329,7 +349,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
     throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
   end
-  return [ast]
+  dprintln(3,"Before asArray return for ", ast)
+  return asArray(ast)
 end
 
 end
