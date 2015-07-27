@@ -158,6 +158,13 @@ function isLocalVariable(s :: Symbol, li :: LambdaInfo)
 end
 
 @doc """
+Returns an array of Symbols for local variables.
+"""
+function getLocalVariables(li :: LambdaInfo)
+  return setdiff(collect(keys(li.var_defs)), li.input_params)
+end
+
+@doc """
 Returns true if the Symbol in "s" is an escaping variable in LambdaInfo in "li".
 """
 function isEscapingVariable(s :: Symbol, li :: LambdaInfo)
