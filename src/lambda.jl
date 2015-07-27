@@ -7,7 +7,7 @@ export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
-export getRefParams, updateAssignedDesc, lambdaTypeinf
+export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
 
@@ -119,7 +119,10 @@ function getType(x, li :: LambdaInfo)
   xtyp = typeof(x)
 
   if xtyp == Symbol
-    return li.var_defs[x].typ
+    if haskey(li.var_defs, x) li.var_defs[x].typ
+    elseif haskey(li.escaping_defs, x) li.escaping_defs[x].typ
+    else throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
+    end
   elseif xtyp == SymbolNode
     return x.typ
   elseif xtyp == GenSym
