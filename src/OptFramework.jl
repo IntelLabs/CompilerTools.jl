@@ -499,7 +499,7 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
-      return x
+      return [x]
     end    
   end
   nothing
