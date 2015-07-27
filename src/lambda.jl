@@ -7,7 +7,7 @@ export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
-export getRefParams, updateAssignedDesc, lambdaTypeinf
+export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
 
@@ -119,7 +119,10 @@ function getType(x, li :: LambdaInfo)
   xtyp = typeof(x)
 
   if xtyp == Symbol
-    return li.var_defs[x].typ
+    if haskey(li.var_defs, x) li.var_defs[x].typ
+    elseif haskey(li.escaping_defs, x) li.escaping_defs[x].typ
+    else throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
+    end
   elseif xtyp == SymbolNode
     return x.typ
   elseif xtyp == GenSym
@@ -341,7 +344,7 @@ Note that we do not recurse down nested lambda expressions (i.e., LambdaStaticDa
 DomainLambda or any other none Expr objects are left unchanged). If such lambdas have
 escaping names that are to be replaced, then the result will be wrong.
 """
-function replaceExprWithDict(expr::Any, dict::Dict{Union{Symbol,GenSym}, Any})
+function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
   function traverse(expr)       # traverse expr to find the places where arrSym is refernced
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
@@ -385,7 +388,7 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   outer.var_defs = merge(outer.var_defs, inner.var_defs)
   outer.escaping_defs = merge(outer.escaping_defs, inner.escaping_defs)
   n = length(outer.gen_sym_typs)
-  dict = Dict{Union{Symbol, GenSym}, Any}()
+  dict = Dict{SymGen, Any}()
   for i = 1:length(inner.gen_sym_typs)
     push!(outer.gen_sym_typs, inner.gen_sym_typs[i])
     old_sym = GenSym(i)
