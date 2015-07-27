@@ -2,6 +2,7 @@ module LambdaHandling
 
 import Base.show
 
+export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
@@ -50,6 +51,14 @@ const ISASSIGNED = 2
 const ISASSIGNEDBYINNERFUNCTION = 4
 const ISCONST = 8
 const ISASSIGNEDONCE = 16
+
+@doc """
+Type aliases for different unions of Symbol, SymbolNode, and GenSym.
+"""
+typealias SymGen     Union{Symbol, GenSym}
+typealias SymNodeGen Union{SymbolNode, GenSym}
+typealias SymAllGen  Union{Symbol, SymbolNode, GenSym}
+typealias SymAll     Union{Symbol, SymbolNode}
 
 @doc """
 Represents the triple stored in a lambda's args[2][1].
