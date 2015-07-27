@@ -125,16 +125,16 @@ For each label in the code, replace that label with the rhs of the label map.
 function update_labels(x, state :: lmstate, top_level_number, is_top_level, read)
   asttyp = typeof(x)
   if asttyp == LabelNode
-    return LabelNode(state.label_map[x.label])
+    return [LabelNode(state.label_map[x.label])]
   elseif asttyp == GotoNode
-    return GotoNode(state.label_map[x.label])
+    return [GotoNode(state.label_map[x.label])]
   elseif asttyp == Expr
     head = x.head
     args = x.args
     if head == :gotoifnot
       else_label = args[2]
       x.args[2] = state.label_map[else_label]
-      return x
+      return [x]
     end
   end
   return nothing
