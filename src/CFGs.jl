@@ -575,7 +575,7 @@ function createFunctionBody(bl :: CFG)
       cur_block = body_order[bo]
       # Get the BasicBlock corresponding to the label.
       bb = bl.basic_blocks[cur_block]
-      dprintln(2,"dumping basic block ", cur_block, " fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label, " to_be_processed = ", to_be_processed)
+      dprintln(2,"dumping basic block ", cur_block, " fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label)
 
       # Labels greater than or equal to 0 are real and are output to the beginning of the block.
       if cur_block >= 0
