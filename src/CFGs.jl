@@ -544,14 +544,15 @@ function getBbBodyOrder(bl :: CFG)
       # If the next block via the depth_first_number is not already in the body order do the following.
       # This can happen if a fallthrough successor is added before its normal place in depth first numbering.
       if !in(cur, res)
-        push!(res, cur)     # Add this basic block to the body order.
+        push!(res, cur)                # Add this basic block to the body order.
         cur_bb = bl.basic_blocks[cur]  # Get the BasicBlock given the current block's index.
         # If the cur basic block has a fallthrough successor then make sure it comes next
         # by adding it to the body order here.
-        if cur_bb.fallthrough_succ != nothing
+        while cur_bb.fallthrough_succ != nothing
           fallthrough_id = cur_bb.fallthrough_succ.label
           assert(!in(fallthrough_id, res))
           push!(res, fallthrough_id) 
+          cur_bb = cur_bb.fallthrough_succ
         end
       end
     end
@@ -565,9 +566,8 @@ Create the array of statements that go in a :body Expr given a CFG "bl".
 function createFunctionBody(bl :: CFG)
     res = Any[]
 
-    dprintln(2,"createFunctionBody, dfn = ", bl.depth_first_numbering)
-
     body_order = getBbBodyOrder(bl)
+    dprintln(2,"createFunctionBody, body_order = ", body_order)
 
     # Go through the blocks in body order.
     for bo = 1:length(body_order)
