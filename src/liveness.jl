@@ -156,14 +156,15 @@ function show(io::IO, bb::BasicBlock)
     for j in bb.live_out
         print(io, " ", j)
     end
+    println(io,")")
 
     tls = bb.statements
     if length(tls) == 0
         println(io,"Basic block without any statements.")
     end
     for j = 1:length(tls)
-        print(io, "    ",tls[j].tls.index, "  ", tls[j].tls.expr)
         if(DEBUG_LVL >= 5)
+            print(io, "    ",tls[j].tls.index, "  ", tls[j].tls.expr)
             print(io,"  Defs(")
             for k in tls[j].def
                 print(io, " ", k)
