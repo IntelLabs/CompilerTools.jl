@@ -533,7 +533,7 @@ Walk through a lambda expression.
 We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
 We don't recurse into the body here because from_expr handles that with fromCFG.
 """
-function from_lambda(ast, depth, state, callback, cbdata)
+function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   # :lambda expression
   lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
   state.ref_params = CompilerTools.LambdaHandling.getRefParams(lambdaInfo)
@@ -544,7 +544,7 @@ end
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
-function from_exprs(ast::Array{Any,1}, depth, state, callback, cbdata)
+function from_exprs(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   # sequence of expressions
   # ast = [ expr, ... ]
   local len = length(ast)
@@ -559,7 +559,7 @@ end
 @doc """
 Walk through an assignment expression.
 """
-function from_assignment(ast::Array{Any,1}, depth, state, callback, cbdata)
+function from_assignment(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   # :(=) assignment
   # ast = [ ... ]
   assert(length(ast) == 2)
@@ -621,7 +621,7 @@ end
 @doc """
 Walk through a call expression.
 """
-function from_call(ast::Array{Any,1}, depth, state, callback, cbdata)
+function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
@@ -711,7 +711,7 @@ end
 @doc """
 Extract liveness information from the CFG.
 """
-function fromCFG(live_res, cfg :: CFGs.CFG, callback, cbdata)
+function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: Any)
   dprintln(2,"fromCFG")
   CFGs.dump_bb(cfg)   # Dump debugging information if set_debug_level is high enough.
 
@@ -742,7 +742,7 @@ end
 @doc """
 Process a return Expr node which is just a recursive processing of all of its args.
 """
-function from_return(args, depth, state, callback, cbdata)
+function from_return(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
     dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
     nothing
@@ -751,7 +751,7 @@ end
 @doc """
 Process a gotoifnot which is just a recursive processing of its first arg which is the conditional.
 """
-function from_if(args, depth, state, callback, cbdata)
+function from_if(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
     # The structure of the if node is an array of length 2.
     assert(length(args) == 2)
     # The first index is the conditional.
@@ -765,7 +765,7 @@ end
 @doc """
 Generic routine for how to walk most AST node types.
 """
-function from_expr(ast::Any, depth, state, callback, cbdata)
+function from_expr(ast::Any, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   if typeof(ast) == LambdaStaticData
       # ast = uncompressed_ast(ast)
       # skip processing LambdaStaticData
@@ -887,7 +887,7 @@ function from_expr(ast::Any, depth, state, callback, cbdata)
     #addStatement(top_level, state, ast)
     dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
     for i = 1:length(ast)
-      from_expr(ast[i], depth, state, false, callback, cbdata)
+      from_expr(ast[i], depth, state, callback, cbdata)
     end
   elseif asttyp == DataType
     #addStatement(top_level, state, ast)
