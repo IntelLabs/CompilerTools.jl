@@ -440,8 +440,8 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   dict = Dict{SymGen, Any}()
   for i = 1:length(inner.gen_sym_typs)
     push!(outer.gen_sym_typs, inner.gen_sym_typs[i])
-    old_sym = GenSym(i)
-    new_sym = GenSym(n + i)
+    old_sym = GenSym(i - 1)
+    new_sym = GenSym(n + i - 1)
     dict[old_sym] = new_sym
   end
   return dict
