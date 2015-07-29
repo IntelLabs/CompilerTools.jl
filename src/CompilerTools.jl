@@ -1,8 +1,8 @@
 module CompilerTools
 
 # package code goes here
-include("lambda.jl")
 include("ast_walk.jl")
+include("lambda.jl")
 include("read-write-set.jl")
 include("CFGs.jl")
 include("liveness.jl")

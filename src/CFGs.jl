@@ -1,6 +1,7 @@
 # The CFGs module provides the type CFG that contains the control-flow graph of a given function.
 module CFGs
 
+using CompilerTools
 using CompilerTools.AstWalker
 
 import Base.show

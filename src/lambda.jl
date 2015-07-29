@@ -1,5 +1,8 @@
 module LambdaHandling
 
+using CompilerTools
+using CompilerTools.AstWalker
+
 import Base.show
 
 export SymGen, SymNodeGen, SymAllGen, SymAll
@@ -9,7 +12,6 @@ export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
 export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
-
 
 # This controls the debug print level.  0 prints nothing.  3 print everything.
 DEBUG_LVL=0
@@ -92,6 +94,53 @@ type LambdaInfo
 
   function LambdaInfo()
     new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[])
+  end
+end
+
+type CountSymbolState
+  used_symbols :: Set{Symbol}
+  callback     :: Union{Function, Nothing}
+
+  function CountSymbolState(cb)
+    new(Set{Symbol}(), cb)
+  end
+end
+
+function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_level, read)
+  if state.callback != nothing
+    ret = state.callback(x)
+    if ret != nothing
+      assert(isa(ret, Array))
+      for a in ret
+        CompilerTools.AstWalker.AstWalk(a, count_symbols, state)
+      end
+      return [x]
+    end
+  end
+
+  if typeof(x) == Symbol
+    push!(state.used_symbols, x)
+  elseif typeof(x) == SymbolNode
+    push!(state.used_symbols, x.name)
+  end
+  return nothing
+end
+
+@doc """
+Eliminates unused symbols from the LambdaInfo var_defs.
+Takes a LambdaInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
+"""
+function eliminateUnusedLocals(li :: LambdaInfo, body, astwalkcallback = nothing)
+  css = CountSymbolState(astwalkcallback)
+  CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
+  dprintln(3,"css = ", css)
+  for i in li.var_defs
+    if in(i[1], li.input_params)
+      continue
+    end
+    if !in(i[1], css.used_symbols)
+      delete!(li.var_defs, i[1])
+    end
   end
 end
 
