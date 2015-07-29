@@ -554,6 +554,8 @@ This takes a LambdaInfo and a body as input parameters.
 This body can be a body expression or you can pass "nothing" if you want but then you will probably need to set the body in args[3] manually by yourself.
 """
 function lambdaInfoToLambdaExpr(lambdaInfo :: LambdaInfo, body)
+  assert(typeof(body) == Expr)
+  assert(body.head == :body)
   return Expr(:lambda, setToArray(lambdaInfo.input_params), createMeta(lambdaInfo), body)
 end
 
