@@ -7,7 +7,7 @@ import Base.show
 
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaInfo
-export getType, getVarDef, isInputParameter, isLocalVariable, isLocalGenSym
+export getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
 export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
@@ -427,16 +427,31 @@ function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
 end
 
 @doc """
-Merge "inner" lambdaInfo into "outer", and "outer" is changed as result.
-Note that the input_params and static_parameter_names of "outer" do not change,
-other fields are merged. The GenSyms in "inner" will need to adjust their 
-indices as a result of this merge. We return a dictionary that maps
-from old GenSym to new GenSym for "inner", which can be used to adjust
-the body Expr of "inner" lambda using "replaceExprWithDict".
+Merge "inner" lambdaInfo into "outer", and "outer" is changed as result.  Note
+that the input_params, static_parameter_names, and escaping_defs of "outer" do
+not change, other fields are merged. The GenSyms in "inner" will need to adjust
+their indices as a result of this merge. We return a dictionary that maps from
+old GenSym to new GenSym for "inner", which can be used to adjust the body Expr
+of "inner" lambda using "replaceExprWithDict".
 """
 function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
+  for (v, d) in inner.var_defs
+    if isLocalVariable(v, outer) 
+      if !isInputParameter(v, inner) # skip input parameters
+        throw(string("Conflicting variable ", v, " exists in both inner and outer lambda"))
+      end
+    else
+      addLocalVariable(d, outer)
+    end
+  end
   outer.var_defs = merge(outer.var_defs, inner.var_defs)
-  outer.escaping_defs = merge(outer.escaping_defs, inner.escaping_defs)
+  for (v, d) in inner.escaping_defs
+    if !isLocalVariable(v, outer)
+      if !isEscapingVariable(v, outer)
+        throw(string("Variable ", v, " from inner lambda is neither local nor escaping in outer lambda"))
+      end
+    end
+  end
   n = length(outer.gen_sym_typs)
   dict = Dict{SymGen, Any}()
   for i = 1:length(inner.gen_sym_typs)
