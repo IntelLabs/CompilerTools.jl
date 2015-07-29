@@ -1,7 +1,7 @@
 import CompilerTools.AstWalker
 export constant_fold
 
-binops = Set({:+, :-, :*, :/})
+binops = Set([:+; :-; :*; :/])
 
 function constant_folder(node, symbol_table, top_level_number, is_top_level, read)
   if isa(node, Expr)
