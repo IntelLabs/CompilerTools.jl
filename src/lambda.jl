@@ -91,9 +91,10 @@ type LambdaInfo
   gen_sym_typs  :: Array{Any,1}
   escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
+  return_type
 
   function LambdaInfo()
-    new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[])
+    new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
   end
 end
 
@@ -471,7 +472,18 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   end
   ret.static_parameter_names = meta[4]
 
+  assert(typeof(lambda.args[3]) == Expr)
+  assert(lambda.args[3].head == :body)
+  ret.return_type = lambda.args[3].typ
+
   return ret
+end
+
+@doc """
+Returns the type of the lambda as stored in LambdaInfo "li" and as extracted during lambdaExprToLambdaInfo.
+"""
+function getReturnType(li :: LambdaInfo)
+  return li.return_type
 end
 
 @doc """
