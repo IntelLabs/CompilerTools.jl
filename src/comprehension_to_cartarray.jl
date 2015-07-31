@@ -71,7 +71,7 @@ function infer_comprehension_type(comp)
 end
 
 function process_node(node, state, top_level_number, is_top_level, read)
-	if !isa(node,Expr)
+  if !isa(node,Expr)
     return nothing
   end
   if node.head == :typed_comprehension
@@ -84,7 +84,7 @@ function process_node(node, state, top_level_number, is_top_level, read)
     typ = infer_comprehension_type(node)
   end
   if (node.head == :comprehension)
-    return :(@parallelize($node, $typ))
+    return [:(@parallelize($node, $typ))]
   end
 end
 
