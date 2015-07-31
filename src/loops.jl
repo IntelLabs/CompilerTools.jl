@@ -217,62 +217,14 @@ end
 @doc """
 Find the loops in a CFGs.CFG in "bl".
 """
-function compute_dom_loops(bl::CompilerTools.CFGs.CFG)
+function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)
     # Get the depth-first numering for the CFG.
     bbs_df_order = bl.depth_first_numbering
     # Get the number of basic blocks.
     num_bb = length(bl.basic_blocks)
     assert(num_bb == length(bbs_df_order))
 
-    # Compute dominators.
-    # https://en.wikipedia.org/wiki/Dominator_(graph_theory)
-    # The above webpage describes what a dominator is and a simple way to calculate them.
-    # Their data-flow equations inspired the following concrete implementation.
-    all_set = Set()
-    for i in collect(keys(bl.basic_blocks))
-        push!(all_set, i)
-    end
-    dom_dict = Dict{Int,Set}()
-    for i in collect(keys(bl.basic_blocks))
-        if i == -1
-            dom_dict[i] = Set(-1)
-        else
-            dom_dict[i] = deepcopy(all_set)
-        end
-    end
-
-    count = 0;
-    change_found = true
-    while(change_found)
-        dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
-
-        count = count + 1
-        if count > 1000
-            throw(string("Probable infinite loop in compute_dom_loops."))
-        end
-
-        change_found = false
-
-        for i = 1:num_bb
-            bb_index = bbs_df_order[i]
-            bb = bl.basic_blocks[bb_index]
-
-            if bb_index != -1
-                if length(bb.preds) != 0
-                    pred_array = collect(bb.preds)
-                    vb = deepcopy(dom_dict[pred_array[1].label])
-                    for j = 2:length(pred_array)
-                        vb = intersect(vb, dom_dict[pred_array[j].label])
-                    end
-                    push!(vb, bb_index)
-                    if vb != dom_dict[bb_index]
-                        dom_dict[bb_index] = vb
-                        change_found = true
-                    end
-                end
-            end
-        end
-    end
+    dom_dict = CompilerTools.CFGs.compute_dominators(bl)
 
     loops = Loop[]
 

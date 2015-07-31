@@ -114,7 +114,7 @@ function addStatement(top_level, state, ast)
             throw(string("statement number already there"))
           end
         end
-        push!(state.cur_bb.statements,TopLevelStatement(state.top_level_number, ast))
+        push!(state.cur_bb.statements, TopLevelStatement(state.top_level_number, ast))
         return true
     end
     return false
@@ -406,12 +406,101 @@ function getDistinctStatementNum(bl :: CFG)
 end
 
 @doc """
+Modifies the CFG to create a conditional (i.e., if statement) that wraps a certain region of the CFG whose entry block is
+"first" and whose last block is "last".
+Takes a parameters:
+1) bl - the CFG to modify
+2) cond_gotoifnot - a :gotoifnot Expr whose label is equal to "first"
+3) first - the existing starting block of the code to be included in the conditional
+4) merge - the existing block to be executed after the conditional
+To be eligible for wrapping, first and merge must be in the same scope of source code.
+This restriction is validated by confirming that "first" dominates "merge" and that "merge" inverse dominates "first".
+"""
+function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merge :: Int, back_edge :: Union{Nothing, BasicBlock} = nothing)
+    dprintln(2,"wrapInConditional condition = ", cond_gotoifnot, " first = ", first, " merge = ", merge)
+    assert(haskey(bl.basic_blocks, first))   # Make sure the "before" basic block exists in the CFG.
+    assert(haskey(bl.basic_blocks, merge))   # Make sure the "after"  basic block exists in the CFG.
+    dump_bb(bl)                              # Print the CFG in debugging mode.
+    assert(cond_gotoifnot.head == :gotoifnot)
+    cond_label = cond_gotoifnot.args[2]
+    assert(cond_label == first)
+
+    bb_first     = bl.basic_blocks[first]
+    bb_merge     = bl.basic_blocks[merge]
+    dom_dict     = compute_dominators(bl)
+    inv_dom_dict = compute_inverse_dominators(bl)
+
+    @assert in(merge, dom_dict[first])     "The starting block in wrapInConditional does not dominate the merge block."
+    @assert in(first, inv_dom_dict[merge]) "The merge block in wrapInConditional does not inverse dominate the first block."
+
+    # Get the label for the new basic block.  If the block to insert before has a positive label
+    # then we'll need to be able to jump to new basic block we are inserting as well so it has to have a
+    # positive label, which we get by adding 1 to the previous maximum basic block level.
+    # If the block we want to insert before has a negative level then similarly the new basic block also
+    # has to be negative, which was get from the previous minimum -1.
+    if first < -2
+      new_bb_id = getMinBB(bl) - 1
+      cond_fallthrough = new_bb_id - 1
+    else 
+      new_bb_id = getMaxBB(bl) + 1
+      cond_fallthrough = getMinBB(bl) - 1
+    end
+
+    dprintln(2,"new_bb_id = ", new_bb_id, " cond_fallthrough = ", cond_fallthrough)
+
+    # Create the new basic blocks.
+    new_bb  = BasicBlock(new_bb_id)
+    cond_ft = BasicBlock(cond_fallthrough)
+
+    # The new basic block containing the conditional can go to the new fallthrough block or "first".
+    push!(new_bb.succs, cond_ft)
+    new_bb.fallthrough_succ = cond_ft
+    push!(new_bb.succs, bb_first)
+    #push!(new_bb.sttaements, TopLevelStatement(-1, cond_gotoifnot))
+
+    # For each predecessor of the "after" basic block...
+    for pred in bb_first.preds
+        # If this predecessor isn't a back-edge from a loop that we want to exclude...
+        if back_edge != nothing || pred.label != back_edge
+            # ... then make this predecessor of "after" a predecessor of the new basic block ...
+            push!(new_bb.preds, pred)
+            # ... no longer include this predecessor as one for "after" but exclusively the new basic block.
+            delete!(bb_first.preds, pred)
+        end
+    end
+
+    # Link the conditional fallthrough's succs and preds.
+    push!(cond_ft.succs, bb_merge)
+    push!(cond_ft.preds, new_bb)
+    push!(cond_ft.statements, TopLevelStatement(-1, GotoNode(merge)))
+    push!(bb_merge.preds, cond_ft)
+
+    # Add the new basic blocks to the CFG.
+    bl.basic_blocks[new_bb_id] = new_bb
+    bl.basic_blocks[cond_fallthrough] = cond_ft
+
+    push!(bb_first.preds, new_bb)
+
+    # For all the predecessors of the new basic block, go through and make those blocks successors
+    # no longer point to "after" but point to the new basic block instead.
+    for pred in new_bb.preds
+      dprintln(2,"pred = ", pred.label)
+      replaceSucc(pred, bb_first, new_bb)
+    end
+
+    # Just have to recompute the depth-first numbering.
+    bl.depth_first_numbering = compute_dfn(bl.basic_blocks)
+    dump_bb(bl)
+    (new_bb, cond_ft)
+end
+
+@doc """
 Insert a new basic block into the CFG "bl" between the basic blocks whose labels are "before" and "after".
 Returns a tuple of the new basic block created and if needed a GotoNode AST node to be inserted at the end of the new
 basic block so that it will jump to the "after" basic block.  The user of this function is expected to insert
 at the end of the new basic block once they are done inserting their other code.
 """
-function insertBetween(bl::CFG, before :: Int, after :: Int)
+function insertBetween(bl :: CFG, before :: Int, after :: Int)
     dprintln(2,"insertBetween before = ", before, " after = ", after)
     assert(haskey(bl.basic_blocks, before))   # Make sure the "before" basic block exists in the CFG.
     assert(haskey(bl.basic_blocks, after))    # Make sure the "after"  basic block exists in the CFG.
@@ -757,7 +846,7 @@ end
 @doc """
 For a given basic block "cur_bb", replace one of its successors "orig_succ" with a different successor "new_succ".
 """
-function replaceSucc(cur_bb, orig_succ, new_succ)
+function replaceSucc(cur_bb :: BasicBlock, orig_succ :: BasicBlock, new_succ :: BasicBlock)
   delete!(cur_bb.succs, orig_succ)   # delete the original successor from the set of successors
   push!(cur_bb.succs, new_succ)      # add the new successor to the set of successors
 
@@ -1003,6 +1092,134 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
   end
   nothing
+end
+
+@doc """
+Compute the dominators of the CFG.
+"""
+function compute_dominators(bl :: CFG)
+  # Compute dominators.
+  # https://en.wikipedia.org/wiki/Dominator_(graph_theory)
+  # The above webpage describes what a dominator is and a simple way to calculate them.
+  # Their data-flow equations inspired the following concrete implementation.
+
+  # Get the depth-first numering for the CFG.
+  bbs_df_order = bl.depth_first_numbering
+  # Get the number of basic blocks.
+  num_bb = length(bl.basic_blocks)
+  assert(num_bb == length(bbs_df_order))
+
+  all_set = Set()
+  for i in collect(keys(bl.basic_blocks))
+      push!(all_set, i)
+  end
+  dom_dict = Dict{Int,Set}()
+  for i in collect(keys(bl.basic_blocks))
+      if i == -1
+          dom_dict[i] = Set(-1)
+      else
+          dom_dict[i] = deepcopy(all_set)
+      end
+  end
+
+  count = 0;
+  change_found = true
+  while(change_found)
+      dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+
+      count = count + 1
+      if count > 1000
+          throw(string("Probable infinite loop in compute_dominators."))
+      end
+
+      change_found = false
+
+      for i = 1:num_bb
+          bb_index = bbs_df_order[i]
+          bb = bl.basic_blocks[bb_index]
+
+          if bb_index != -1
+              if length(bb.preds) != 0
+                  pred_array = collect(bb.preds)
+                  vb = deepcopy(dom_dict[pred_array[1].label])
+                  for j = 2:length(pred_array)
+                      vb = intersect(vb, dom_dict[pred_array[j].label])
+                  end
+                  push!(vb, bb_index)
+                  if vb != dom_dict[bb_index]
+                      dom_dict[bb_index] = vb
+                      change_found = true
+                  end
+              end
+          end
+      end
+  end
+
+  return dom_dict
+end
+
+@doc """
+Compute the inverse dominators of the CFG.
+"""
+function compute_inverse_dominators(bl :: CFG)
+  # Compute inverse dominators.
+  # https://en.wikipedia.org/wiki/Dominator_(graph_theory)
+  # The above webpage describes what a dominator is and a simple way to calculate them.
+  # Their data-flow equations inspired the following concrete implementation.
+
+  # Get the depth-first numering for the CFG.
+  bbs_df_order = bl.depth_first_numbering
+  # Get the number of basic blocks.
+  num_bb = length(bl.basic_blocks)
+  assert(num_bb == length(bbs_df_order))
+
+  all_set = Set()
+  for i in collect(keys(bl.basic_blocks))
+      push!(all_set, i)
+  end
+  dom_dict = Dict{Int,Set}()
+  for i in collect(keys(bl.basic_blocks))
+      if i == -2
+          dom_dict[i] = Set(-2)
+      else
+          dom_dict[i] = deepcopy(all_set)
+      end
+  end
+
+  count = 0;
+  change_found = true
+  while(change_found)
+      dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+
+      count = count + 1
+      if count > 1000
+          throw(string("Probable infinite loop in compute_inverse_dominators."))
+      end
+
+      change_found = false
+
+      for i = num_bb:-1:1
+          bb_index = bbs_df_order[i]
+          bb = bl.basic_blocks[bb_index]
+
+          if bb_index != -2
+              if length(bb.succs) != 0
+                  succ_array = collect(bb.succs)
+                  vb = deepcopy(dom_dict[succ_array[1].label])
+                  for j = 2:length(succ_array)
+                      vb = intersect(vb, dom_dict[succ_array[j].label])
+                  end
+                  push!(vb, bb_index)
+                  if vb != dom_dict[bb_index]
+                      dom_dict[bb_index] = vb
+                      change_found = true
+                  end
+              end
+          end
+      end
+  end
+
+  return dom_dict
 end
 
 end
