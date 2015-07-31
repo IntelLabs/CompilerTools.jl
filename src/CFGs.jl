@@ -270,7 +270,7 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
         # Mark as successful label replacement.
         state.changed = true
         # Indicate we changed the current node.
-        return x
+        return [x]
       end
     elseif asttype == GotoNode
       # The node is a GotoNode which has a "label" field.
@@ -280,7 +280,7 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
       state.changed = true
       # Return a new node with the new label.  
       # At some point there was a problem with updating the label in place as object's this type are considered immutable.
-      return GotoNode(state.new_label)
+      return [GotoNode(state.new_label)]
     end
 
     # Indicate we didn't change anything.
@@ -314,7 +314,7 @@ the new basic block by setting excludeBackEdge to true and setting back_edge to 
 the back edge.
 """
 function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, back_edge = nothing)
-    dprintln(2,"insertBefore ", after)
+    dprintln(2,"insertBefore ", after, " excludeBackEdge = ", excludeBackEdge, " back_edge = ", back_edge)
     assert(haskey(bl.basic_blocks, after))   # Make sure the basic block we want to insert before exists in the CFG.
     dump_bb(bl)                              # Print the CFG in debugging mode.
 
@@ -419,6 +419,8 @@ function insertBetween(bl::CFG, before :: Int, after :: Int)
 
     bb_before = bl.basic_blocks[before]       # Get the BasicBlock for "before".
     bb_after  = bl.basic_blocks[after]        # Get the BasicBlock for "after".
+
+    @assert (in(bb_after, bb_before.succs)) "To insert between two blocks, the after block must be a successor of the before block, otherwise the operation is not well-defined."
 
     # Get the label for the new basic block.  If the block to insert before has a positive label
     # then we'll need to be able to jump to new basic block we are inserting as well so it has to have a
