@@ -301,6 +301,10 @@ function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   return false
 end
 
+function addEscapingVariable(vd :: VarDef, li :: LambdaInfo)
+  addEscapingVariable(vd.name, vd.typ, vd.desc, li)
+end
+
 @doc """
 Add a new GenSym to the LambdaInfo in "li" with the given type in "typ".
 Returns the new GenSym.
