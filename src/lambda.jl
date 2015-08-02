@@ -301,6 +301,9 @@ function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   return false
 end
 
+@doc """
+Adds a new escaping variable from a VarDef in parameter "vd" into LambdaInfo "li".
+"""
 function addEscapingVariable(vd :: VarDef, li :: LambdaInfo)
   addEscapingVariable(vd.name, vd.typ, vd.desc, li)
 end
