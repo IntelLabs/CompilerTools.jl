@@ -223,7 +223,7 @@ function from_call(ast::Array{Any,1}, depth, rws, callback, cbdata)
   local args = ast[2:end]
   dprintln(2,fun)
   for(i = 1:length(args))
-    dprintln(2,"RWS first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
+    dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
   end
   if(fun == TopNode(:arrayref) || fun == TopNode(:unsafe_arrayref))
     dprintln(2,"Handling arrayref in from_call")
