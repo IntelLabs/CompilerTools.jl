@@ -261,7 +261,11 @@ it was able to process it.  If so, then we process the regular Julia statement r
 the callback.
 """
 function tryCallback(ast, callback, cbdata, depth, rws)
-  res = callback(ast, cbdata)
+  if callback != nothing
+    res = callback(ast, cbdata)
+  else
+    res = nothing
+  end
   if res != nothing
     from_exprs(res, depth+1, rws, callback, cbdata)
     return false
@@ -366,6 +370,8 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     dprintln(3,"RWS QuoteNode type ",typeof(value))
     #warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
   elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
+    #skip
+  elseif asttyp == NewvarNode
     #skip
   else
     if tryCallback(ast, callback, cbdata, depth, rws)
