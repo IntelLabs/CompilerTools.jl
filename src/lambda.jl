@@ -442,6 +442,8 @@ old GenSym to new GenSym for "inner", which can be used to adjust the body Expr
 of "inner" lambda using "replaceExprWithDict".
 """
 function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
+  dprintln(3,"outer = ", outer)
+  dprintln(3,"inner = ", inner)
   for (v, d) in inner.var_defs
     if isLocalVariable(v, outer) 
       if !isInputParameter(v, inner) # skip input parameters
@@ -453,10 +455,8 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   end
   outer.var_defs = merge(outer.var_defs, inner.var_defs)
   for (v, d) in inner.escaping_defs
-    if !isLocalVariable(v, outer)
-      if !isEscapingVariable(v, outer)
-        throw(string("Variable ", v, " from inner lambda is neither local nor escaping in outer lambda"))
-      end
+    if !isLocalVariable(v, outer) && !isInputParameter(v, outer) && !isEscapingVariable(v, outer)
+      throw(string("Variable ", v, " from inner lambda is neither parameter nor local nor escaping in outer lambda"))
     end
   end
   n = length(outer.gen_sym_typs)
