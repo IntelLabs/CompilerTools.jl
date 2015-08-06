@@ -263,9 +263,10 @@ type expr_state
     cur_bb
     read
     ref_params :: Array{Symbol, 1}
+    params_not_modified :: Dict{Any, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
 
-    function expr_state(cfg)
-        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[])
+    function expr_state(cfg, no_mod)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod)
     end
 end
 
@@ -581,15 +582,10 @@ function from_assignment(ast::Array{Any,1}, depth :: Int64, state :: expr_state,
 end
 
 @doc """
-Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
-"""
-params_not_modified = Dict{Any, Array{Int64,1}}()
-
-@doc """
 Add an entry the dictionary of which arguments can be modified by which functions.
 """
-function addUnmodifiedParams(func, signature, unmodifieds)
-  params_not_modified[(func, signature)] = unmodifieds
+function addUnmodifiedParams(func, signature, unmodifieds, state :: expr_state)
+  state.params_not_modified[(func, signature)] = unmodifieds
 end
 
 @doc """
@@ -597,10 +593,10 @@ For a given function and signature, return which parameters can be modified by t
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
-function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
+function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
   fs = (func, arg_type_tuple)
-  if haskey(params_not_modified, fs)
-    res = params_not_modified[fs]
+  if haskey(state.params_not_modified, fs)
+    res = state.params_not_modified[fs]
     assert(length(res) == length(args))
     return res
   end 
@@ -611,11 +607,11 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, params_not_modified)
   elseif func == :SpMV
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
   else
-    addUnmodifiedParams(func, arg_type_tuple, Int64[isbits(x) ? 1 : 0 for x in arg_type_tuple])
+    addUnmodifiedParams(func, arg_type_tuple, Int64[isbits(x) ? 1 : 0 for x in arg_type_tuple], state)
     #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
 
-  return params_not_modified[fs]
+  return state.params_not_modified[fs]
 end
 
 @doc """
@@ -638,7 +634,7 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
   end
   arg_type_tuple = eval(texpr)
   # See which arguments to the function can be modified by the function.
-  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, params_not_modified)
+  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, state)
   assert(length(unmodified_args) == length(args))
   
   # symbols don't need to be translated
@@ -698,14 +694,21 @@ ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing)
+function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
-  live_res = expr_state(cfg)
+  live_res = expr_state(cfg, no_mod)
   # Just to process the lambda and extract what the ref_params are.
   from_expr(ast, 1, live_res, callback, cbdata)
   # Process the body of the function via the CFG.
   fromCFG(live_res, cfg, callback, cbdata)
+end
+
+@doc """
+This function gives you the option of calling the ENTRY point from_expr with an ast and several optional named arguments.
+"""
+function from_expr(ast :: Expr; callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
+  from_expr(ast, callback, cbdata, no_mod)
 end
 
 @doc """
