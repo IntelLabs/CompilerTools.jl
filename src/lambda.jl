@@ -491,8 +491,19 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   assert(length(lambda.args) == 3)
 
   ret = LambdaInfo()
-  # Convert array of input parameters in lambda.args[1] into a searchable Set.
-  ret.input_params = lambda.args[1]
+  # Convert array of input parameters in lambda.args[1] into an array of Symbol.
+  for i = 1:length(lambda.args[1])
+    one_input = lambda.args[1][i]
+    oityp = typeof(one_input)
+    if oityp == Symbol
+      push!(ret.input_params, one_input)
+    elseif oityp == Expr && one_input.head == :(::)
+      push!(ret.input_params, one_input.args[1])
+    else
+      dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
+    end
+  end
+
   # We call the second part of the lambda metadata.
   meta = lambda.args[2]
   dprintln(1,"meta = ", meta)
