@@ -86,7 +86,7 @@ The GenSym part (args[2][3]) is stored as an array since GenSym's are indexed.
 Captured_outer_vars and static_parameter_names are stored as arrays for now since we don't expect them to be changed much.
 """
 type LambdaInfo
-  input_params  :: Set{Symbol}
+  input_params  :: Array{Any,1}
   var_defs      :: Dict{Symbol,VarDef}
   gen_sym_typs  :: Array{Any,1}
   escaping_defs :: Dict{Symbol,VarDef}
@@ -94,19 +94,26 @@ type LambdaInfo
   return_type
 
   function LambdaInfo()
-    new(Set{Symbol}(), Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
   end
 end
 
+@doc """
+Holds symbols and gensyms that are seen in a given AST when using the specified callback to handle non-standard Julia AST types.
+"""
 type CountSymbolState
   used_symbols :: Set{Symbol}
+  used_gensyms :: Set{Int64}
   callback     :: Union{Function, Nothing}
 
   function CountSymbolState(cb)
-    new(Set{Symbol}(), cb)
+    new(Set{Symbol}(), Set{Int64}(), cb)
   end
 end
 
+@doc """
+Adds symbols and gensyms to their corresponding sets in CountSymbolState when they are seen in the AST.
+"""
 function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_level, read)
   if state.callback != nothing
     ret = state.callback(x)
@@ -119,10 +126,14 @@ function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_le
     end
   end
 
-  if typeof(x) == Symbol
+  xtyp = typeof(x)
+
+  if xtyp == Symbol
     push!(state.used_symbols, x)
-  elseif typeof(x) == SymbolNode
+  elseif xtyp == SymbolNode
     push!(state.used_symbols, x.name)
+  elseif xtyp == GenSym
+    push!(state.used_gensyms, x.id)
   end
   return nothing
 end
@@ -131,7 +142,7 @@ end
 Eliminates unused symbols from the LambdaInfo var_defs.
 Takes a LambdaInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
-function eliminateUnusedLocals(li :: LambdaInfo, body, astwalkcallback = nothing)
+function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, astwalkcallback = nothing)
   css = CountSymbolState(astwalkcallback)
   CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
   dprintln(3,"css = ", css)
@@ -143,6 +154,23 @@ function eliminateUnusedLocals(li :: LambdaInfo, body, astwalkcallback = nothing
       delete!(li.var_defs, i[1])
     end
   end
+
+  gensymdict = Dict{SymGen,Any}()
+  newgensym  = Any[]
+  next_id    = 0
+  for i = 0:length(li.gen_sym_typs)-1
+    if in(i, css.used_gensyms)
+      push!(newgensym, li.gen_sym_typs[i+1])
+      gensymdict[GenSym(i)] = GenSym(next_id)
+      next_id = next_id + 1
+    end
+  end
+  dprintln(3,"gensymdict = ", gensymdict)
+  dprintln(3,"newgensym = ", newgensym)
+  li.gen_sym_typs = newgensym
+  body = replaceExprWithDict(body, gensymdict)
+  dprintln(3,"updated body = ", body)
+  return body
 end
 
 @doc """
@@ -355,22 +383,6 @@ function removeLocalVar(name :: Symbol, li :: LambdaInfo)
 end
 
 @doc """
-Convert the lambda expression's args[1] from array of any to Set of Symbol to be stored in LambdaInfo.
-We make sure that each element of the array is indeed a Symbol. 
-"""
-function createVarSet(x :: Array{Any,1})
-  ret = Set{Symbol}()
-  for i = 1:length(x)
-    # turns out some lambda has Expr in parameter array...
-    s = x[i]
-    if isa(s, Expr) assert(is(s.head, :(::))); s = s.args[1] end
-    assert(isa(s, Symbol))
-    push!(ret, s)
-  end
-  return ret
-end
-
-@doc """
 Convert the lambda expression's args[2][1] from Array{Array{Any,1},1} to a Dict{Symbol,VarDef}.
 The internal triples are extracted and asserted that name and desc are of the appropriate type.
 """
@@ -480,7 +492,7 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
 
   ret = LambdaInfo()
   # Convert array of input parameters in lambda.args[1] into a searchable Set.
-  ret.input_params = createVarSet(lambda.args[1]) 
+  ret.input_params = lambda.args[1]
   # We call the second part of the lambda metadata.
   meta = lambda.args[2]
   dprintln(1,"meta = ", meta)
@@ -520,17 +532,6 @@ function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Type)
 end
 
 @doc """
-Convert the set of Symbols corresponding to the input parameters back to an array for inclusion in a new lambda expression.
-"""
-function setToArray(x :: Set{Symbol})
-  ret = Any[]
-  for s in x
-    push!(ret, s)
-  end
-  return ret
-end
-
-@doc """
 Convert the Dict{Symbol,VarDef} internal storage format from a dictionary back into an array of Any triples.
 """
 function dictToArray(x :: Dict{Symbol,VarDef})
@@ -563,7 +564,7 @@ This body can be a body expression or you can pass "nothing" if you want but the
 function lambdaInfoToLambdaExpr(lambdaInfo :: LambdaInfo, body)
   assert(typeof(body) == Expr)
   assert(body.head == :body)
-  return Expr(:lambda, setToArray(lambdaInfo.input_params), createMeta(lambdaInfo), body)
+  return Expr(:lambda, lambdaInfo.input_params, createMeta(lambdaInfo), body)
 end
 
 @doc """
