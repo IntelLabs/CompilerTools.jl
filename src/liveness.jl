@@ -657,6 +657,7 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
         if unmodified_args[i] == 1
           from_expr(args[i], depth+1, state, callback, cbdata)
         else
+          from_expr(args[i], depth+1, state, callback, cbdata)
           # The argument could be modified so treat it as a "def".
           state.read = false
           from_expr(args[i], depth+1, state, callback, cbdata)
