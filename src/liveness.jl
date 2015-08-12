@@ -2,6 +2,7 @@ module LivenessAnalysis
 
 using CompilerTools
 using CompilerTools.CFGs
+using CompilerTools.LambdaHandling
 
 import Base.show
 
@@ -264,9 +265,10 @@ type expr_state
     read
     ref_params :: Array{Symbol, 1}
     params_not_modified :: Dict{Any, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
+    li :: Union{Nothing, LambdaInfo}
 
     function expr_state(cfg, no_mod)
-        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, nothing)
     end
 end
 
@@ -536,8 +538,8 @@ We don't recurse into the body here because from_expr handles that with fromCFG.
 """
 function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   # :lambda expression
-  lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
-  state.ref_params = CompilerTools.LambdaHandling.getRefParams(lambdaInfo)
+  state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
+  state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
@@ -589,6 +591,35 @@ function addUnmodifiedParams(func, signature, unmodifieds, state :: expr_state)
 end
 
 @doc """
+Get the type of some AST node.
+"""
+function typeOfOpr(x, li :: LambdaInfo)
+  if isa(x, Expr) x.typ
+  elseif isa(x, Symbol)
+    getType(x, li)
+  elseif isa(x, SymbolNode)
+    typ1 = getType(x.name, li)
+    assert(x.typ == typ1)
+    x.typ
+  elseif isa(x, GenSym) getType(x, li)
+  elseif isa(x, GlobalRef) typeof(eval(x))
+  else typeof(x)
+  end
+end
+
+@doc """
+Returns true if a parameter is passed by reference.
+isbits types are not passed by ref but everything else is (is this always true..any exceptions?)
+"""
+function isPassedByRef(x :: DataType, state :: expr_state)
+  if isbits(x)
+    return false
+  else
+    return true
+  end 
+end
+
+@doc """
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
@@ -606,8 +637,9 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args))) 
   elseif func == :SpMV
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+# TODO other functions like arraylen here.
   else
-    addUnmodifiedParams(func, arg_type_tuple, Int64[isbits(x) ? 1 : 0 for x in arg_type_tuple], state)
+    addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x) ? 0 : 1) for x in arg_type_tuple], state)
     #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
 
@@ -626,11 +658,10 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
     dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
    
-  # Form a the signature of the call in a tuple.
+  # Form the signature of the call in a tuple.
   texpr = Expr(:tuple)
   for i = 1:length(args)
-    argtyp = typeof(args[i])
-    push!(texpr.args, argtyp) 
+    push!(texpr.args, typeOfOpr(args[i], state.li)) 
   end
   arg_type_tuple = eval(texpr)
   # See which arguments to the function can be modified by the function.
@@ -644,28 +675,16 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
 
   # For each argument.
   for i = 1:length(args)
-    argtyp = typeof(args[i])
+    argtyp = typeOfOpr(args[i], state.li)
     dprintln(2,"cur arg = ", args[i], " type = ", argtyp)
 
-    if(argtyp == Symbol)
+    # We can always potentially read first.
+    from_expr(args[i], depth+1, state, callback, cbdata)
+    if unmodified_args[i] == 0
+      # The argument could be modified so treat it as a "def".
+      state.read = false
       from_expr(args[i], depth+1, state, callback, cbdata)
-    elseif argtyp == SymbolNode
-      if isbits(args[i].typ)
-        from_expr(args[i], depth+1, state, callback, cbdata)
-      else
-        from_expr(args[i], depth+1, state, callback, cbdata)
-        if unmodified_args[i] == 1
-          from_expr(args[i], depth+1, state, callback, cbdata)
-        else
-          from_expr(args[i], depth+1, state, callback, cbdata)
-          # The argument could be modified so treat it as a "def".
-          state.read = false
-          from_expr(args[i], depth+1, state, callback, cbdata)
-          state.read = true
-        end
-      end
-    else
-      from_expr(args[i], depth+1, state, callback, cbdata)
+      state.read = true
     end
   end
 end
