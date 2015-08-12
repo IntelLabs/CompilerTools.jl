@@ -104,10 +104,9 @@ Holds symbols and gensyms that are seen in a given AST when using the specified 
 type CountSymbolState
   used_symbols :: Set{Symbol}
   used_gensyms :: Set{Int64}
-  callback     :: Union{Function, Nothing}
 
-  function CountSymbolState(cb)
-    new(Set{Symbol}(), Set{Int64}(), cb)
+  function CountSymbolState()
+    new(Set{Symbol}(), Set{Int64}())
   end
 end
 
@@ -115,16 +114,16 @@ end
 Adds symbols and gensyms to their corresponding sets in CountSymbolState when they are seen in the AST.
 """
 function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_level, read)
-  if state.callback != nothing
-    ret = state.callback(x)
-    if ret != nothing
-      assert(isa(ret, Array))
-      for a in ret
-        CompilerTools.AstWalker.AstWalk(a, count_symbols, state)
-      end
-      return [x]
-    end
-  end
+#  if state.callback != nothing
+#    ret = state.callback(x)
+#    if ret != nothing
+#      assert(isa(ret, Array))
+#      for a in ret
+#        CompilerTools.AstWalker.AstWalk(a, count_symbols, state)
+#      end
+#      return [x]
+#    end
+#  end
 
   xtyp = typeof(x)
 
@@ -142,9 +141,13 @@ end
 Eliminates unused symbols from the LambdaInfo var_defs.
 Takes a LambdaInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
-function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, astwalkcallback = nothing)
-  css = CountSymbolState(astwalkcallback)
-  CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
+function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, AstWalkFunc = nothing)
+  css = CountSymbolState()
+  if AstWalkFunc == nothing
+    CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
+  else
+    AstWalkFunc(body, count_symbols, css)
+  end
   dprintln(3,"css = ", css)
   for i in li.var_defs
     if in(i[1], li.input_params)
@@ -168,7 +171,7 @@ function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, astwalkcallback =
   dprintln(3,"gensymdict = ", gensymdict)
   dprintln(3,"newgensym = ", newgensym)
   li.gen_sym_typs = newgensym
-  body = replaceExprWithDict(body, gensymdict)
+  body = replaceExprWithDict(body, gensymdict, AstWalkFunc)
   dprintln(3,"updated body = ", body)
   return body
 end
@@ -413,35 +416,40 @@ Note that we do not recurse down nested lambda expressions (i.e., LambdaStaticDa
 DomainLambda or any other none Expr objects are left unchanged). If such lambdas have
 escaping names that are to be replaced, then the result will be wrong.
 """
-function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
-  function traverse(expr)       # traverse expr to find the places where arrSym is refernced
+function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any}, AstWalkFunc = nothing)
+  function update_sym(expr, dict, top_level_number, is_top_level, read)
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
-        return dict[expr]
+        return [dict[expr]]
       end
-      return expr
     elseif isa(expr, SymbolNode)
       if haskey(dict, expr.name)
-        return dict[expr.name]
+        return [dict[expr.name]]
       end
-      return expr
-    elseif isa(expr, Array)
-      Any[ traverse(e) for e in expr ]
-    elseif isa(expr, Expr)
-      local head = expr.head
-      local args = copy(expr.args)
-      local typ  = expr.typ
-      for i = 1:length(args)
-        args[i] = traverse(args[i])
+    end
+    return nothing
+  end
+
+  if expr == nothing
+    return nothing
+  end
+
+  dprintln(3, "replaceExprWithDict: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
+  if isa(expr,Array)
+    for i = 1:length(expr)
+      if AstWalkFunc == nothing
+        expr[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(expr[i], update_sym, dict))
+      else
+        expr[i] = CompilerTools.AstWalker.get_one(AstWalkFunc(expr[i], update_sym, dict))
       end
-      expr = Expr(expr.head, args...)
-      expr.typ = typ
-      return expr
+    end
+  else
+    if AstWalkFunc == nothing
+      expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(expr, update_sym, dict))
     else
-      expr
+      expr = CompilerTools.AstWalker.get_one(AstWalkFunc(expr, update_sym, dict))
     end
   end
-  expr=traverse(expr)
   return expr
 end
 
