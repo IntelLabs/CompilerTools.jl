@@ -611,8 +611,10 @@ end
 Returns true if a parameter is passed by reference.
 isbits types are not passed by ref but everything else is (is this always true..any exceptions?)
 """
-function isPassedByRef(x :: DataType, state :: expr_state)
-  if isbits(x)
+function isPassedByRef(x, state :: expr_state)
+  if isa(x, Tuple)
+    return true
+  elseif isbits(x)
     return false
   else
     return true
