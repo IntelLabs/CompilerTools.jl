@@ -639,7 +639,7 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
     addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
 # TODO other functions like arraylen here.
   else
-    addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x) ? 0 : 1) for x in arg_type_tuple], state)
+    addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
     #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
 
