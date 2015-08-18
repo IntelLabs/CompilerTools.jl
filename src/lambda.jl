@@ -216,6 +216,8 @@ function getType(x, li :: LambdaInfo)
     return x.typ
   elseif xtyp == GenSym
     return li.gen_sym_typs[x.id + 1]
+  elseif xtyp == Expr
+    return x.typ
   else
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", xtyp))
   end
