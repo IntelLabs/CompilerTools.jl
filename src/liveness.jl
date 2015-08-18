@@ -599,7 +599,12 @@ function typeOfOpr(x, li :: LambdaInfo)
     getType(x, li)
   elseif isa(x, SymbolNode)
     typ1 = getType(x.name, li)
-    assert(x.typ == typ1)
+    if x.typ != typ1
+      dprintln(2, "typeOfOpr x.typ and lambda type different")
+      dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
+      dprintln(2, "li = ", li)
+    end
+    assert(x.typ <: typ1)
     x.typ
   elseif isa(x, GenSym) getType(x, li)
   elseif isa(x, GlobalRef) typeof(eval(x))
