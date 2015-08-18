@@ -302,7 +302,7 @@ function get_info_internal(x, bl :: BlockLiveness, field)
         return getfield(x, field)
     elseif typeof(x) == CFGs.TopLevelStatement
         for i in bl.basic_blocks
-          for j in i.statements
+          for j in i[2].statements
             if x == j.tls
               return getfield(j, field)
             end
