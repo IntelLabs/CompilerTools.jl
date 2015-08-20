@@ -369,7 +369,7 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     #TODO: fields: value
     dprintln(3,"RWS QuoteNode type ",typeof(value))
     #warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
-  elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
+  elseif isbits(asttyp)
     #skip
   elseif asttyp == Module
     #skip
