@@ -99,6 +99,31 @@ type LambdaInfo
 end
 
 @doc """
+Pretty print a LambdaInfo.
+"""
+function show(io :: IO, li :: LambdaInfo)
+  println(io, "Inputs = ", li.input_params)
+  if !isempty(li.static_parameter_names)
+    println(io, "Static Parameter Names = ", li.static_parameter_names)
+  end
+  if li.return_type != nothing
+    println(io, "Return type = ", li.return_type)
+  end
+  println(io, "VarDefs")
+  for i in li.var_defs
+    println(io, "    ", i[2])
+  end
+  println(io, "GenSym")
+  for i = 1:length(li.gen_sym_typs)
+    println(io, "    ", i-1, " => ", li.gen_sym_typs[i])
+  end
+  println(io, "EscapingDefs")
+  for i in li.escaping_defs
+    println(io, "    ", i[2])
+  end
+end
+
+@doc """
 Holds symbols and gensyms that are seen in a given AST when using the specified callback to handle non-standard Julia AST types.
 """
 type CountSymbolState
