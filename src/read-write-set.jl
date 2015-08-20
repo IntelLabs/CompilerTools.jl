@@ -371,6 +371,8 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     #warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
   elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
     #skip
+  elseif asttyp == Module
+    #skip
   elseif asttyp == NewvarNode
     #skip
   else
