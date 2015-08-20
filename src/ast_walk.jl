@@ -341,7 +341,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     #skip
   elseif asttyp == ()
     #skip
-  elseif asttyp == ASCIIString
+  elseif asttyp == ASCIIString || asttyp == UTF8String
     #skip
   elseif asttyp == NewvarNode
     #skip

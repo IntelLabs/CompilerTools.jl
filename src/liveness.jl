@@ -923,7 +923,7 @@ function from_expr(ast::Any, depth :: Int64, state :: expr_state, callback :: Fu
     #addStatement(top_level, state, ast)
   elseif asttyp == ()
     #addStatement(top_level, state, ast)
-  elseif asttyp == ASCIIString
+  elseif asttyp == ASCIIString || asttyp == UTF8String
     #addStatement(top_level, state, ast)
   elseif asttyp == NewvarNode
     #addStatement(top_level, state, ast)
