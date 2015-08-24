@@ -659,6 +659,12 @@ function showNoModDict(dict)
   end
 end
 
+# If true, will assume that functions without "!" don't update their arguments.
+use_inplace_naming_convention = false
+function set_use_inplace_naming_convention()
+  global use_inplace_naming_convention = true
+end
+
 @doc """
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
@@ -667,7 +673,7 @@ well-known functions or default to presuming that all arguments could be modifie
 function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
   dprintln(3,"getUnmodifiedArgs func = ", func)
   dprintln(3,"getUnmodifiedArgs args = ", args)
-  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
+#  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
   dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
   dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
   showNoModDict(state.params_not_modified)
@@ -715,9 +721,12 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
     addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
 # TODO other functions like arraylen here.
   else
-    dprintln(3,"fallback to args passed by ref as modified.")
-    addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
-    #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
+    if use_inplace_naming_convention && isgeneric(func) && !in('!', function_name(func))
+      addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
+    else
+      dprintln(3,"fallback to args passed by ref as modified.")
+      addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
+    end
   end
 
   return state.params_not_modified[fs]
