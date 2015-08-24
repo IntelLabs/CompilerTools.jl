@@ -605,6 +605,7 @@ function typeOfOpr(x, li :: LambdaInfo)
       dprintln(2, "li = ", li)
     end
     assert(x.typ <: typ1)
+    assert(isa(x.typ, Type))
     x.typ
   elseif isa(x, GenSym) getType(x, li)
   elseif isa(x, GlobalRef) typeof(eval(x))
@@ -627,25 +628,94 @@ function isPassedByRef(x, state :: expr_state)
 end
 
 @doc """
+Returns true if all elements of tuple1 are sub-types of the corresponding elements of tuple2.
+"""
+function tupleSubType(tuple1, tuple2)
+  assert(length(tuple1) == length(tuple2))
+
+  for i = 1:length(tuple1)
+    dprintln(3, "tupleSubType tuple1[i] = ", tuple1[i], " tuple2[i] = ", tuple2[i], " type1 = ", typeof(tuple1[i]), " type2 = ", typeof(tuple2[i]))
+    if !(tuple1[i] <: tuple2[i])
+      return false
+    end
+  end
+
+  return true
+end
+
+function showNoModDict(dict)
+  for i in dict
+    try
+    dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
+    catch
+    targs = i[1][2]
+    assert(isa(targs, Tuple))
+    println("EXCEPTION: type = ", typeof(targs))
+    for j = 1:length(targs)
+       println(j, " = ", typeof(targs[j]))
+       println(targs[j])
+    end
+    end
+  end
+end
+
+@doc """
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
 function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
+  dprintln(3,"getUnmodifiedArgs func = ", func)
+  dprintln(3,"getUnmodifiedArgs args = ", args)
+  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
+  dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
+  dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
+  showNoModDict(state.params_not_modified)
+  if typeof(func) == GlobalRef || typeof(func) == Expr || typeof(func) == TopNode
+    func = eval(func)
+  end
+
+  assert(typeof(func) == Function)
+
   fs = (func, arg_type_tuple)
   if haskey(state.params_not_modified, fs)
     res = state.params_not_modified[fs]
     assert(length(res) == length(args))
+    dprintln(3,"funcion already in params_not_modified so returning previously computed value")
     return res
   end 
 
+  assert(isa(arg_type_tuple, Tuple))
+
+  for i in state.params_not_modified
+    (f1, t1) = i[1]
+    dprintln(3,"f1 = ", f1, " t1 = ", t1, " f1type = ", typeof(f1), " len(t1) = ", length(t1))
+    if func == f1 
+      dprintln(3,"function matches")
+      assert(isa(t1, Tuple))
+      if length(t1) == length(arg_type_tuple)
+        dprintln(3,"tuple lengths match")
+        if tupleSubType(arg_type_tuple, t1)
+          res = i[2]
+          assert(length(res) == length(args))
+          addUnmodifiedParams(func, arg_type_tuple, res, state)
+          dprintln(3,"exact match not found but sub-type match found")
+          return res
+        end
+      end
+    end
+  end
+
   if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
-     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
-    addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args))) 
+     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-) 
+    dprintln(3,"arithmetic functions known not to modify args")
+    addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
   elseif func == :SpMV
-    addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+    dprintln(3,"check for SpMV that should probably be removed now.")
+    addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
 # TODO other functions like arraylen here.
   else
+    dprintln(3,"fallback to args passed by ref as modified.")
     addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
     #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
   end
@@ -674,6 +744,7 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
   # See which arguments to the function can be modified by the function.
   unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, state)
   assert(length(unmodified_args) == length(args))
+  dprintln(3,"unmodified_args = ", unmodified_args)
   
   # symbols don't need to be translated
   if typeof(fun) != Symbol
@@ -722,6 +793,7 @@ You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
 function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
+  #dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod)
