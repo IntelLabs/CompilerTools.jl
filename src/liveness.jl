@@ -2,6 +2,7 @@ module LivenessAnalysis
 
 using CompilerTools
 using CompilerTools.CFGs
+using CompilerTools.LambdaHandling
 
 import Base.show
 
@@ -264,9 +265,10 @@ type expr_state
     read
     ref_params :: Array{Symbol, 1}
     params_not_modified :: Dict{Any, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
+    li :: Union{Nothing, LambdaInfo}
 
     function expr_state(cfg, no_mod)
-        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, nothing)
     end
 end
 
@@ -300,7 +302,7 @@ function get_info_internal(x, bl :: BlockLiveness, field)
         return getfield(x, field)
     elseif typeof(x) == CFGs.TopLevelStatement
         for i in bl.basic_blocks
-          for j in i.statements
+          for j in i[2].statements
             if x == j.tls
               return getfield(j, field)
             end
@@ -536,8 +538,8 @@ We don't recurse into the body here because from_expr handles that with fromCFG.
 """
 function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
   # :lambda expression
-  lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
-  state.ref_params = CompilerTools.LambdaHandling.getRefParams(lambdaInfo)
+  state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
+  state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
@@ -589,26 +591,142 @@ function addUnmodifiedParams(func, signature, unmodifieds, state :: expr_state)
 end
 
 @doc """
+Get the type of some AST node.
+"""
+function typeOfOpr(x, li :: LambdaInfo)
+  if isa(x, Expr) x.typ
+  elseif isa(x, Symbol)
+    getType(x, li)
+  elseif isa(x, SymbolNode)
+    typ1 = getType(x.name, li)
+    if x.typ != typ1
+      dprintln(2, "typeOfOpr x.typ and lambda type different")
+      dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
+      dprintln(2, "li = ", li)
+    end
+    assert(x.typ <: typ1)
+    assert(isa(x.typ, Type))
+    x.typ
+  elseif isa(x, GenSym) getType(x, li)
+  elseif isa(x, GlobalRef) typeof(eval(x))
+  else typeof(x)
+  end
+end
+
+@doc """
+Returns true if a parameter is passed by reference.
+isbits types are not passed by ref but everything else is (is this always true..any exceptions?)
+"""
+function isPassedByRef(x, state :: expr_state)
+  if isa(x, Tuple)
+    return true
+  elseif isbits(x)
+    return false
+  else
+    return true
+  end 
+end
+
+@doc """
+Returns true if all elements of tuple1 are sub-types of the corresponding elements of tuple2.
+"""
+function tupleSubType(tuple1, tuple2)
+  assert(length(tuple1) == length(tuple2))
+
+  for i = 1:length(tuple1)
+    dprintln(3, "tupleSubType tuple1[i] = ", tuple1[i], " tuple2[i] = ", tuple2[i], " type1 = ", typeof(tuple1[i]), " type2 = ", typeof(tuple2[i]))
+    if !(tuple1[i] <: tuple2[i])
+      return false
+    end
+  end
+
+  return true
+end
+
+function showNoModDict(dict)
+  for i in dict
+    try
+    dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
+    catch
+    targs = i[1][2]
+    assert(isa(targs, Tuple))
+    println("EXCEPTION: type = ", typeof(targs))
+    for j = 1:length(targs)
+       println(j, " = ", typeof(targs[j]))
+       println(targs[j])
+    end
+    end
+  end
+end
+
+# If true, will assume that functions without "!" don't update their arguments.
+use_inplace_naming_convention = false
+function set_use_inplace_naming_convention()
+  global use_inplace_naming_convention = true
+end
+
+@doc """
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
 function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
+  dprintln(3,"getUnmodifiedArgs func = ", func)
+  dprintln(3,"getUnmodifiedArgs args = ", args)
+#  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
+  dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
+  dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
+  showNoModDict(state.params_not_modified)
+  if typeof(func) == GlobalRef || typeof(func) == Expr || typeof(func) == TopNode
+    func = eval(func)
+  end
+
+  assert(typeof(func) == Function)
+
   fs = (func, arg_type_tuple)
   if haskey(state.params_not_modified, fs)
     res = state.params_not_modified[fs]
     assert(length(res) == length(args))
+    dprintln(3,"funcion already in params_not_modified so returning previously computed value")
     return res
   end 
 
+  assert(isa(arg_type_tuple, Tuple))
+
+  for i in state.params_not_modified
+    (f1, t1) = i[1]
+    dprintln(3,"f1 = ", f1, " t1 = ", t1, " f1type = ", typeof(f1), " len(t1) = ", length(t1))
+    if func == f1 
+      dprintln(3,"function matches")
+      assert(isa(t1, Tuple))
+      if length(t1) == length(arg_type_tuple)
+        dprintln(3,"tuple lengths match")
+        if tupleSubType(arg_type_tuple, t1)
+          res = i[2]
+          assert(length(res) == length(args))
+          addUnmodifiedParams(func, arg_type_tuple, res, state)
+          dprintln(3,"exact match not found but sub-type match found")
+          return res
+        end
+      end
+    end
+  end
+
   if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
-     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-)
-    addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args))) 
+     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-) 
+    dprintln(3,"arithmetic functions known not to modify args")
+    addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
   elseif func == :SpMV
-    addUnmodifiedParams(func, arg_type_tuple, [1,1]) 
+    dprintln(3,"check for SpMV that should probably be removed now.")
+    addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
+# TODO other functions like arraylen here.
   else
-    addUnmodifiedParams(func, arg_type_tuple, Int64[isbits(x) ? 1 : 0 for x in arg_type_tuple], state)
-    #addUnmodifiedParams(func, arg_type_tuple, zeros(Int64, length(args))) 
+    if use_inplace_naming_convention && isgeneric(func) && !in('!', function_name(func))
+      addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
+    else
+      dprintln(3,"fallback to args passed by ref as modified.")
+      addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
+    end
   end
 
   return state.params_not_modified[fs]
@@ -626,16 +744,16 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
     dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
    
-  # Form a the signature of the call in a tuple.
+  # Form the signature of the call in a tuple.
   texpr = Expr(:tuple)
   for i = 1:length(args)
-    argtyp = typeof(args[i])
-    push!(texpr.args, argtyp) 
+    push!(texpr.args, typeOfOpr(args[i], state.li)) 
   end
   arg_type_tuple = eval(texpr)
   # See which arguments to the function can be modified by the function.
   unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, state)
   assert(length(unmodified_args) == length(args))
+  dprintln(3,"unmodified_args = ", unmodified_args)
   
   # symbols don't need to be translated
   if typeof(fun) != Symbol
@@ -644,28 +762,16 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
 
   # For each argument.
   for i = 1:length(args)
-    argtyp = typeof(args[i])
+    argtyp = typeOfOpr(args[i], state.li)
     dprintln(2,"cur arg = ", args[i], " type = ", argtyp)
 
-    if(argtyp == Symbol)
+    # We can always potentially read first.
+    from_expr(args[i], depth+1, state, callback, cbdata)
+    if unmodified_args[i] == 0
+      # The argument could be modified so treat it as a "def".
+      state.read = false
       from_expr(args[i], depth+1, state, callback, cbdata)
-    elseif argtyp == SymbolNode
-      if isbits(args[i].typ)
-        from_expr(args[i], depth+1, state, callback, cbdata)
-      else
-        from_expr(args[i], depth+1, state, callback, cbdata)
-        if unmodified_args[i] == 1
-          from_expr(args[i], depth+1, state, callback, cbdata)
-        else
-          from_expr(args[i], depth+1, state, callback, cbdata)
-          # The argument could be modified so treat it as a "def".
-          state.read = false
-          from_expr(args[i], depth+1, state, callback, cbdata)
-          state.read = true
-        end
-      end
-    else
-      from_expr(args[i], depth+1, state, callback, cbdata)
+      state.read = true
     end
   end
 end
@@ -696,6 +802,7 @@ You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
 function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
+  #dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod)
@@ -897,7 +1004,7 @@ function from_expr(ast::Any, depth :: Int64, state :: expr_state, callback :: Fu
     #addStatement(top_level, state, ast)
   elseif asttyp == ()
     #addStatement(top_level, state, ast)
-  elseif asttyp == ASCIIString
+  elseif asttyp == ASCIIString || asttyp == UTF8String
     #addStatement(top_level, state, ast)
   elseif asttyp == NewvarNode
     #addStatement(top_level, state, ast)

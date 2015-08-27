@@ -350,7 +350,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     #skip
   elseif asttyp == ()
     #skip
-  elseif asttyp == ASCIIString
+  elseif asttyp == ASCIIString || asttyp == UTF8String
     #skip
   elseif asttyp == NewvarNode
     #skip
@@ -358,7 +358,6 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     #skip
   elseif asttyp == Function
     #skip
-  #elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
   elseif isbits(asttyp)
     #skip
   elseif isa(ast,Tuple)

@@ -354,7 +354,7 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
   elseif asttyp == TopNode    # name
     dprintln(3,"RWS TopNode type")
     #skip
-  elseif asttyp == ASCIIString
+  elseif asttyp == ASCIIString || asttyp == UTF8String
     dprintln(3,"RWS ASCIIString type")
     #skip
   elseif asttyp == GlobalRef 
@@ -369,7 +369,9 @@ function from_expr(ast::Any, depth,rws, callback, cbdata)
     #TODO: fields: value
     dprintln(3,"RWS QuoteNode type ",typeof(value))
     #warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
-  elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
+  elseif isbits(asttyp)
+    #skip
+  elseif asttyp == Module
     #skip
   elseif asttyp == NewvarNode
     #skip

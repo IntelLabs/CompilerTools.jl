@@ -99,6 +99,31 @@ type LambdaInfo
 end
 
 @doc """
+Pretty print a LambdaInfo.
+"""
+function show(io :: IO, li :: LambdaInfo)
+  println(io, "Inputs = ", li.input_params)
+  if !isempty(li.static_parameter_names)
+    println(io, "Static Parameter Names = ", li.static_parameter_names)
+  end
+  if li.return_type != nothing
+    println(io, "Return type = ", li.return_type)
+  end
+  println(io, "VarDefs")
+  for i in li.var_defs
+    println(io, "    ", i[2])
+  end
+  println(io, "GenSym")
+  for i = 1:length(li.gen_sym_typs)
+    println(io, "    ", i-1, " => ", li.gen_sym_typs[i])
+  end
+  println(io, "EscapingDefs")
+  for i in li.escaping_defs
+    println(io, "    ", i[2])
+  end
+end
+
+@doc """
 Holds symbols and gensyms that are seen in a given AST when using the specified callback to handle non-standard Julia AST types.
 """
 type CountSymbolState
@@ -202,12 +227,22 @@ function getType(x, li :: LambdaInfo)
   if xtyp == Symbol
     if haskey(li.var_defs, x) li.var_defs[x].typ
     elseif haskey(li.escaping_defs, x) li.escaping_defs[x].typ
-    else throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
+    else 
+      res = eval(x)
+      res_typ = typeof(res)
+      dprintln(3, "getType Symbol x = ", x, " eval(x) = ", res, " typeof(res) = ", res_typ)
+      if res_typ == DataType
+        return res_typ
+      else
+        throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
+      end
     end
   elseif xtyp == SymbolNode
     return x.typ
   elseif xtyp == GenSym
     return li.gen_sym_typs[x.id + 1]
+  elseif xtyp == Expr
+    return x.typ
   else
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", xtyp))
   end
