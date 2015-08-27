@@ -264,7 +264,7 @@ type expr_state
     cur_bb
     read
     ref_params :: Array{Symbol, 1}
-    params_not_modified :: Dict{Any, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
+    params_not_modified :: Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
     li :: Union{Nothing, LambdaInfo}
 
     function expr_state(cfg, no_mod)
@@ -586,7 +586,7 @@ end
 @doc """
 Add an entry the dictionary of which arguments can be modified by which functions.
 """
-function addUnmodifiedParams(func, signature, unmodifieds, state :: expr_state)
+function addUnmodifiedParams(func, signature :: Array{DataType,1}, unmodifieds, state :: expr_state)
   state.params_not_modified[(func, signature)] = unmodifieds
 end
 
@@ -609,6 +609,9 @@ function typeOfOpr(x, li :: LambdaInfo)
     x.typ
   elseif isa(x, GenSym) getType(x, li)
   elseif isa(x, GlobalRef) typeof(eval(x))
+  elseif isa(x, SimpleVector)
+    svec_types = [ typeOfOpr(x[i], li) for i = 1:length(x) ]
+    Tuple{svec_types...}
   else typeof(x)
   end
 end
@@ -625,22 +628,6 @@ function isPassedByRef(x, state :: expr_state)
   else
     return true
   end 
-end
-
-@doc """
-Returns true if all elements of tuple1 are sub-types of the corresponding elements of tuple2.
-"""
-function tupleSubType(tuple1, tuple2)
-  assert(length(tuple1) == length(tuple2))
-
-  for i = 1:length(tuple1)
-    dprintln(3, "tupleSubType tuple1[i] = ", tuple1[i], " tuple2[i] = ", tuple2[i], " type1 = ", typeof(tuple1[i]), " type2 = ", typeof(tuple2[i]))
-    if !(tuple1[i] <: tuple2[i])
-      return false
-    end
-  end
-
-  return true
 end
 
 function showNoModDict(dict)
@@ -670,18 +657,19 @@ For a given function and signature, return which parameters can be modified by t
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
-function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
+function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, state :: expr_state)
   dprintln(3,"getUnmodifiedArgs func = ", func)
   dprintln(3,"getUnmodifiedArgs args = ", args)
-#  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
+  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
   dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
   dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
   showNoModDict(state.params_not_modified)
   if typeof(func) == GlobalRef || typeof(func) == Expr || typeof(func) == TopNode
     func = eval(func)
+    dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
   end
 
-  assert(typeof(func) == Function)
+  assert(typeof(func) == Function || typeof(func) == IntrinsicFunction)
 
   fs = (func, arg_type_tuple)
   if haskey(state.params_not_modified, fs)
@@ -691,23 +679,17 @@ function getUnmodifiedArgs(func, args, arg_type_tuple, state :: expr_state)
     return res
   end 
 
-  assert(isa(arg_type_tuple, Tuple))
-
   for i in state.params_not_modified
     (f1, t1) = i[1]
     dprintln(3,"f1 = ", f1, " t1 = ", t1, " f1type = ", typeof(f1), " len(t1) = ", length(t1))
     if func == f1 
       dprintln(3,"function matches")
-      assert(isa(t1, Tuple))
-      if length(t1) == length(arg_type_tuple)
-        dprintln(3,"tuple lengths match")
-        if tupleSubType(arg_type_tuple, t1)
-          res = i[2]
-          assert(length(res) == length(args))
-          addUnmodifiedParams(func, arg_type_tuple, res, state)
-          dprintln(3,"exact match not found but sub-type match found")
-          return res
-        end
+      if Tuple{arg_type_tuple...} <: Tuple{t1...}
+        res = i[2]
+        assert(length(res) == length(args))
+        addUnmodifiedParams(func, arg_type_tuple, res, state)
+        dprintln(3,"exact match not found but sub-type match found")
+        return res
       end
     end
   end
@@ -745,13 +727,19 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
   end
    
   # Form the signature of the call in a tuple.
-  texpr = Expr(:tuple)
+  arg_type_array = DataType[]
   for i = 1:length(args)
-    push!(texpr.args, typeOfOpr(args[i], state.li)) 
+    dprintln(3, "arg ", i, " = ", args[i], " typeof arg = ", typeof(args[i]))
+    too = typeOfOpr(args[i], state.li)
+    if !isa(too, DataType)
+      dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
+    end
+    push!(arg_type_array, typeOfOpr(args[i], state.li)) 
   end
-  arg_type_tuple = eval(texpr)
+  dprintln(3, "arg_type_array = ", arg_type_array)
+  #arg_type_tuple = Tuple{arg_type_array...}
   # See which arguments to the function can be modified by the function.
-  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_tuple, state)
+  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_array, state)
   assert(length(unmodified_args) == length(args))
   dprintln(3,"unmodified_args = ", unmodified_args)
   
@@ -801,7 +789,7 @@ ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
+function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
   #dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
@@ -815,7 +803,7 @@ end
 @doc """
 This function gives you the option of calling the ENTRY point from_expr with an ast and several optional named arguments.
 """
-function from_expr(ast :: Expr; callback=not_handled, cbdata=nothing, no_mod=Dict{Any, Array{Int64,1}}())
+function from_expr(ast :: Expr; callback=not_handled, cbdata=nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
   from_expr(ast, callback, cbdata, no_mod)
 end
 
