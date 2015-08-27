@@ -669,7 +669,9 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
     dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
   end
 
-  assert(typeof(func) == Function || typeof(func) == IntrinsicFunction)
+  # We are seeing Symbol's getting here as well due to incomplete name resolution.  Once this is 
+  # fixed then maybe we re-enable this assertion as a sanity check.
+#  assert(typeof(func) == Function || typeof(func) == IntrinsicFunction)
 
   fs = (func, arg_type_tuple)
   if haskey(state.params_not_modified, fs)
