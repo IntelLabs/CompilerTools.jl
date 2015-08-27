@@ -283,7 +283,9 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
 	    dprintln(3,"in vcat head")
 	    #skip
     elseif head == :ref
-	    #skip
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
     elseif head == :meta
 	    # ignore :meta for now. TODO: we might need to walk its args.
     elseif head == :comprehension
@@ -304,6 +306,13 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     elseif head == :const
 	    dump(ast,1000)
 	    # ignore :const for now. 
+    elseif head == :for
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :(+=)
+        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, false))
+        args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
