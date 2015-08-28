@@ -321,6 +321,8 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
 	    for i = 1:length(args)
 		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
 	    end
+    elseif head == :simdloop
+        # skip
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
