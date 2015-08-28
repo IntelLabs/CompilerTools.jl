@@ -652,21 +652,33 @@ function set_use_inplace_naming_convention()
   global use_inplace_naming_convention = true
 end
 
+wellknown_all_unmodified = Set{Any}()
+
+function __init__()
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(./))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.*))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.+))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.-))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(/))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(*))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(+))))
+  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(-))))
+end
+
 @doc """
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
 function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, state :: expr_state)
-  dprintln(3,"getUnmodifiedArgs func = ", func)
+  dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   dprintln(3,"getUnmodifiedArgs args = ", args)
   dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
-  dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
   dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
   showNoModDict(state.params_not_modified)
   if typeof(func) == GlobalRef || typeof(func) == Expr || typeof(func) == TopNode
     func = eval(func)
-    dprintln(3,"getUnmodifiedArgs ftype = ", typeof(func))
+    dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   end
 
   # We are seeing Symbol's getting here as well due to incomplete name resolution.  Once this is 
@@ -677,7 +689,7 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
   if haskey(state.params_not_modified, fs)
     res = state.params_not_modified[fs]
     assert(length(res) == length(args))
-    dprintln(3,"funcion already in params_not_modified so returning previously computed value")
+    dprintln(3,"function already in params_not_modified so returning previously computed value")
     return res
   end 
 
@@ -696,16 +708,16 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
     end
   end
 
-  if func == :(./) || func == :(.*) || func == :(.+) || func == :(.-) ||
-     func == :(/)  || func == :(*)  || func == :(+)  || func == :(-) 
+  if in(func, wellknown_all_unmodified)
     dprintln(3,"arithmetic functions known not to modify args")
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
-  elseif func == :SpMV
-    dprintln(3,"check for SpMV that should probably be removed now.")
-    addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
+#  elseif func == :SpMV
+#    dprintln(3,"check for SpMV that should probably be removed now.")
+#    addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
 # TODO other functions like arraylen here.
   else
-    if use_inplace_naming_convention && isgeneric(func) && !in('!', function_name(func))
+    if use_inplace_naming_convention && isgeneric(func) && !in('!', string(Base.function_name(func)))
+      dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
     else
       dprintln(3,"fallback to args passed by ref as modified.")
