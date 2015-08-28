@@ -9,7 +9,7 @@ export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
-export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr
+export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr, getBody
 export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
