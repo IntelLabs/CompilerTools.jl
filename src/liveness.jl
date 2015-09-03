@@ -594,9 +594,10 @@ end
 Get the type of some AST node.
 """
 function typeOfOpr(x, li :: LambdaInfo)
-  if isa(x, Expr) x.typ
+  dprintln(3,"starting typeOfOpr, type = ", typeof(x))
+  if isa(x, Expr) ret = x.typ
   elseif isa(x, Symbol)
-    getType(x, li)
+    ret = getType(x, li)
   elseif isa(x, SymbolNode)
     typ1 = getType(x.name, li)
     if x.typ != typ1
@@ -606,14 +607,36 @@ function typeOfOpr(x, li :: LambdaInfo)
     end
     assert(x.typ <: typ1)
     assert(isa(x.typ, Type))
-    x.typ
-  elseif isa(x, GenSym) getType(x, li)
-  elseif isa(x, GlobalRef) typeof(eval(x))
+#    if typeof(x.typ) != DataType
+#      if typeof(x.typ) == Union
+#        ret = Tuple{x.typ.types...} 
+#      else
+#        dprintln(2, "typeof(x.typ) != DataType")
+#        throw(string("typeOfOpr found SymbolNode type that was not a DataType or a Union of DataTypes."))
+#      end
+#    else
+#      ret = x.typ
+#    end
+     ret= x.typ
+  elseif isa(x, GenSym) ret = getType(x, li)
+  elseif isa(x, GlobalRef) ret = typeof(eval(x))
   elseif isa(x, SimpleVector)
     svec_types = [ typeOfOpr(x[i], li) for i = 1:length(x) ]
-    Tuple{svec_types...}
-  else typeof(x)
+    ret = Tuple{svec_types...}
+  else ret = typeof(x)
   end
+
+  if typeof(ret) != DataType
+    dprintln(3,"Final typeof(ret) != DataType, instead = ", typeof(ret))
+    if typeof(ret) == Union
+      ret = Tuple{ret.types...} 
+    else
+      dprintln(2, "typeof(ret) != DataType")
+      throw(string("typeOfOpr found SymbolNode type that was not a DataType or a Union of DataTypes."))
+    end
+  end
+
+  return ret
 end
 
 @doc """
@@ -736,9 +759,6 @@ function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callb
   local fun  = ast[1]
   local args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
-  if length(args) > 0
-    dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
-  end
    
   # Form the signature of the call in a tuple.
   arg_type_array = DataType[]
