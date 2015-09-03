@@ -109,17 +109,23 @@ function show(io :: IO, li :: LambdaInfo)
   if li.return_type != nothing
     println(io, "Return type = ", li.return_type)
   end
-  println(io, "VarDefs")
-  for i in li.var_defs
-    println(io, "    ", i[2])
+  if !isempty(li.var_defs)
+    println(io, "VarDefs")
+    for i in li.var_defs
+      println(io, "    ", i[2])
+    end
   end
-  println(io, "GenSym")
-  for i = 1:length(li.gen_sym_typs)
-    println(io, "    ", i-1, " => ", li.gen_sym_typs[i])
+  if !isempty(li.gen_sym_typs)
+    println(io, "GenSym")
+    for i = 1:length(li.gen_sym_typs)
+      println(io, "    ", i-1, " => ", li.gen_sym_typs[i])
+    end
   end
-  println(io, "EscapingDefs")
-  for i in li.escaping_defs
-    println(io, "    ", i[2])
+  if !isempty(li.escaping_defs)
+    println(io, "EscapingDefs")
+    for i in li.escaping_defs
+      println(io, "    ", i[2])
+    end
   end
 end
 
