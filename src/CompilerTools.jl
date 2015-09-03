@@ -1,3 +1,5 @@
+VERSION >= v"0.4.0-dev" && __precompile__()
+
 module CompilerTools
 
 # package code goes here
