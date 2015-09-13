@@ -6,6 +6,8 @@ using CompilerTools.LambdaHandling
 
 import Base.show
 
+include("function-descriptions.jl")
+
 # This controls the debug print level.  0 prints nothing.  3 print everything.
 DEBUG_LVL=0
 
