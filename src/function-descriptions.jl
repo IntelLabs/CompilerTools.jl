@@ -182,20 +182,12 @@ const bwdTriSolve!_Desc = FunctionDescription(
 )
 
 function_descriptions  = [
-    element_wise_multiply_Desc,
-    element_wise_multiply!_Desc,
-    element_wise_divide_Desc,
     element_wise_divide1_Desc,
-    element_wise_divide!_Desc,
-    SpMV_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,
-    Dot_Desc,
     dot_Desc,
     copy_Desc,
-    WAXPBY_Desc,
-    WAXPBY!_Desc,
     add_vector_Desc,
     add_matrix_Desc,
     sub_vector_Desc,
