@@ -609,17 +609,7 @@ function typeOfOpr(x, li :: LambdaInfo)
     end
     assert(x.typ <: typ1)
     assert(isa(x.typ, Type))
-#    if typeof(x.typ) != DataType
-#      if typeof(x.typ) == Union
-#        ret = Tuple{x.typ.types...} 
-#      else
-#        dprintln(2, "typeof(x.typ) != DataType")
-#        throw(string("typeOfOpr found SymbolNode type that was not a DataType or a Union of DataTypes."))
-#      end
-#    else
-#      ret = x.typ
-#    end
-     ret= x.typ
+     ret = x.typ
   elseif isa(x, GenSym) ret = getType(x, li)
   elseif isa(x, GlobalRef) ret = typeof(eval(x))
   elseif isa(x, SimpleVector)
@@ -736,11 +726,13 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
   if in(func, wellknown_all_unmodified)
     dprintln(3,"arithmetic functions known not to modify args")
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
-#  elseif func == :SpMV
-#    dprintln(3,"check for SpMV that should probably be removed now.")
-#    addUnmodifiedParams(func, arg_type_tuple, [1,1], state) 
-# TODO other functions like arraylen here.
   else
+    if func == eval(TopNode(:tuple))
+      dprintln(3,"Detected tuple in getUnmodifiedArgs so returning that no arguments are modified.")
+      addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
+      return state.params_not_modified[fs]
+    end
+
     if use_inplace_naming_convention && isgeneric(func) && !in('!', string(Base.function_name(func)))
       dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
