@@ -76,26 +76,38 @@ function from_lambda(ast::Array{Any,1}, depth, callback, cbdata, top_level_numbe
 end
 
 @doc """
-AstWalk through an array of expressions.
-We know that the first array of expressions we will find is for the lambda body.
-top_level_number starts out 0 and if we find it to be 0 then we know that we're processing the array of expr for the body
-and so we keep track of the index into body so that users of AstWalk can associate information with particular statements.
-Recursively process each element of the array of expressions.
+AstWalk through a function body.
 """
-function from_exprs(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
-  len  = length(ast)
-  top_level = (top_level_number == 0)
+function from_body(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+  len = length(ast)
+  top_level = true
 
   body = Any[]
 
   for i = 1:len
-    if top_level
-        top_level_number = length(body) + 1
-        dprintln(2,"Processing top-level ast #",i," depth=",depth)
-    else
-        dprintln(2,"Processing ast #",i," depth=",depth)
-    end
+    dprintln(2,"Processing top-level ast #",i," depth=",depth)
 
+    dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
+    new_exprs = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
+    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_exprs)
+    assert(isa(new_exprs,Array))
+    append!(body, new_exprs)
+  end
+
+  return body
+end
+
+@doc """
+AstWalk through an array of expressions.
+"""
+function from_exprs(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+  len = length(ast)
+  top_level = false
+
+  body = Any[]
+
+  for i = 1:len
+    dprintln(2,"Processing ast #",i," depth=",depth)
     dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
     new_exprs = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
     dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_exprs)
@@ -210,7 +222,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
         args = from_lambda(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :body
         dprintln(2,"Processing :body Expr in AstWalker.from_expr")
-        args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
+        args = from_body(args, depth+1, callback, cbdata, top_level_number, read)
         dprintln(2,"Done processing :body Expr in AstWalker.from_expr")
     elseif head == :block
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
