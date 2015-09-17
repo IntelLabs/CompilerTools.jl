@@ -10,7 +10,7 @@ export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr, getBody
-export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict
+export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
 # This controls the debug print level.  0 prints nothing.  3 print everything.
@@ -172,7 +172,7 @@ end
 Eliminates unused symbols from the LambdaInfo var_defs.
 Takes a LambdaInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
-function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, AstWalkFunc = nothing)
+function eliminateUnusedLocals!(li :: LambdaInfo, body :: Expr, AstWalkFunc = nothing)
   css = CountSymbolState()
   if AstWalkFunc == nothing
     CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
@@ -202,7 +202,7 @@ function eliminateUnusedLocals(li :: LambdaInfo, body :: Expr, AstWalkFunc = not
   dprintln(3,"gensymdict = ", gensymdict)
   dprintln(3,"newgensym = ", newgensym)
   li.gen_sym_typs = newgensym
-  body = replaceExprWithDict(body, gensymdict, AstWalkFunc)
+  body = replaceExprWithDict!(body, gensymdict, AstWalkFunc)
   dprintln(3,"updated body = ", body)
   return body
 end
@@ -450,14 +450,56 @@ function createVarDict(x :: Array{Any, 1})
 end
 
 @doc """
-Replace the symbols in an expression "expr" with those defined in the dictionary "dict".
-Return the result expression, which may share part of the input expression, but the input 
-is not changed. 
-Note that we do not recurse down nested lambda expressions (i.e., LambdaStaticData or
-DomainLambda or any other none Expr objects are left unchanged). If such lambdas have
-escaping names that are to be replaced, then the result will be wrong.
+Replace the symbols in an expression "expr" with those defined in the
+dictionary "dict".  Return the result expression, which may share part of the
+input expression, but the input "expr" remains intact and is not modified.
+
+Note that unlike "replaceExprWithDict!", we do not recurse down nested lambda
+expressions (i.e., LambdaStaticData or DomainLambda or any other none Expr
+objects are left unchanged). If such lambdas have escaping names that are to be
+replaced, then the result will be wrong.
 """
-function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any}, AstWalkFunc = nothing)
+function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
+  function traverse(expr)       # traverse expr to find the places where arrSym is refernced
+    if isa(expr, Symbol) || isa(expr, GenSym)
+      if haskey(dict, expr)
+        return dict[expr]
+      end
+      return expr
+    elseif isa(expr, SymbolNode)
+      if haskey(dict, expr.name)
+        return dict[expr.name]
+      end
+      return expr
+    elseif isa(expr, Array)
+      Any[ traverse(e) for e in expr ]
+    elseif isa(expr, Expr)
+      local head = expr.head
+      local args = copy(expr.args)
+      local typ  = expr.typ
+      for i = 1:length(args)
+        args[i] = traverse(args[i])
+      end
+      expr = Expr(expr.head, args...)
+      expr.typ = typ
+      return expr
+    else
+      expr
+    end
+  end
+  expr=traverse(expr)
+  return expr
+end
+
+
+@doc """
+Replace the symbols in an expression "expr" with those defined in the
+dictionary "dict".  Return the result expression, which may share part of the
+input expression, and the input "expr" may be modified inplace and shall not be used
+after this call. Note that unlike "replaceExprWithDict", the traversal here is
+done by ASTWalker, which has the ability to traverse non-Expr data.
+"""
+function replaceExprWithDict!(expr::Any, dict::Dict{SymGen, Any}, AstWalkFunc = nothing)
   function update_sym(expr, dict, top_level_number, is_top_level, read)
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
@@ -475,7 +517,7 @@ function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any}, AstWalkFunc = n
     return nothing
   end
 
-  dprintln(3, "replaceExprWithDict: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
+  dprintln(3, "replaceExprWithDict!: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
   if isa(expr,Array)
     for i = 1:length(expr)
       if AstWalkFunc == nothing
@@ -500,7 +542,7 @@ that the input_params, static_parameter_names, and escaping_defs of "outer" do
 not change, other fields are merged. The GenSyms in "inner" will need to adjust
 their indices as a result of this merge. We return a dictionary that maps from
 old GenSym to new GenSym for "inner", which can be used to adjust the body Expr
-of "inner" lambda using "replaceExprWithDict".
+of "inner" lambda using "replaceExprWithDict" or "replaceExprWithDict!".
 """
 function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   dprintln(3,"outer = ", outer)
