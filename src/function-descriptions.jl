@@ -27,45 +27,10 @@ const UPDATED_NONE  = Set()
 const VECTOR_OR_NUM = Tuple{Vector{}, Number}
 const MATRIX_OR_NUM = Tuple{AbstractMatrix{}, Number}
 
-const element_wise_multiply_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_multiply",          # SparseAccelerator.element_wise_multiply(x::Vector, y::Vector)
-    (Vector{}, Vector{}),             # The arguments must be vectors
-    UPDATED_NONE,                     # No argument is updated
-)
-
-const element_wise_multiply!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_multiply!",         # SparseAccelerator.element_wise_multiply!(w::Vector, x::Vector, y::Vector)
-    (Vector{}, Vector{}, Vector{}),   # The arguments must be vectors
-    Set(1),                           # argument 1 (w) is updated
-)
-
-const element_wise_divide_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_divide",            # SparseAccelerator.element_wise_divide(x::Vector, y::Vector)
-    (Vector{}, Vector{}),             # The arguments must be vectors
-    UPDATED_NONE,                     # No argument is updated
-)
-
 const element_wise_divide1_Desc = FunctionDescription(
     "Main", 
     "./",           
     (VECTOR_OR_NUM, Vector{}),        # The arguments must be vectors
-    UPDATED_NONE,                     # No argument is updated
-)
-
-const element_wise_divide!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "element_wise_divide!",           # SparseAccelerator.element_wise_divide!(w::Vector, x::Vector, y::Vector)
-    (Vector{}, Vector{}, Vector{}),   # The arguments must be vectors
-    Set(1),                           # argument 1 (w) is updated
-)
-
-const SpMV_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "SpMV",                           # SparseAccelerator.SpMV(A::SparseMatrixCSC, x::Vector)
-    (SparseMatrixCSC, Vector{}),      # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
 )
 
@@ -90,16 +55,9 @@ const star2_Desc = FunctionDescription(
     UPDATED_NONE,                     # No argument is updated
 )
 
-const Dot_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
-    (Vector{}, Vector{}),             # The arguments must be vectors
-    UPDATED_NONE,                     # No argument is updated
-)
-
 const dot_Desc = FunctionDescription(
     "Main", 
-    "dot",                            # SparseAccelerator.Dot(x::Vector, y::Vector)
+    "dot",                            # Dot(x::Vector, y::Vector)
     (Vector{}, Vector{}),             # The arguments must be vectors
     UPDATED_NONE,                     # No argument is updated
 )
@@ -109,20 +67,6 @@ const copy_Desc = FunctionDescription(
     "copy",
     (Vector{}, ),                     # The arguments must be a vector
     UPDATED_NONE,                     # No argument is updated
-)
-
-const WAXPBY_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "WAXPBY",                         # SparseAccelerator.WAXPBY(alpha::Number, x::Vector, beta::Number, y::Vector)
-    (Number, Vector{}, Number, Vector{}),
-    UPDATED_NONE,                     # No argument is updated
-)
-
-const WAXPBY!_Desc = FunctionDescription(
-    "SparseAccelerator", 
-    "WAXPBY!",                        # SparseAccelerator.WAXPBY!(w::Vector, alpha::Number, x::Vector, beta::Number, y::Vector)
-    (Vector{}, Number, Vector{}, Number, Vector{}),
-    Set(1),                           # argument 1 (w) is updated
 )
 
 const add_vector_Desc = FunctionDescription(
@@ -238,20 +182,12 @@ const bwdTriSolve!_Desc = FunctionDescription(
 )
 
 function_descriptions  = [
-    element_wise_multiply_Desc,
-    element_wise_multiply!_Desc,
-    element_wise_divide_Desc,
     element_wise_divide1_Desc,
-    element_wise_divide!_Desc,
-    SpMV_Desc,
     star_Desc,
     star1_Desc,
     star2_Desc,
-    Dot_Desc,
     dot_Desc,
     copy_Desc,
-    WAXPBY_Desc,
-    WAXPBY!_Desc,
     add_vector_Desc,
     add_matrix_Desc,
     sub_vector_Desc,

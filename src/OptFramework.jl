@@ -39,6 +39,17 @@ function dprintln(level,msgs...)
 end
 
 @doc """
+Creates a typed Expr AST node.
+Convenence function that takes a type as first argument and the varargs thereafter.
+The varargs are used to form an Expr AST node and the type parameter is used to fill in the "typ" field of the Expr.
+"""
+function TypedExpr(typ, rest...)
+    res = Expr(rest...)
+    res.typ = typ
+    res
+end
+
+@doc """
 A data structure that holds information about one high-level optimization pass to run.
 "func" is the callback functino that does the optimization pass and should have the signature (Expr, Tuple, Tuple)
 where the Expr is the :lambda Expr for a function, the first tuple is a tuple of the types of the arguments to the
@@ -259,15 +270,16 @@ Create a copy of a function.
 """
 function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
   lambda = code_lowered(old_func, arg_tuple)[1] # Get the code_lowered AST form for the function to be copied.
-  nfsym = symbol(new_func_name)                 # Create a symbol for the new function name.
+  nfsym  = symbol(new_func_name)                 # Create a symbol for the new function name.
   dprintln(3, "copying old_func = \n", lambda)
 
+  dprintln(3, "lambda = ", lambda)
   # You can't just take the output of code_lowered and put that in a new function and have it work.
   # It will complain about certain facets of the basic block labelling and CFG structure.  Here
   # we re-number and simplify basic blocks numbering to a form that is acceptable.
   copy_args = lambda.args[1]
   copy_body = lambda.args[3].args
-  dprintln(3,"copyFunctionNewName body = \n", lambda.args[3])
+  dprintln(3,"copyFunctionNewName body = \n", lambda.args[3], " length = ", length(copy_body))
   state = lmstate()
   CompilerTools.AstWalker.AstWalk(lambda.args[3], create_label_map, state)
   #dprintln(3,"label mapping = ", state.label_map)
@@ -280,7 +292,10 @@ function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
   new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
   # Evaluate the function expression to force the function into existence.  
   # The function is eval'ed into existence in the same module in which the original function existed.
-  eval_new_func = Base.function_module(old_func, arg_tuple).eval(new_func)
+  old_func_mod = Base.function_module(old_func, arg_tuple)
+  dprintln(3, "old_func = ", old_func, " arg_tuple = ", arg_tuple, " old_func_mod = ", old_func_mod, " old_func_mod type = ", typeof(old_func_mod))
+  dprintln(3, "new_func = ", new_func)
+  eval_new_func = old_func_mod.eval(new_func)
   if DEBUG_LVL >= 3
     lambda = code_lowered(eval_new_func, arg_tuple)[1]
     dprintln(3, "new copied func = \n", lambda)
