@@ -416,7 +416,7 @@ Takes a parameters:
 To be eligible for wrapping, first and merge must be in the same scope of source code.
 This restriction is validated by confirming that "first" dominates "merge" and that "merge" inverse dominates "first".
 """
-function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merge :: Int, back_edge :: Union{Nothing, BasicBlock} = nothing)
+function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merge :: Int, back_edge :: Union{Void, BasicBlock} = nothing)
     dprintln(2,"wrapInConditional condition = ", cond_gotoifnot, " first = ", first, " merge = ", merge)
     assert(haskey(bl.basic_blocks, first))   # Make sure the "before" basic block exists in the CFG.
     assert(haskey(bl.basic_blocks, merge))   # Make sure the "after"  basic block exists in the CFG.

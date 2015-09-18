@@ -393,7 +393,7 @@ end
 Add a local variable to the function corresponding to LambdaInfo in "li" with name (as String), type and descriptor.
 Returns true if variable already existed and was updated, false otherwise.
 """
-function addLocalVar(name :: String, typ, desc :: Int64, li :: LambdaInfo)
+function addLocalVar(name :: AbstractString, typ, desc :: Int64, li :: LambdaInfo)
   addLocalVar(Symbol(name), typ, desc, li)
 end
 

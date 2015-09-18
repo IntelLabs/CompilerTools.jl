@@ -17,10 +17,10 @@
 # How to represent and use some "may" information?
 
 immutable FunctionDescription
-    module_name     :: String # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
-    function_name   :: String # Name of the function
-    argument_types  :: Tuple  # Tuple of the function arguments' types
-    output          :: Set    # The arguments updated by the function
+    module_name     :: AbstractString # Module of the function. It is "nothing" if it is not in a Julia module, e.g. if this is a C function 
+    function_name   :: AbstractString # Name of the function
+    argument_types  :: Tuple          # Tuple of the function arguments' types
+    output          :: Set            # The arguments updated by the function
 end
 
 const UPDATED_NONE  = Set()
@@ -211,7 +211,7 @@ Takes a module and a function both as Strings. Looks up the specified module as
 part of the "Main" module and then looks and returns the Function object
 corresponding to the "func" String in that module.
 """
-function get_function_from_string(mod :: String, func :: String)
+function get_function_from_string(mod :: AbstractString, func :: AbstractString)
     # A module string may have submodules like "Base.SparseMatrix". We need to
     # get module object level by level
     modobj  = eval(:Main)

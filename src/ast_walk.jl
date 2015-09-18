@@ -381,7 +381,7 @@ function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_l
     #skip
   elseif asttyp == NewvarNode
     #skip
-  elseif asttyp == Nothing
+  elseif asttyp == Void
     #skip
   elseif asttyp == Function
     #skip

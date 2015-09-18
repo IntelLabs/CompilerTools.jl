@@ -268,7 +268,7 @@ Create a copy of a function.
 2) new_func_name - the name of the new copy of function.
 3) arg_tuple - the signature of the function
 """
-function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
+function copyFunctionNewName(old_func, new_func_name :: AbstractString, arg_tuple)
   lambda = code_lowered(old_func, arg_tuple)[1] # Get the code_lowered AST form for the function to be copied.
   nfsym  = symbol(new_func_name)                 # Create a symbol for the new function name.
   dprintln(3, "copying old_func = \n", lambda)
