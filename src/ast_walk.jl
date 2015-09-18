@@ -199,7 +199,7 @@ The internal nodes of the AST are of type Expr with various different Expr.head 
 The leaf nodes of the AST all have different types.
 There are some node types we don't currently recurse into.  Maybe this needs to be extended.
 """
-function from_expr(ast::Any, depth, callback, cbdata, top_level_number, is_top_level, read)
+function from_expr(ast :: Any, depth, callback, cbdata :: Any, top_level_number, is_top_level, read)
   if typeof(ast) == LambdaStaticData
       ast = uncompressed_ast(ast)
   end
