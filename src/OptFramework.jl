@@ -71,19 +71,36 @@ optPasses = optPass[]
 Set the default set of optimization passes to apply with the @acc macro is used.
 """
 function setOptPasses(passes :: Array{optPass,1} )
-    unopt_first = true
+  unopt_first = true
 
-    for i = 1:length(passes)
-      if passes[i].unopt == true
-        if unopt_first == false
-          throw(string("Optimization passes cannot handle a unoptimized AST pass after an optimized typed AST pass."))
-        end
-      else
-        unopt_first = false
+  for i = 1:length(passes)
+    if passes[i].unopt == true
+      if unopt_first == false
+        throw(string("Optimization passes cannot handle a unoptimized AST pass after an optimized typed AST pass."))
+      end
+    else
+      unopt_first = false
+    end
+  end
+
+  global optPasses = passes
+end
+
+@doc """
+Add an optimization pass.  If this is going to be called multiple times then you need some external way of
+corrdinating the code/modules that are calling this function so that optimization passes are added in some sane order.
+"""
+function addOptPass(pass :: optPass)
+  if length(optPasses) > 0
+    last_pass = optPasses[end]
+    if last_pass.unopt == false
+      if pass.unopt == true
+        throw(string("Optimization passes cannot handle a unoptimized AST pass after an optimized typed AST pass."))
       end
     end
+  end
 
-    global optPasses = passes
+  push!(optPasses, pass) 
 end
 
 @doc """
@@ -268,7 +285,7 @@ Create a copy of a function.
 2) new_func_name - the name of the new copy of function.
 3) arg_tuple - the signature of the function
 """
-function copyFunctionNewName(old_func, new_func_name :: String, arg_tuple)
+function copyFunctionNewName(old_func, new_func_name :: AbstractString, arg_tuple)
   lambda = code_lowered(old_func, arg_tuple)[1] # Get the code_lowered AST form for the function to be copied.
   nfsym  = symbol(new_func_name)                 # Create a symbol for the new function name.
   dprintln(3, "copying old_func = \n", lambda)
@@ -484,7 +501,10 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
                 func_to_call = gOptFrameworkState.mapNameFuncInfo[fs]
               else
                 # ... else see if we can optimize it.
+                tic()
                 process_res = processFuncCall(orig_func, call_sig_arg_tuple, $call_sig_args, per_site_opt_set)
+                t = toc()
+                dprintln(3,orig_func," optimization time = ", t)
 
                 if process_res != nothing
                   # We did optimize it in some way we will call the optimized version.

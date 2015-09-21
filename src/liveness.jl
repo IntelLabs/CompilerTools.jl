@@ -267,7 +267,7 @@ type expr_state
     read
     ref_params :: Array{Symbol, 1}
     params_not_modified :: Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
-    li :: Union{Nothing, LambdaInfo}
+    li :: Union{Void, LambdaInfo}
 
     function expr_state(cfg, no_mod)
         new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, nothing)
@@ -1024,7 +1024,7 @@ function from_expr(ast::Any, depth :: Int64, state :: expr_state, callback :: Fu
     #addStatement(top_level, state, ast)
   elseif asttyp == NewvarNode
     #addStatement(top_level, state, ast)
-  elseif asttyp == Nothing
+  elseif asttyp == Void 
     #addStatement(top_level, state, ast)
   elseif asttyp == AccessSummary
     dprintln(3, "Incorporating AccessSummary")
