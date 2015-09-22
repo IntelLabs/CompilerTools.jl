@@ -550,7 +550,7 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   for (v, d) in inner.var_defs
     if isLocalVariable(v, outer) 
       if !isInputParameter(v, inner) # skip input parameters
-        throw(string("Conflicting variable ", v, " exists in both inner and outer lambda"))
+        warn(string("Conflicting variable ", v, " exists in both inner and outer lambda"))
       end
     else
       addLocalVariable(d, outer)
@@ -559,7 +559,7 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   outer.var_defs = merge(outer.var_defs, inner.var_defs)
   for (v, d) in inner.escaping_defs
     if !isLocalVariable(v, outer) && !isInputParameter(v, outer) && !isEscapingVariable(v, outer)
-      throw(string("Variable ", v, " from inner lambda is neither parameter nor local nor escaping in outer lambda"))
+      warn(string("Variable ", v, " from inner lambda is neither parameter nor local nor escaping in outer lambda"))
     end
   end
   n = length(outer.gen_sym_typs)
