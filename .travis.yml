@@ -8,6 +8,12 @@ julia:
 branches:
   only:
     - latest
+
+matrix:
+  allow_failures:
+  # Julia release is 0.3.11, so we shouldn't expect to run on it.
+    - julia: release
+
 notifications:
   email: false
 # uncomment the following lines to override the default test script
