@@ -692,7 +692,7 @@ function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base.LinAlg,:norm), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_B), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_Bc), force = true))
-  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
+#  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
 end
 
 @doc """
