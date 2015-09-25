@@ -538,7 +538,7 @@ Walk through a lambda expression.
 We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
 We don't recurse into the body here because from_expr handles that with fromCFG.
 """
-function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   # :lambda expression
   state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
   state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
@@ -549,7 +549,7 @@ end
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
-function from_exprs(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_exprs(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   # sequence of expressions
   # ast = [ expr, ... ]
   local len = length(ast)
@@ -564,7 +564,7 @@ end
 @doc """
 Walk through an assignment expression.
 """
-function from_assignment(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   # :(=) assignment
   # ast = [ ... ]
   assert(length(ast) == 2)
@@ -595,7 +595,7 @@ end
 @doc """
 Get the type of some AST node.
 """
-function typeOfOpr(x, li :: LambdaInfo)
+function typeOfOpr(x :: ANY, li :: LambdaInfo)
   dprintln(3,"starting typeOfOpr, type = ", typeof(x))
   if isa(x, Expr) ret = x.typ
   elseif isa(x, Symbol)
@@ -670,14 +670,29 @@ end
 wellknown_all_unmodified = Set{Any}()
 
 function __init__()
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(./))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.*))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.+))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(.-))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(/))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(*))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(+))))
-  push!(wellknown_all_unmodified, eval(GlobalRef(Main,:(-))))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(./)), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(.*)), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(.+)), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(.-)), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(/)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(*)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(+)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(-)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(<=)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(<)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(>=)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(>)),  force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:size), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:maximum), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:minimum), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:max), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:min), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:mean), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:ctranspose), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base.LinAlg,:norm), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_B), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_Bc), force = true))
+  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
 end
 
 @doc """
@@ -685,15 +700,26 @@ For a given function and signature, return which parameters can be modified by t
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
 """
-function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, state :: expr_state)
+function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1}, state :: expr_state)
   dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   dprintln(3,"getUnmodifiedArgs args = ", args)
   dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
   dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
   showNoModDict(state.params_not_modified)
-  if typeof(func) == GlobalRef || typeof(func) == Expr || typeof(func) == TopNode
+
+  default_result = Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple]
+  if length(default_result) == 0
+    return default_result
+  end
+
+  if typeof(func) == GlobalRef
+    func = Base.resolve(func, force=true)
+    dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
+  elseif typeof(func) == TopNode
     func = eval(func)
     dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
+  elseif typeof(func) == Expr
+    return default_result
   end
 
   # We are seeing Symbol's getting here as well due to incomplete name resolution.  Once this is 
@@ -724,7 +750,7 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
   end
 
   if in(func, wellknown_all_unmodified)
-    dprintln(3,"arithmetic functions known not to modify args")
+    dprintln(3,"Well-known function known not to modify args.")
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
   else
     if func == eval(TopNode(:tuple))
@@ -733,12 +759,13 @@ function getUnmodifiedArgs(func, args, arg_type_tuple :: Array{DataType,1}, stat
       return state.params_not_modified[fs]
     end
 
+    dprintln(3,"is func generic => ", isgeneric(func))
     if use_inplace_naming_convention && isgeneric(func) && !in('!', string(Base.function_name(func)))
       dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
     else
       dprintln(3,"fallback to args passed by ref as modified.")
-      addUnmodifiedParams(func, arg_type_tuple, Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple], state)
+      addUnmodifiedParams(func, arg_type_tuple, default_result, state)
     end
   end
 
@@ -748,7 +775,7 @@ end
 @doc """
 Walk through a call expression.
 """
-function from_call(ast::Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
@@ -817,7 +844,7 @@ ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata=nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
+function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
   #dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
@@ -831,14 +858,14 @@ end
 @doc """
 This function gives you the option of calling the ENTRY point from_expr with an ast and several optional named arguments.
 """
-function from_expr(ast :: Expr; callback=not_handled, cbdata=nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
+function from_expr(ast :: Expr; callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
   from_expr(ast, callback, cbdata, no_mod)
 end
 
 @doc """
 Extract liveness information from the CFG.
 """
-function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: Any)
+function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
   dprintln(2,"fromCFG")
   CFGs.dump_bb(cfg)   # Dump debugging information if set_debug_level is high enough.
 
@@ -869,7 +896,7 @@ end
 @doc """
 Process a return Expr node which is just a recursive processing of all of its args.
 """
-function from_return(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_return(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
     dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
     nothing
@@ -878,7 +905,7 @@ end
 @doc """
 Process a gotoifnot which is just a recursive processing of its first arg which is the conditional.
 """
-function from_if(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_if(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
     # The structure of the if node is an array of length 2.
     assert(length(args) == 2)
     # The first index is the conditional.
@@ -892,7 +919,7 @@ end
 @doc """
 Generic routine for how to walk most AST node types.
 """
-function from_expr(ast::Any, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: Any)
+function from_expr(ast :: ANY, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   if typeof(ast) == LambdaStaticData
       # ast = uncompressed_ast(ast)
       # skip processing LambdaStaticData

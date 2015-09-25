@@ -127,7 +127,7 @@ function lookup(state, v)
 end
 
 # (:lambda, {param, meta@{localvars, types, freevars}, body})
-function from_lambda(state, expr)
+function from_lambda(state, expr :: Expr)
   local head = expr.head
   local ast  = expr.args
   local typ  = expr.typ
@@ -142,12 +142,12 @@ function from_lambda(state, expr)
   return NotArray
 end
 
-function from_exprs(state, ast, callback=not_handled, cbdata=nothing)
+function from_exprs(state, ast, callback=not_handled, cbdata :: ANY = nothing)
   local len  = length(ast)
   [ from_expr(state, exp, callback, cbdata) for exp in ast ]
 end
 
-function from_body(state, expr::Any, callback, cbdata)
+function from_body(state, expr :: Expr, callback, cbdata :: ANY)
   local exprs = expr.args
   local ret = NotArray       # default return
   for i = 1:length(exprs)
@@ -159,7 +159,7 @@ function from_body(state, expr::Any, callback, cbdata)
   return ret
 end
 
-function from_assignment(state, expr::Any, callback, cbdata)
+function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   local head = expr.head
   local ast  = expr.args
   local typ  = expr.typ
@@ -194,7 +194,7 @@ function from_assignment(state, expr::Any, callback, cbdata)
   end
 end
 
-function from_call(state, expr::Any)
+function from_call(state, expr :: Expr)
   # The assumption here is that the program has already been translated
   # by DomainIR, and all args are either SymbolNode or Constant.
   local head = expr.head
@@ -225,7 +225,7 @@ function from_call(state, expr::Any)
   end
 end
 
-function from_return(state, expr, callback, cbdata)
+function from_return(state, expr :: Expr, callback, cbdata :: ANY)
   local head = expr.head
   local typ  = expr.typ
   local args = from_exprs(state, expr.args, callback, cbdata)
@@ -236,7 +236,7 @@ function from_return(state, expr, callback, cbdata)
   end
 end
 
-function from_expr(state, ast, callback=not_handled, cbdata=nothing)
+function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = nothing)
   if isa(ast, LambdaStaticData)
     ast = uncompressed_ast(ast)
   end
@@ -314,7 +314,7 @@ function isbitarray(typ)
 end
 
 
-function analyze_lambda_body(body :: Expr, lambdaInfo :: CompilerTools.LambdaHandling.LambdaInfo, liveness, callback, cbdata)
+function analyze_lambda_body(body :: Expr, lambdaInfo :: CompilerTools.LambdaHandling.LambdaInfo, liveness, callback, cbdata :: ANY)
   local state = init_state(liveness)
   dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   # FIXME: surprisingly the first value printed above is false!
@@ -356,7 +356,7 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: CompilerTools.LambdaHan
   return unique
 end
 
-function analyze_lambda(expr :: Expr, liveness, callback, cbdata)
+function analyze_lambda(expr :: Expr, liveness, callback, cbdata :: ANY)
   lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(expr)
   analyze_lambda_body(CompilerTools.LambdaHandling.getBody(expr), lambdaInfo, liveness, callback, cbdata)
 end

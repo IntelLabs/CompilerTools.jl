@@ -47,7 +47,7 @@ AstWalk through a lambda expression.
 Walk through each input parameters and the body of the lambda.
 """
 # TODO - it seems we should walk some parts of meta as well.
-function from_lambda(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   assert(length(ast) == 3)
   param = ast[1]
   meta  = ast[2]
@@ -78,7 +78,7 @@ end
 @doc """
 AstWalk through a function body.
 """
-function from_body(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   len = length(ast)
   top_level = true
 
@@ -100,7 +100,7 @@ end
 @doc """
 AstWalk through an array of expressions.
 """
-function from_exprs(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   len = length(ast)
   top_level = false
 
@@ -122,7 +122,7 @@ end
 AstWalk through an assignment expression.
 Recursively process the left and right hand sides with AstWalk.
 """
-function from_assignment(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+function from_assignment(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
 #  assert(length(ast) == 2)
   dprintln(3,"from_assignment, lhs = ", ast[1])
   ast[1] = get_one(from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false))
@@ -135,7 +135,7 @@ end
 AstWalk through a call expression.
 Recursively process the name of the function and each of its arguments.
 """
-function from_call(ast::Array{Any,1}, depth, callback, cbdata, top_level_number, read)
+function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   assert(length(ast) >= 1)
   fun  = ast[1]
   args = ast[2:end]
@@ -169,7 +169,7 @@ are as follows:
 The callback should return an array of items.  It does this because in some cases it makes sense to return multiple things so
 all callbacks have to to keep the interface consistent.
 """
-function AstWalk(ast::Any, callback, cbdata)
+function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
 end
 
@@ -187,7 +187,7 @@ end
 @doc """
 Return one element array with element x.
 """
-function asArray(x)
+function asArray(x :: ANY)
   ret = Any[]
   push!(ret, x)
   return ret
@@ -199,7 +199,7 @@ The internal nodes of the AST are of type Expr with various different Expr.head 
 The leaf nodes of the AST all have different types.
 There are some node types we don't currently recurse into.  Maybe this needs to be extended.
 """
-function from_expr(ast :: Any, depth, callback, cbdata :: Any, top_level_number, is_top_level, read)
+function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
   if typeof(ast) == LambdaStaticData
       ast = uncompressed_ast(ast)
   end

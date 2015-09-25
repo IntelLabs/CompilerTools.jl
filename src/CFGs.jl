@@ -108,7 +108,7 @@ First argument indicates if this statement is a top-level statement.
 Second argument is a object collecting information about the CFG as we go along.
 Third argument is some sub-tree of the AST.
 """
-function addStatement(top_level, state, ast)
+function addStatement(top_level, state, ast :: ANY)
     dprintln(3, "addStatement ", ast, " ", top_level, " ", state.cur_bb == nothing)
     if top_level && state.cur_bb != nothing
         dprintln(3,"liveness adding statement number ", state.top_level_number)

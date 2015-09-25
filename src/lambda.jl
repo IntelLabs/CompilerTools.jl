@@ -227,7 +227,7 @@ end
 @doc """
 Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
 """
-function getType(x, li :: LambdaInfo)
+function getType(x :: ANY, li :: LambdaInfo)
   xtyp = typeof(x)
 
   if xtyp == Symbol
@@ -460,7 +460,7 @@ objects are left unchanged). If such lambdas have escaping names that are to be
 replaced, then the result will be wrong.
 """
 function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
-  function traverse(expr)       # traverse expr to find the places where arrSym is refernced
+  function traverse(expr :: ANY)       # traverse expr to find the places where arrSym is refernced
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
         return dict[expr]
@@ -499,8 +499,8 @@ input expression, and the input "expr" may be modified inplace and shall not be 
 after this call. Note that unlike "replaceExprWithDict", the traversal here is
 done by ASTWalker, which has the ability to traverse non-Expr data.
 """
-function replaceExprWithDict!(expr::Any, dict::Dict{SymGen, Any}, AstWalkFunc = nothing)
-  function update_sym(expr, dict, top_level_number, is_top_level, read)
+function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFunc = nothing)
+  function update_sym(expr :: ANY, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
         return [dict[expr]]
