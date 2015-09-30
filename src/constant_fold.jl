@@ -1,6 +1,7 @@
 import CompilerTools.AstWalker
+export constant_fold
 
-binops = Set({:+, :-, :*, :/})
+binops = Set([:+; :-; :*; :/])
 
 function constant_folder(node, symbol_table, top_level_number, is_top_level, read)
   if isa(node, Expr)
@@ -9,28 +10,35 @@ function constant_folder(node, symbol_table, top_level_number, is_top_level, rea
       if isa(rhs[1], Number)
         symbol_table[node.args[1]] = rhs[1]
       end
-      return node
+      return [node]
     elseif node.head == :call
-      if in(node.args[1], binops)
+      if in(node.args[1], binops) && length(node.args)==3
 	      node.args[2] = AstWalker.AstWalk(node.args[2], constant_folder, symbol_table)[1]
 	      node.args[3] = AstWalker.AstWalk(node.args[3], constant_folder, symbol_table)[1]
         if isa(node.args[2], Number) && isa(node.args[3], Number)
-          return eval(node)
+          return [eval(node)]
         end
       end
     end
   elseif isa(node, Symbol)
     if haskey(symbol_table, node)
-      return symbol_table[node]
+      return [symbol_table[node]]
     end
   elseif isa(node, Number)
-    return node
+    return [node]
   end
   return nothing
 end
 
+function constant_fold(fn)
+	symbol_table = Dict{Symbol, Number}()
+	AstWalker.AstWalk(fn, constant_folder, symbol_table)
+	return fn
+end
+
+#=
 macro constant_fold(fn)
-  symbol_table = Dict{Symbol, Number}()
+	symbol_table = Dict{Symbol, Number}()
 	AstWalker.AstWalk(fn, constant_folder, symbol_table)
   println(symbol_table)
   println(fn)
@@ -44,3 +52,4 @@ end
   d = z + c
   return d
 end
+=#
