@@ -21,7 +21,7 @@ function propagate_errors(a,b)
     nothing
 end
 
-tests = ["test_loops_1"]
+tests = ["test_loops_1", "test_loops_2", "test_liveness_1", "test_liveness_2"]
 
 cd(dirname(@__FILE__)) do
 
