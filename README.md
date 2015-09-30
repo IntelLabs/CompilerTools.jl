@@ -1,5 +1,7 @@
 # CompilerTools
 
+[![Build Status](https://magnum.travis-ci.com/IntelLabs/CompilerTools.jl.svg?token=149Z9PxxcSTNz1n9bRpz&branch=master)](https://magnum.travis-ci.com/IntelLabs/CompilerTools.jl)
+
 This is the CompilerTools Julia package, part of the High Performance
 Scripting project at Intel Labs.  The ParallelAccelerator package
 depends on CompilerTools.
