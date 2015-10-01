@@ -266,7 +266,7 @@ Clean up the labels in AST by renaming them, and removing duplicates.
 """
 function cleanupASTLabels(ast)
   assert(isa(ast, Expr) && ast.head == :lambda)
-  body = ast[3]
+  body = ast.args[3]
   assert(typeof(body) == Expr && body.head == :body)
   state = lmstate()
   CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
@@ -274,7 +274,8 @@ function cleanupASTLabels(ast)
   state.last_was_label = false
   body = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(body, update_labels, state))
   body.args = removeDupLabels(body.args)
-  return body
+  ast.args[3] = body
+  return ast
 end
 
 @doc """
