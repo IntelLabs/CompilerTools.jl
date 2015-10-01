@@ -72,6 +72,9 @@ function show(io::IO, tls::TopLevelStatement)
     println(io, "Expr: ", tls.expr)
 end
 
+const CFG_ENTRY_BLOCK = -1
+const CFG_EXIT_BLOCK  = -2
+
 @doc """
 Data structure to hold information about one basic block in the control-flow graph.
 This structure contains the following fields:
@@ -105,7 +108,7 @@ First argument indicates if this statement is a top-level statement.
 Second argument is a object collecting information about the CFG as we go along.
 Third argument is some sub-tree of the AST.
 """
-function addStatement(top_level, state, ast)
+function addStatement(top_level, state, ast :: ANY)
     dprintln(3, "addStatement ", ast, " ", top_level, " ", state.cur_bb == nothing)
     if top_level && state.cur_bb != nothing
         dprintln(3,"liveness adding statement number ", state.top_level_number)
@@ -177,12 +180,12 @@ type expr_state
     top_level_number :: Int
 
     function expr_state()
-        start  = BasicBlock(-1)
-        finish = BasicBlock(-2)
+        start  = BasicBlock(CFG_ENTRY_BLOCK)
+        finish = BasicBlock(CFG_EXIT_BLOCK)
         init   = Dict{Any,BasicBlock}
         bbs = Dict{Int,BasicBlock}()
-        bbs[-1] = start
-        bbs[-2] = finish
+        bbs[CFG_ENTRY_BLOCK] = start
+        bbs[CFG_EXIT_BLOCK]  = finish
         new(bbs, start, -3, 0)
     end
 end
@@ -325,7 +328,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
     # positive label, which we get by adding 1 to the previous maximum basic block level.
     # If the block we want to insert before has a negative level then similarly the new basic block also
     # has to be negative, which was get from the previous minimum -1.
-    if after < -2
+    if after < CFG_EXIT_BLOCK
       new_bb_id = getMinBB(bl) - 1
     else 
       new_bb_id = getMaxBB(bl) + 1
@@ -354,7 +357,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     new_goto_stmt = nothing
-    if after > -2
+    if after > CFG_EXIT_BLOCK
       new_goto_stmt = TopLevelStatement(-1, GotoNode(after))
     end
 
@@ -363,7 +366,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
 
     # Sanity check that if a block has multiple incoming edges that it must have a positive label.
     if length(new_bb.preds) > 1
-      assert(after > -2)
+      assert(after > CFG_EXIT_BLOCK)
     end
 
     # For all the predecessors of the new basic block, go through and make those blocks successors
@@ -438,7 +441,7 @@ function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merg
     # positive label, which we get by adding 1 to the previous maximum basic block level.
     # If the block we want to insert before has a negative level then similarly the new basic block also
     # has to be negative, which was get from the previous minimum -1.
-    if first < -2
+    if first < CFG_EXIT_BLOCK
       new_bb_id = getMinBB(bl) - 1
       cond_fallthrough = new_bb_id - 1
     else 
@@ -516,7 +519,7 @@ function insertBetween(bl :: CFG, before :: Int, after :: Int)
     # positive label, which we get by adding 1 to the previous maximum basic block level.
     # If the block we want to insert before has a negative level then similarly the new basic block also
     # has to be negative, which was get from the previous minimum -1.
-    if after < -2
+    if after < CFG_EXIT_BLOCK
       new_bb_id = getMinBB(bl) - 1
     else 
       new_bb_id = getMaxBB(bl) + 1
@@ -545,7 +548,7 @@ function insertBetween(bl :: CFG, before :: Int, after :: Int)
     # Since new basic block id is positive and the successor basic block is also positive, we
     # need to jump at the end of the new basic block to its successor.
     new_goto_stmt = nothing
-    if after > -2 && !after_is_fallthrough
+    if after > CFG_EXIT_BLOCK && !after_is_fallthrough
       new_goto_stmt = TopLevelStatement(getDistinctStatementNum(bl), GotoNode(after))
     end
 
@@ -751,7 +754,7 @@ function compute_dfn(basic_blocks)
     num_bb = length(basic_blocks)         # Determine the length of the depth first numbering array
     impossible_bb = -(num_bb + 3)         # Computes a sentinel value that is an impossible basic block label given the number of basic blocks.
     bbs_df_order = [impossible_bb for i = 1:num_bb]  # Initializes an array full of those sentinel values.
-    compute_dfn_internal(basic_blocks, -1, num_bb, visited, bbs_df_order)  # Do the recursive process to compute the numbering starting from the first basic block -1.
+    compute_dfn_internal(basic_blocks, CFG_ENTRY_BLOCK, num_bb, visited, bbs_df_order)  # Do the recursive process to compute the numbering starting from the first basic block -1.
     # Make sure that all basic blocks were visited during the recursively numbering process by making sure all impossible_bb values were over-written.
     if in(impossible_bb, bbs_df_order)
         dprintln(0,"bbs_df_order = ", bbs_df_order)
@@ -764,7 +767,7 @@ end
 Connect the current basic block as a fallthrough to the final invisible basic block (-2).
 """
 function connect_finish(state)
-    connect(state.cur_bb, state.basic_blocks[-2], true)
+    connect(state.cur_bb, state.basic_blocks[CFG_EXIT_BLOCK], true)
 end
 
 @doc """
@@ -877,7 +880,7 @@ function removeUselessBlocks(bbs)
 #      # eliminate basic blocks with only one successor and no statements.
 #      if length(bb.succs) == 1 && length(bb.statements) == 0
 #        succ = first(bb.succs)
-#        if succ.label != -2
+#        if succ.label != CFG_EXIT_BLOCK
 #          delete!(succ.preds, bb)
 #
 #          for j in bb.preds
@@ -892,7 +895,7 @@ function removeUselessBlocks(bbs)
 #      elseif length(bb.preds) == 1 && length(bb.succs) == 1
 #        pred = first(bb.preds)
 #        succ = first(bb.succs)
-#        if length(pred.succs) == 1 && succ.label != -2
+#        if length(pred.succs) == 1 && succ.label != CFG_EXIT_BLOCK
 #            replaceSucc(pred, bb, succ) 
 #            delete!(succ.preds, bb)
 #            push!(succ.preds, pred)
@@ -901,8 +904,8 @@ function removeUselessBlocks(bbs)
 #            delete!(bbs, i[1])
 #            found_change = true
 #        end
-#      elseif length(bb.preds) == 0 && bb.label != -1
-      if length(bb.preds) == 0 && bb.label != -1
+#      elseif length(bb.preds) == 0 && bb.label != CFG_ENTRY_BLOCK
+      if length(bb.preds) == 0 && bb.label != CFG_ENTRY_BLOCK
         # dead code
         for j in bb.succs
           delete!(j.preds, bb)
@@ -997,7 +1000,7 @@ function from_return(args, depth, state, callback, cbdata)
     dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
     # Connect this basic block to the finish pseudo-basic block.
-    connect(state.cur_bb, state.basic_blocks[-2], false)
+    connect(state.cur_bb, state.basic_blocks[CFG_EXIT_BLOCK], false)
     # Indicate that we are now not in any basic block.
     state.cur_bb = nothing
     nothing
@@ -1115,8 +1118,8 @@ function compute_dominators(bl :: CFG)
   end
   dom_dict = Dict{Int,Set}()
   for i in collect(keys(bl.basic_blocks))
-      if i == -1
-          dom_dict[i] = Set(-1)
+      if i == CFG_ENTRY_BLOCK
+          dom_dict[i] = Set(CFG_ENTRY_BLOCK)
       else
           dom_dict[i] = deepcopy(all_set)
       end
@@ -1138,7 +1141,7 @@ function compute_dominators(bl :: CFG)
           bb_index = bbs_df_order[i]
           bb = bl.basic_blocks[bb_index]
 
-          if bb_index != -1
+          if bb_index != CFG_ENTRY_BLOCK
               if length(bb.preds) != 0
                   pred_array = collect(bb.preds)
                   vb = deepcopy(dom_dict[pred_array[1].label])
@@ -1179,8 +1182,8 @@ function compute_inverse_dominators(bl :: CFG)
   end
   dom_dict = Dict{Int,Set}()
   for i in collect(keys(bl.basic_blocks))
-      if i == -2
-          dom_dict[i] = Set(-2)
+      if i == CFG_EXIT_BLOCK
+          dom_dict[i] = Set(CFG_EXIT_BLOCK)
       else
           dom_dict[i] = deepcopy(all_set)
       end
@@ -1202,7 +1205,7 @@ function compute_inverse_dominators(bl :: CFG)
           bb_index = bbs_df_order[i]
           bb = bl.basic_blocks[bb_index]
 
-          if bb_index != -2
+          if bb_index != CFG_EXIT_BLOCK
               if length(bb.succs) != 0
                   succ_array = collect(bb.succs)
                   vb = deepcopy(dom_dict[succ_array[1].label])
