@@ -138,6 +138,7 @@ end
 convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
 """
 function convertCodeToLevel(ast::ANY, sig, old_level, new_level, func)
+  dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig))
   if isa(ast, Function)
     return getCodeAtLevel(ast, sig, new_level)
   end
@@ -340,7 +341,7 @@ function processFuncCall(func, call_sig_arg_tuple, per_site_opt_set)
   end
 
   if isa(cur_ast, Expr)
-    ast = convertCodeToLevel(call_sig_arg_tuple, cur_ast, cur_level, PASS_TYPED, new_func)
+    ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
     dprintln(3,"Last opt pass after converting to typed AST.\n", cur_ast.args[3])
 
     # Write the modifed code back to the function.
