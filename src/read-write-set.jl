@@ -94,7 +94,7 @@ uncompressed_ast(l::LambdaStaticData) =
 Walk through a lambda expression.
 We just need to recurse through the lambda body and can ignore the rest.
 """
-function from_lambda(ast :: Expr, depth, callback, cbdata)
+function from_lambda(ast :: Expr, depth, callback, cbdata :: ANY)
   # :lambda expression
   body = CompilerTools.LambdaHandling.getBody(ast)
   from_expr(body, depth, callback, cbdata)
@@ -114,7 +114,7 @@ Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 """
-function from_exprs(ast::Array, callback, cbdata)
+function from_exprs(ast :: Array, callback, cbdata :: ANY)
   from_exprs(ast, 1, ReadWriteSetType(), callback, cbdata)
 end
 
@@ -122,7 +122,7 @@ end
 Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 """
-function from_expr(ast::Any)
+function from_expr(ast :: ANY)
   from_expr(ast, 1, ReadWriteSetType(), nothing, nothing)
 end
 
@@ -131,7 +131,7 @@ Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 """
-function from_expr(ast::Any, callback, cbdata)
+function from_expr(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, ReadWriteSetType(), callback, cbdata)
 end
 
@@ -141,7 +141,7 @@ Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 Takes a ReadWriteSetType in "rws" into which information will be stored.
 """
-function from_exprs(ast::Array, depth, rws, callback, cbdata)
+function from_exprs(ast :: Array, depth, rws, callback, cbdata :: ANY)
   # sequence of expressions
   # ast = [ expr, ... ]
   local len  = length(ast)
@@ -157,7 +157,7 @@ end
 Walk through a tuple.
 Just recursively call from_exprs on the internal tuple array to process each part of the tuple.
 """
-function from_tuple(ast::Array, depth,rws, callback, cbdata)
+function from_tuple(ast :: Array, depth,rws, callback, cbdata :: ANY)
   from_exprs(ast, depth+1, rws, callback, cbdata)
 end
 
@@ -165,7 +165,7 @@ end
 Process a :(::) AST node.
 Just process the symbol part of the :(::) node in ast[1] (which is args of the node passed in).
 """
-function from_coloncolon(ast::Array, depth,rws, callback, cbdata)
+function from_coloncolon(ast :: Array, depth,rws, callback, cbdata :: ANY)
   assert(length(ast) == 2)
   from_expr(ast[1], depth+1, rws, callback, cbdata)
 end
@@ -191,7 +191,7 @@ end
 Process an assignment AST node.
 The left-hand side of the assignment is added to the writeSet.
 """
-function from_assignment(ast::Array{Any,1}, depth,rws, callback, cbdata)
+function from_assignment(ast :: Array{Any,1}, depth,rws, callback, cbdata :: ANY)
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
@@ -217,7 +217,7 @@ end
 @doc """
 Process :call Expr nodes to find arrayref and arrayset calls and adding the corresponding index expressions to the read and write sets respectively.
 """
-function from_call(ast::Array{Any,1}, depth, rws, callback, cbdata)
+function from_call(ast :: Array{Any,1}, depth, rws, callback, cbdata :: ANY)
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
@@ -260,7 +260,7 @@ If an AST node is not recognized then we try the passing the node to the callbac
 it was able to process it.  If so, then we process the regular Julia statement returned by
 the callback.
 """
-function tryCallback(ast, callback, cbdata, depth, rws)
+function tryCallback(ast :: ANY, callback, cbdata :: ANY, depth, rws)
   if callback != nothing
     res = callback(ast, cbdata)
   else
@@ -278,7 +278,7 @@ The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
 """
-function from_expr(ast::Any, depth,rws, callback, cbdata)
+function from_expr(ast :: ANY, depth, rws, callback, cbdata :: ANY)
   if typeof(ast) == LambdaStaticData
       ast = uncompressed_ast(ast)
   end
