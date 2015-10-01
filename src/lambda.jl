@@ -627,8 +627,8 @@ Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
 and the inferred return type of the input method.
 """
-function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Type)
-  (tree, ty) = Core.Inference.typeinf(lambda, typs, Core.svec())
+function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Type; optimize = true)
+  (tree, ty) = Core.Inference.typeinf_uncached(lambda, typs, Core.svec(), optimize = optimize)
   lambda.ast = tree
   return Base.uncompressed_ast(lambda), ty
 end
