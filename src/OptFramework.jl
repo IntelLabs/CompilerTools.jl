@@ -2,7 +2,8 @@ module OptFramework
 
 using CompilerTools
 
-export @acc 
+export @acc, addOptPass
+export PASS_MACRO, PASS_LOWERED, PASS_UNOPTTYPED, PASS_TYPED
 
 # This controls the debug print level.  0 prints nothing.  3 print everything.
 DEBUG_LVL=0
@@ -49,86 +50,123 @@ function TypedExpr(typ, rest...)
     res
 end
 
+const PASS_MACRO = 0 :: Int
+const PASS_LOWERED = 1 :: Int
+const PASS_UNOPTTYPED = 2 :: Int
+const PASS_TYPED = 3 :: Int
+
+@doc """
+pretty print pass level number as string.
+"""
+function dumpLevel(level)
+  if level == PASS_MACRO "macro AST"
+  elseif level == PASS_LOWERED "lowered AST"
+  elseif level == PASS_UNOPTTYPED "unoptimized typed AST"
+  elseif level == PASS_TYPED "typed AST"
+  else "unknown AST"
+  end
+end
+
 @doc """
 A data structure that holds information about one high-level optimization pass to run.
-"func" is the callback functino that does the optimization pass and should have the signature (Expr, Tuple, Tuple)
-where the Expr is the :lambda Expr for a function, the first tuple is a tuple of the types of the arguments to the
-function and the second tuple is the actual name of the arguments to the functions.
+"func" is the callback function that does the optimization pass and should have the signature (GlobalRef, Expr, Tuple) where the GlobalRef provides the locate of the function to be optimized, Expr is the AST input to this pass, and Tuple is a tuple of all parameter types of the functions. It must return either an optimized Expr, or a Function.
+"level" indicates at which level this pass is to be run. 
 """
-type optPass
+type OptPass
     func  :: Function
-    unopt :: Bool   # true if this optimization pass wants to use unoptimized code_typed form
-
-    function optPass(f, l)
-      new(f, l)
-    end
+    level :: Int # at which level this OptPass is run
 end
 
 # Stores the default set of optimization passes if they are not specified on a line-by-line basis.
-optPasses = optPass[]
+optPasses = OptPass[]
 
 @doc """
-Set the default set of optimization passes to apply with the @acc macro is used.
+Set the default set of optimization passes to apply with the @acc macro. 
 """
-function setOptPasses(passes :: Array{optPass,1} )
-  unopt_first = true
-
-  for i = 1:length(passes)
-    if passes[i].unopt == true
-      if unopt_first == false
-        throw(string("Optimization passes cannot handle a unoptimized AST pass after an optimized typed AST pass."))
-      end
-    else
-      unopt_first = false
-    end
+function setOptPasses(passes :: Array{OptPass,1})
+  for pass in passes
+    addOptPass(pass)
   end
-
-  global optPasses = passes
 end
 
 @doc """
-Add an optimization pass.  If this is going to be called multiple times then you need some external way of
-corrdinating the code/modules that are calling this function so that optimization passes are added in some sane order.
+Add an optimization pass. If this is going to be called multiple times then you need some external way of corrdinating the code/modules that are calling this function so that optimization passes are added in some sane order.
 """
-function addOptPass(pass :: optPass)
+function addOptPass(pass :: OptPass)
+  level = -1
   if length(optPasses) > 0
-    last_pass = optPasses[end]
-    if last_pass.unopt == false
-      if pass.unopt == true
-        throw(string("Optimization passes cannot handle a unoptimized AST pass after an optimized typed AST pass."))
-      end
-    end
+    level = optPasses[end].level
   end
-
+  if pass.level < level
+      throw(string("Optimization passes cannot handle ", dumpLevel(pass.level), " pass after ", dumpLevel(level)))
+  end
+  dprintln(2, "Add optimization pass at level ", dumpLevel(pass.level))
   push!(optPasses, pass) 
 end
 
 @doc """
-Get the type of an AST node.
+Same as the other addOptPass but with a pass call back function and pass level as input.
 """
-function typeOfOpr(x)
-#  dprintln(3,"typeOfOpr ", x, " type = ", typeof(x))
-  if isa(x, Expr) x.typ
-  elseif isa(x, SymbolNode) x.typ
-  elseif isa(x, GlobalRef) typeof(eval(x))
-  else typeof(x) 
-  end
-end   
+function addOptPass(func, level)
+  addOptPass(OptPass(func, level))
+end
 
 @doc """
-The type for the global state of OptFramework.
-It keeps track of a mapping between functions and their optimized version so that we don't try to optimize the same function with the same signature twice.
-The field per_site_opt_set is used when the programmer provides the set of optimization passes along with the @acc macro.  In which case, that set of 
-optimizations associated with that one @acc site is stored in per_site_opt_set.
+Retrieve the AST of the given function "func" and signature "sig" for at the given pass "level".
 """
-type memoizeState
-  mapNameFuncInfo :: Dict{Any, Any}   # tracks the mapping from unoptimized function name to optimized function name
-  per_site_opt_set
-
-  function memoizeState()
-    new(Dict{Any,Any}(), nothing)
+function getCodeAtLevel(func, sig, level)
+  if level == PASS_MACRO 
+    error("AST at macro level must be passed in, and cannot be obtained from inspecting the function itself")
+  elseif level == PASS_LOWERED 
+    ast = code_lowered(func, sig)
+  elseif level == PASS_UNOPTTYPED 
+    ast = code_typed(func, sig, optimize=false)
+  elseif level == PASS_TYPED
+    ast = code_typed(func, sig, optimize=true)
+  else 
+    error("Unknown AST level: ", level)
   end
+  dprintln(3, "getCodeAtLevel ", dumpLevel(level), " ast = ", ast)
+  @assert (length(ast) > 0) ("Failed to retrieve AST for function " * dump(func) * " with signature " * dump(sig))
+  @assert (length(ast) == 1) ("Expect one AST but got many for function " * dump(func) * " with signature " * dump(sig) * ": " * dump(ast))
+  @assert (isa(ast[1], Expr) && ast[1].head == :lambda) ("Expect Expr with :lambda head, but got " * dump(ast[1]))
+  dprintln(3, "getCodeAtLevel returns")
+  return ast[1]
 end
+
+@doc """
+convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
+"""
+function convertCodeToLevel(ast::ANY, sig, old_level, new_level, func)
+  if isa(ast, Function)
+    return getCodeAtLevel(ast, sig, new_level)
+  end
+  if old_level == new_level
+    return ast
+  end
+  if old_level == PASS_MACRO
+    error("Code in macro must be evaled first before converted")
+  else
+    func_methods = methods(func, sig)
+    @assert (length(func_methods) == 1) ("Expect only one matching method for " * func * " of signature " * sig * " but got " * length(func_methods))
+    lambda = func_methods[1].func.code
+    @assert (isa(lambda, LambdaStaticData)) ("LambdaStaticData not found for " * func * " of signature " * sig)
+    lambda.ast = ccall(:jl_compress_ast, Any, (Any,Any), lambda, ast)
+    if new_level == PASS_UNOPTTYPED
+      (new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=false)
+    else
+      assert(new_level == PASS_TYPED)
+      (new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=true)
+    end
+    @assert (isa(new_ast, Expr) && new_ast.head == :lambda) ("Expect Expr with :lambda head, but got " * new_ast)
+    return new_ast
+  end 
+end
+
+@doc """
+A global memo-table of the optimization of function/signature pairs.
+"""
+gOptFrameworkDict = Dict{Any,Any}()
 
 @doc """
 The callback state variable used by create_label_map and update_labels.
@@ -224,16 +262,32 @@ function removeDupLabels(stmts)
 end
 
 @doc """
+Clean up the labels in AST by renaming them, and removing duplicates.
+"""
+function cleanupASTLabels(ast)
+  assert(isa(ast, Expr) && ast.head == :lambda)
+  body = ast[3]
+  assert(typeof(body) == Expr && body.head == :body)
+  state = lmstate()
+  CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
+  #dprintln(3,"label mapping = ", state.label_map)
+  state.last_was_label = false
+  body = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(body, update_labels, state))
+  body.args = removeDupLabels(body.args)
+  return body
+end
+
+@doc """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
 """
 function tfuncPresent(func, tt)
   m = methods(func, tt)[1]
   def = m.func.code
-  if def.tfunc == ()
+  if is(def.tfunc, nothing)
     dprintln(1, "tfunc NOT present before code_typed")
     code_typed(func, tt)
-    if def.tfunc == ()
-      dprintln(1, "tfunc NOT present after code_typed")
+    if is(def.tfunc, nothing) 
+      error("tfunc still NOT present after code_typed")
     else
       dprintln(1, "tfunc present after code_typed")
     end
@@ -243,190 +297,50 @@ function tfuncPresent(func, tt)
 end
 
 @doc """
-Converts the unoptimized typed AST for a function/signature to the optimized typed AST version.
-"""
-function unoptToTyped(func :: Function, unoptAst, call_sig_arg_tuple)
-  new_func_name = string(string(func), "_unoptToTyped")  # A temporary function to perform this conversion.
-  nfsym = symbol(new_func_name)                          # The symbol for the temporary function.
-  assert(typeof(unoptAst) == Expr && unoptAst.head == :lambda)
-
-  # The basic approach is to put the unoptimized AST into a temporary function and then call optimized code_typed to
-  # get the corresponding optimized version of the AST.
-  #
-  # This process has the same problem with basic block labelling as we do in copyFunctionNewName and so the same
-  # process is employed to relabel the function into a form that Julia will accept.
-  copy_args = unoptAst.args[1]
-  body = unoptAst.args[3]
-  assert(typeof(body) == Expr && body.head == :body)
-  dprintln(2,"unoptToTyped typeof(copy_args) = ", typeof(copy_args), " ", copy_args)
-  dprintln(2,"unoptToTyped typeof(unoptAst.args[3]) = ", typeof(unoptAst.args[3]), " ", unoptAst.args[3])
-  state = lmstate()
-  CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
-  #dprintln(3,"label mapping = ", state.label_map)
-  state.last_was_label = false
-  unoptAst.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(unoptAst.args[3], update_labels, state))
-  unoptAst.args[3].args = removeDupLabels(unoptAst.args[3].args)
-  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, unoptAst.args[3].args...))
-  dprintln(2,"unoptToTyped new body = ", unoptAst.args[3])
-  # Evaluate the function expression to force the temporary function into existence.  
-  # The function is eval'ed into existence in the same module in which the original function existed.
-  eval_new_func = Base.function_module(func, call_sig_arg_tuple).eval(new_func)
-  if DEBUG_LVL >= 3
-    lambda = code_lowered(eval_new_func, call_sig_arg_tuple)[1]
-    println("lowered copy = \n", lambda)
-  end
-  # Now just return the optimized AST from the newly created temporary function.
-  return code_typed(eval_new_func, call_sig_arg_tuple)[1]
-end
-
-@doc """
-Create a copy of a function.
-1) old_func - the function to copy.
-2) new_func_name - the name of the new copy of function.
-3) arg_tuple - the signature of the function
-"""
-function copyFunctionNewName(old_func, new_func_name :: AbstractString, arg_tuple)
-  lambda = code_lowered(old_func, arg_tuple)[1] # Get the code_lowered AST form for the function to be copied.
-  nfsym  = symbol(new_func_name)                 # Create a symbol for the new function name.
-  dprintln(3, "copying old_func = \n", lambda)
-
-  dprintln(3, "lambda = ", lambda)
-  # You can't just take the output of code_lowered and put that in a new function and have it work.
-  # It will complain about certain facets of the basic block labelling and CFG structure.  Here
-  # we re-number and simplify basic blocks numbering to a form that is acceptable.
-  copy_args = lambda.args[1]
-  copy_body = lambda.args[3].args
-  dprintln(3,"copyFunctionNewName body = \n", lambda.args[3], " length = ", length(copy_body))
-  state = lmstate()
-  CompilerTools.AstWalker.AstWalk(lambda.args[3], create_label_map, state)
-  #dprintln(3,"label mapping = ", state.label_map)
-  state.last_was_label = false
-  lambda.args[3] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(lambda.args[3], update_labels, state))
-  copy_body = lambda.args[3].args = removeDupLabels(lambda.args[3].args)
-  #dprintln(3,"after label renumberingl = \n", lambda.args[3], " type = ", typeof(lambda.args[3]), " copy_body = ", copy_body, " type = ", typeof(copy_body))
- 
-  # Create a new function whose name is in nfsym and whose arguments are in copy_args and whose body is copy_body.
-  new_func = Expr(:function, Expr(:call, nfsym, copy_args...), Expr(:block, copy_body...))
-  # Evaluate the function expression to force the function into existence.  
-  # The function is eval'ed into existence in the same module in which the original function existed.
-  old_func_mod = Base.function_module(old_func, arg_tuple)
-  dprintln(3, "old_func = ", old_func, " arg_tuple = ", arg_tuple, " old_func_mod = ", old_func_mod, " old_func_mod type = ", typeof(old_func_mod))
-  dprintln(3, "new_func = ", new_func)
-  eval_new_func = old_func_mod.eval(new_func)
-  if DEBUG_LVL >= 3
-    lambda = code_lowered(eval_new_func, arg_tuple)[1]
-    dprintln(3, "new copied func = \n", lambda)
-    tfuncPresent(eval_new_func, arg_tuple)
-  end
-  code_typed(eval_new_func, arg_tuple) # force tfunc to be created in methods[1].func.code
-  return eval_new_func
-end
-
-@doc """
-Takes a function, a signature, argument names, and a set of optimizations and applies that set of optimizations to the function,
-creating a new optimized function.  Argument explanation follows:
-1) func_expr - the function being optimized
+Takes a function, a signature, and a set of optimizations and applies that set of optimizations to the function,
+returns a new optimized function without modifying the input.  Argument explanation follows:
+1) func - the function being optimized
 2) call_sig_arg_tuple - the signature of the function, i.e., the types of each of its arguments
-3) call_sig_args - the actual argument names of the function
-4) per_site_opt_set - the set of optimization passes to apply to this function.
+3) per_site_opt_set - the set of optimization passes to apply to this function.
 """
-function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args, per_site_opt_set)
-  fetyp = typeof(func_expr)
-  dprintln(3,"processFuncCall ", func_expr, " module = ", Base.function_module(func_expr, call_sig_arg_tuple), " ", call_sig_arg_tuple, " ", fetyp, " args = ", call_sig_args, " opt_set = ", per_site_opt_set)
-  func = eval(func_expr)
-  dprintln(3,"func = ", func, " type = ", typeof(func))
-
-  ftyp = typeof(func)
-  dprintln(4,"After name resolution: func = ", func, " type = ", ftyp)
-  if ftyp == DataType
-    return nothing
+function processFuncCall(func, call_sig_arg_tuple, per_site_opt_set)
+  @assert (isa(func, Function)) ("processFuncCall can only optimize functions, but got " * typeof(func))
+  if per_site_opt_set == nothing 
+    per_site_opt_set = optPasses 
   end
-  assert(ftyp == Function || ftyp == IntrinsicFunction || ftyp == LambdaStaticData)
+  @assert (length(per_site_opt_set) > 0) "There are no registered optimization passes."
+  func_module = Base.function_module(func, call_sig_arg_tuple)
+  func_ref = GlobalRef(func_module, symbol(string(func)))
+  dprintln(3,"processFuncCall ", func_ref, " ", call_sig_arg_tuple, " opt_set = ", per_site_opt_set)
 
-  # If per site opt set has not been provided then use the global default.
-  if per_site_opt_set == nothing
-    per_site_opt_set = optPasses
-  else
-    assert(isa(per_site_opt_set, Array))
-    for s in per_site_opt_set
-      assert(typeof(s) == optPass)
-    end
-  end
+  # Create a skeleton of the incoming function, which is used to facilitate AST conversion, and will eventually be the result function to be returned.
+  new_func_name = gensym(string(func_ref))
+  fake_args = Any[ gensym() for a in call_sig_arg_tuple ]
+  new_func = Core.eval(func_module, :(function $(new_func_name)($(fake_args...)) end))
+  dprintln(2,"temp_func is ", new_func)
 
-  # We can only optimize Functions, not IntrinsicFunction or LambdaStaticData.
-  if ftyp == Function
-    if length(per_site_opt_set) == 0
-      throw(string("There are no registered optimization passes."))
-    end
+  # Remember what level the AST was in.
+  cur_level = per_site_opt_set[1].level
+  cur_ast = func
 
-    # Create a copy of the incoming function.  We will then optimize the copy so the original unoptimized function can still be called.
-    new_func_name = string(string(func),"_processFuncCall")
-    new_func = copyFunctionNewName(func, new_func_name, call_sig_arg_tuple)
-    dprintln(2,"temp_func is ", new_func)
+  dprintln(3,"Initial code to optimize = ", cur_ast)
 
-    # Some optimization passes want to work on unoptmized code_typed AST whereas others want to work on optimized (i.e., regular) code-typed AST.
-    # All unoptimized passes have to preceed any optimized pass because we can't convert from modified optimized AST back to modified unoptimized AST.
-    # Here we see which kind of AST we will start with.
-    last_unopt = per_site_opt_set[1].unopt
-
-    # Get the AST on which the first optimization pass wants to work.
-    if last_unopt == true
-      cur_ast = code_typed(new_func, call_sig_arg_tuple, optimize=false)[1]   # false means generate type information but don't otherwise optimize
-    else
-      cur_ast = code_typed(new_func, call_sig_arg_tuple)[1]
-    end
-    assert(typeof(cur_ast) == Expr)
-    assert(cur_ast.head == :lambda)
-
-    dprintln(3,"Initial code to optimize = ", cur_ast)
-
-    # For each optimization pass in the optimization set.
-    for i = 1:length(per_site_opt_set)
+  # For each optimization pass in the optimization set.
+  for i = 1:length(per_site_opt_set)
       # See if the current optimization pass uses optimized AST form and the previous optimization pass used unoptimized AST form.
-      if per_site_opt_set[i].unopt != last_unopt
-        # If so, convert unoptimized AST to optimized AST form.
-        cur_ast = unoptToTyped(new_func, cur_ast, call_sig_arg_tuple)
-      end
-      last_unopt = per_site_opt_set[i].unopt
-      assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
-      assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
-
-      # Call the current optimization on the current AST.
-      cur_ast = per_site_opt_set[i].func(cur_ast, call_sig_arg_tuple, call_sig_args)
-
-      assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
-      assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
-
-      if typeof(cur_ast) == Function
-        dprintln(3,"Optimization pass returned a function.")
-        if i != length(per_site_opt_set)
-          dprintln(0,"A non-final optimization pass returned a Function so later optimization passes will not run.")
-        end
-        return cur_ast
-      else
+      cur_level = per_site_opt_set[i].level
+      if cur_level > PASS_MACRO
+        cur_ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, cur_level, new_func)
+        assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
+        # Call the current optimization on the current AST.
+        cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
         dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
-        if typeof(cur_ast) != Expr
-          dprintln(0, "cur_ast after opt pass not an expression. type = ", typeof(cur_ast))
-        end
       end
-    end
+  end
 
-    # If the last optimization pass operated on unoptimized AST, then we need to convert to optimized AST before we can store the AST
-    # back into the optimized copy of the function.
-    if last_unopt == true
-      assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
-      assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
-      body = cur_ast.args[3]
-      dprintln(3,"Last opt pass worked on unopt.\n", body)
-
-      cur_ast = unoptToTyped(new_func, cur_ast, call_sig_arg_tuple)
-
-      assert(typeof(cur_ast) == Expr && cur_ast.head == :lambda)
-      assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
-
-      body = cur_ast.args[3]
-      dprintln(3,"Last opt pass after converting to typed AST.\n", body)
-    end
+  if isa(cur_ast, Expr)
+    ast = convertCodeToLevel(call_sig_arg_tuple, cur_ast, cur_level, PASS_TYPED, new_func)
+    dprintln(3,"Last opt pass after converting to typed AST.\n", cur_ast.args[3])
 
     # Write the modifed code back to the function.
     dprintln(2,"Before methods at end of processFuncCall.")
@@ -438,16 +352,45 @@ function processFuncCall(func_expr, call_sig_arg_tuple, call_sig_args, per_site_
 
     dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
+  elseif isa(cur_ast, Function)
+    return cur_ast
+  else
+    error("Expect either AST or Function after processFuncCall, but got ", cur_ast)
   end
-  return nothing
 end
 
 @doc """
-The global state of OptFramework.
-Memoizes the optimization of function/signature pairs.
-Holds per call site optimization set for the second flavor of the @acc macro.
+Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
-gOptFrameworkState = memoizeState()
+function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
+  dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
+  Core.eval(current_module(), :(function $(new_func)($(call_sig_args...))
+         call_sig_arg_typs = Any[ typeof(x) for x in tuple($(call_sig_args...)) ]
+         call_sig_arg_tuple = tuple(call_sig_arg_typs...)
+         opt_set = $per_site_opt_set
+         fs = ($real_func, call_sig_arg_tuple, opt_set)
+         func_to_call = get(CompilerTools.OptFramework.gOptFrameworkDict, fs, nothing)
+         if func_to_call == nothing
+           tic()
+           process_res = CompilerTools.OptFramework.processFuncCall($real_func, call_sig_arg_tuple, opt_set)
+           t = toc()
+           CompilerTools.OptFramework.dprintln(3,$real_func," optimization time = ", t)
+           if process_res != nothing
+             # We did optimize it in some way we will call the optimized version.
+             CompilerTools.OptFramework.dprintln(3,"processFuncCall DID optimize ", $real_func)
+             func_to_call = process_res
+           else
+             # We did not optimize it so we will call the original function.
+             CompilerTools.OptFramework.dprintln(3,"processFuncCall didn't optimize ", $real_func)
+             func_to_call = $real_func
+           end
+           # Remember this optimization result for this function/type combination.
+           CompilerTools.OptFramework.gOptFrameworkDict[fs] = func_to_call
+         end
+         CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
+         func_to_call($(call_sig_args...))
+        end))
+end
 
 @doc """
 An AstWalk callback function.
@@ -455,7 +398,7 @@ Finds call sites in the AST and replaces them with calls to newly generated tram
 These trampolines functions allow us to capture runtime types which in turn enables optimization passes to run on fully typed AST.
 If a function/signature combination has not previously been optimized then call processFuncCall to optimize it.
 """
-function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number, is_top_level, read)
+function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_top_level, read)
   if typeof(x) == Expr
     if x.head == :call
       # We found a call expression within the larger expression.
@@ -464,73 +407,21 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
       dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
 
       # The name of the new trampoline function.
-      new_func_name = string("opt_calls_trampoline_", string(call_expr))
-      new_func_sym  = symbol(new_func_name)
+      real_func = symbol(string(call_expr))
 
       # Recursively process the arguments to this function possibly finding other calls to replace.
       for i = 2:length(x.args)
-        new_arg = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
+        new_arg = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, per_site_opt_set)
         assert(isa(new_arg,Array))
         assert(length(new_arg) == 1)
         x.args[i] = new_arg[1]
       end
 
-      # Form a tuple of the function name and arguments.
-      dprintln(3,"Creating new trampoline for ", call_expr)
-      dprintln(2, new_func_sym)
-      for i = 1:length(call_sig_args)
-        dprintln(2, "    ", call_sig_args[i])
-      end
-      per_site_opt_set = state.per_site_opt_set 
- 
-      # Define the trampoline.
-      @eval function ($new_func_sym)(orig_func, per_site_opt_set, $(call_sig_args...))
-              # Create a tuple of the actual argument types for this invocation.
-              call_sig = Expr(:tuple)
-              call_sig.args = map(typeOfOpr, Any[ $(call_sig_args...) ]) 
-              call_sig_arg_tuple = eval(call_sig)
-              #println(call_sig_arg_tuple)
-
-              # Create a tuple of function and argument types.
-              fs = ($new_func_sym, call_sig_arg_tuple, per_site_opt_set)
-              dprintln(1, "running ", $new_func_name, " fs = ", fs)
-
-              # If we have previously optimized this function and type combination ...
-              if haskey(gOptFrameworkState.mapNameFuncInfo, fs)
-                # ... then call the function we previously optimized.
-                func_to_call = gOptFrameworkState.mapNameFuncInfo[fs]
-              else
-                # ... else see if we can optimize it.
-                tic()
-                process_res = processFuncCall(orig_func, call_sig_arg_tuple, $call_sig_args, per_site_opt_set)
-                t = toc()
-                dprintln(3,orig_func," optimization time = ", t)
-
-                if process_res != nothing
-                  # We did optimize it in some way we will call the optimized version.
-                  dprintln(3,"processFuncCall DID optimize ", orig_func)
-                  func_to_call = process_res
-                else
-                  # We did not optimize it so we will call the original function.
-                  dprintln(3,"processFuncCall didn't optimize ", orig_func)
-                  func_to_call = orig_func
-                end
-                # Remember this optimization result for this function/type combination.
-                gOptFrameworkState.mapNameFuncInfo[fs] = func_to_call
-              end
-
-              dprintln(1, "Executing function = ", Base.function_name(func_to_call), " module = ", Base.function_module(func_to_call, call_sig_arg_tuple))
-              #dprintln(3,"Code to call = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
-              # Call the function.
-              ret = func_to_call($(call_sig_args...))
-              #dprintln(3,"Code to call after = ", code_typed(func_to_call, call_sig_arg_tuple)[1])
-              ret
-            end
-
+      trampoline_func = symbol(string("opt_calls_trampoline_", real_func))
+      makeWrapperFunc(trampoline_func, real_func, call_sig_args, per_site_opt_set) 
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
-      resolved_name = @eval OptFramework.$new_func_sym
-      x.args = [ resolved_name; call_expr; per_site_opt_set; x.args[2:end] ]
+      x.args = [ trampoline_func; x.args[2:end] ]
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
@@ -541,13 +432,11 @@ function opt_calls_insert_trampoline(x, state :: memoizeState, top_level_number,
 end
 
 @doc """
-The formation of the code to be returned from the @acc macro is handled here.
-We use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.
-That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
+When @acc is used at a function's callsite, we use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.  That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
 """
-function convert_expr(ast)
-  dprintln(2, "convert_expr ", ast, " ", typeof(ast), " gOptFrameworkState = ", gOptFrameworkState)
-  res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, gOptFrameworkState)
+function convert_expr(per_site_opt_set, ast)
+  dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
+  res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
   assert(isa(res,Array))
   assert(length(res) == 1)
   dprintln(2,"converted expression = ", res[1])
@@ -555,24 +444,67 @@ function convert_expr(ast)
 end
 
 @doc """
+When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
+"""
+function convert_function(per_site_opt_set, ast)
+  # unlike convert_expr, we must eval per_site_opt_set statically
+  opt_set = per_site_opt_set == nothing ? optPasses : evalPerSiteOptSet(per_site_opt_set)
+  assert(isa(ast, Expr) && (ast.head == :function))
+  assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
+  fname = ast.args[1].args[1]
+  assert(isa(fname, Symbol))
+  ref = GlobalRef(current_module(), fname)
+  call_sig_args = ast.args[1].args[2:end]
+  real_fname = gensym(string(fname))
+  ast.args[1].args[1] = real_fname
+  println(3, "Initial code = ", ast)
+  for i in 1:length(opt_set)
+    x = opt_set[i]
+    if x.level == PASS_MACRO
+      ast = x.func(ref, ast, nothing) # macro level transformation only takes input ast as its argument
+      println(3, "After pass[", i, "], AST = ", ast)
+    end
+  end
+  Core.eval(current_module(), ast)
+  makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
+end
+
+
+@doc """
+Statically evaluate per-site optimization passes setting, and return the result.
+"""
+function evalPerSiteOptSet(per_site_opt_set)
+  opt_set = Core.eval(current_module(), per_site_opt_set)
+  for s in opt_set
+    @assert isa(s, OptPass) ("Expect OptPass but got " * dump(s))
+  end
+  return opt_set
+end
+
+
+@doc """
 The @acc macro comes in two forms:
 1) @acc expression
-2) @acc Array{optPass,1} expression.
-In the first form, the set of optimization passes to apply come from the default set of optimization passes as specified with the funciton setOptPasses.
-In the second form, an array of optPass's comes right after @acc and this is followed by an expression.  In this case, the specified set of
-   optPasses are used just for optimizing the following expression.
-The @acc macro replaces each call in the expression with a call to a trampolines that determines the types of the call and if that combination of function and signature
-has not previously been optimized then it calls the set of optimization passes to optimize it.  Then, the trampoline calls the optimized function.
+3) @acc function ... end
+In the first form, the set of optimization passes to apply come from the default set of optimization passes as specified with the funciton setOptPasses.  The @acc macro replaces each call in the expression with a call to a trampolines that determines the types of the call and if that combination of function and signature has not previously been optimized then it calls the set of optimization passes to optimize it.  Then, the trampoline calls the optimized function.
+The second form is similar, and instead annotating callsite, the @acc macro can be used in front of a function's declaration. Used this way, it will replace the body of the function with the trampoline itself. The programmer can use @acc either at function callsite, or at function delcaration, but not both.
+This macro may optionally take an OptPass array, right after @acc and followed by an expression or function.  In this case, the specified set of optPasses are used just for optimizing the following expression. When used with the second form (in front of a function), the value of this OptPass array will be statically evaluated at the macro expansion stage.
 """
 macro acc(ast1, ast2...)
   if isempty(ast2)
-#    println("old acc code")
-    gOptFrameworkState.per_site_opt_set = nothing
-    return convert_expr(ast1)
+    # default to assume global optPasses setting
+    per_site_opt_set = nothing
+    ast = ast1
   else
-#    println("new acc code")
-    gOptFrameworkState.per_site_opt_set = ast1
-    return convert_expr(ast2[1]) 
+    per_site_opt_set = ast1 
+    ast = ast2[1]
+  end
+  if isa(ast, Expr) && ast.head == :function
+    # used at function definition
+    convert_function(per_site_opt_set, ast)
+  else
+    # used at call site
+    convert_expr(per_site_opt_set, ast)
   end
 end
 
