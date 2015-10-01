@@ -13,7 +13,6 @@ include("udchains.jl")
 include("loops.jl")
 include("constant_fold.jl")
 include("alias-analysis.jl")
-include("comprehension.jl")
 
 using .OptFramework
 export @acc
