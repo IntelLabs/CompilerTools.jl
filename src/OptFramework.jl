@@ -165,7 +165,7 @@ function convertCodeToLevel(ast::ANY, sig, old_level, new_level, func)
 end
 
 @doc """
-A global memo-table of the optimization of function/signature pairs.
+A global memo-table that maps both: the triple (function, signature, optPasses) to the trampoline function, and the trampoline function to the real function.
 """
 gOptFrameworkDict = Dict{Any,Any}()
 
@@ -366,7 +366,7 @@ Define a wrapper function with the name given by "new_func" that when called wil
 """
 function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
   dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
-  Core.eval(current_module(), :(function $(new_func)($(call_sig_args...))
+  func = Core.eval(current_module(), :(function $(new_func)($(call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
@@ -392,6 +392,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
          CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
          func_to_call($(call_sig_args...))
         end))
+  gOptFrameworkDict[func] = eval(GlobalRef(current_module(), real_func))
 end
 
 @doc """
@@ -455,7 +456,8 @@ function convert_function(per_site_opt_set, ast)
   assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
   fname = ast.args[1].args[1]
   assert(isa(fname, Symbol))
-  ref = GlobalRef(current_module(), fname)
+  mod = current_module()
+  ref = GlobalRef(mod, fname)
   call_sig_args = ast.args[1].args[2:end]
   real_fname = gensym(string(fname))
   ast.args[1].args[1] = real_fname
@@ -467,7 +469,7 @@ function convert_function(per_site_opt_set, ast)
       println(3, "After pass[", i, "], AST = ", ast)
     end
   end
-  Core.eval(current_module(), ast)
+  Core.eval(mod, ast)
   makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
 end
 
