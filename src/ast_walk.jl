@@ -284,7 +284,11 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :&
         # skip
-    elseif head == :ccall
+    elseif head == :static_typeof
+        for i = 1:length(args)
+          args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+        end
+   elseif head == :ccall
         for i = 1:length(args)
           args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
         end
@@ -330,6 +334,22 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
 		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
 	    end
     elseif head == :comparison
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :while
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :let
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :local
+	    for i = 1:length(args)
+		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+	    end
+    elseif head == :quote
 	    for i = 1:length(args)
 		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
 	    end
