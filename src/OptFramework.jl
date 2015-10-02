@@ -137,7 +137,7 @@ end
 @doc """
 convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
 """
-function convertCodeToLevel(ast::ANY, sig, old_level, new_level, func)
+function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
   dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig))
   if isa(ast, Function)
     return getCodeAtLevel(ast, sig, new_level)
@@ -154,10 +154,14 @@ function convertCodeToLevel(ast::ANY, sig, old_level, new_level, func)
     @assert (isa(lambda, LambdaStaticData)) ("LambdaStaticData not found for " * func * " of signature " * sig)
     lambda.ast = ccall(:jl_compress_ast, Any, (Any,Any), lambda, ast)
     if new_level == PASS_UNOPTTYPED
+      dprintln(3,"Calling lambdaTypeinf with optimize=false")
       (new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=false)
     else
       assert(new_level == PASS_TYPED)
-      (new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=true)
+      dprintln(3,"Calling lambdaTypeinf with optimize=true")
+      dprintln(4,"lambda = ", lambda)
+      new_ast = ast
+      #(new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=true)
     end
     @assert (isa(new_ast, Expr) && new_ast.head == :lambda) ("Expect Expr with :lambda head, but got " * new_ast)
     return new_ast
@@ -305,7 +309,8 @@ returns a new optimized function without modifying the input.  Argument explanat
 2) call_sig_arg_tuple - the signature of the function, i.e., the types of each of its arguments
 3) per_site_opt_set - the set of optimization passes to apply to this function.
 """
-function processFuncCall(func, call_sig_arg_tuple, per_site_opt_set)
+function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_set :: ANY)
+  dprintln(3,"processFuncCall starting")
   @assert (isa(func, Function)) ("processFuncCall can only optimize functions, but got " * typeof(func))
   if per_site_opt_set == nothing 
     per_site_opt_set = optPasses 
@@ -329,6 +334,7 @@ function processFuncCall(func, call_sig_arg_tuple, per_site_opt_set)
 
   # For each optimization pass in the optimization set.
   for i = 1:length(per_site_opt_set)
+      dprintln(3,"optimization pass ", i)
       # See if the current optimization pass uses optimized AST form and the previous optimization pass used unoptimized AST form.
       cur_level = per_site_opt_set[i].level
       if cur_level > PASS_MACRO
@@ -339,6 +345,8 @@ function processFuncCall(func, call_sig_arg_tuple, per_site_opt_set)
         dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
       end
   end
+
+  dprintln(3,"After optimization passes")
 
   if isa(cur_ast, Expr)
     ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
@@ -366,7 +374,11 @@ Define a wrapper function with the name given by "new_func" that when called wil
 """
 function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
   dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
-  func = Core.eval(current_module(), :(function $(new_func)($(call_sig_args...))
+  dprintln(3, "call_sig_args = ", call_sig_args)
+  temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
+  temp_tuple = tuple(temp_typs...)
+  dprintln(3, "call_sig_arg_typs = ", temp_tuple)
+  wrapper_ast = :(function $(new_func)($(call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
@@ -391,7 +403,9 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
          end
          CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
          func_to_call($(call_sig_args...))
-        end))
+        end)
+  dprintln(4,"wrapper_ast = ", wrapper_ast)
+  func = Core.eval(current_module(), wrapper_ast)
   gOptFrameworkDict[func] = eval(GlobalRef(current_module(), real_func))
 end
 
@@ -472,7 +486,6 @@ function convert_function(per_site_opt_set, ast)
   Core.eval(mod, ast)
   makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
 end
-
 
 @doc """
 Statically evaluate per-site optimization passes setting, and return the result.
