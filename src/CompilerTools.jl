@@ -14,4 +14,7 @@ include("loops.jl")
 include("constant_fold.jl")
 include("alias-analysis.jl")
 
+using .OptFramework
+export @acc
+
 end # module
