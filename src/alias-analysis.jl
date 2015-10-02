@@ -206,7 +206,9 @@ function from_call(state, expr :: Expr)
   dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
   #fun = from_expr(state, fun)
   #dprintln(2, "AA from_call: new fun=", fun)
-  if is(fun, :arrayref) || is(fun, :arrayset) || fun==TopNode(:arrayref) || fun==TopNode(:arrayset)
+  fun = isa(fun, TopNode) ? fun.name : fun
+  fun = isa(fun, GlobalRef) ? fun.name : fun
+  if is(fun, :arrayref) || is(fun, :arrayset) || is(fun, :getindex) || is(fun, :setindex!)
     # This is actually an conservative answer since arrayref might return
     # an array too, but we don't consider it as a case to handle.
     return NotArray
