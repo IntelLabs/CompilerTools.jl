@@ -2,6 +2,7 @@ module LambdaHandling
 
 using CompilerTools
 using CompilerTools.AstWalker
+using Core.Inference: to_tuple_type
 
 import Base.show
 
@@ -9,7 +10,7 @@ export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaInfo
 export getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
-export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr, getBody
+export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr, getBody, getReturnType
 export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
@@ -627,8 +628,8 @@ Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
 and the inferred return type of the input method.
 """
-function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Type; optimize = true)
-  (tree, ty) = Core.Inference.typeinf_uncached(lambda, typs, Core.svec(), optimize = optimize)
+function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Tuple; optimize = true)
+  (tree, ty) = Core.Inference.typeinf_uncached(lambda, to_tuple_type(typs), Core.svec(), optimize = optimize)
   lambda.ast = tree
   return Base.uncompressed_ast(lambda), ty
 end
