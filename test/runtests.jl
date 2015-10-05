@@ -55,20 +55,7 @@ function test_liveness_1(x::Int64, y::Int64, scale::Int64)
     return n;
 end
 
-ast_lv_1 = code_lowered(test_liveness_1, (Int64,Int64,Int64))[1]
-# cfg_lv_1 = CompilerTools.CFGs.from_ast(ast_lv_1) :: CompilerTools.CFGs.CFG
-
-#CompilerTools.LivenessAnalysis.set_debug_level(3)
-function cb_func(a,b)
-  nothing
-end
-lives_1 = CompilerTools.LivenessAnalysis.from_expr(ast_lv_1, cb_func, nothing )
-
-
-@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].live_in) == 3
-@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].live_out) == 10
-@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].def) == 7
-@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].use) == 3
+tests = ["test_loops_1", "test_loops_2", "test_liveness_1", "test_liveness_2", "test_alias_1"]
 
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_in) == 10
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_out) == 10

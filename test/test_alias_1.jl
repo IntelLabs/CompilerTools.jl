@@ -32,7 +32,7 @@ end
 ast = code_typed(test_loops, (Int64,Int64,Int64,))[1]
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
-CompilerTools.AliasAnalysis.set_debug_level(3)
+#CompilerTools.AliasAnalysis.set_debug_level(3)
 function cb_func(a,b)
   nothing
 end
@@ -44,9 +44,6 @@ end
 
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives, cb_func1, nothing)
 
-println("handled = ", handled)
-#=
-@test (length(all_loops.loops) == 4)
-@test (CompilerTools.Loops.isInLoop(all_loops, 8) == false)
-@test (CompilerTools.Loops.isInLoop(all_loops, 16) == true)
-=#
+@test (in(:A, handled))
+#TODO: D is not detected now.
+#@test (in(:D, handled))
