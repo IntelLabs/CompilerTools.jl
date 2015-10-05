@@ -273,7 +273,7 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
         # Mark as successful label replacement.
         state.changed = true
         # Indicate we changed the current node.
-        return [x]
+        return x
       end
     elseif asttype == GotoNode
       # The node is a GotoNode which has a "label" field.
@@ -283,11 +283,11 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
       state.changed = true
       # Return a new node with the new label.  
       # At some point there was a problem with updating the label in place as object's this type are considered immutable.
-      return [GotoNode(state.new_label)]
+      return GotoNode(state.new_label)
     end
 
     # Indicate we didn't change anything.
-    return nothing
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -301,9 +301,7 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     dprintln(2, "changeEndingLabel ", bb.statements[end].expr)
     new_last_stmt = AstWalker.AstWalk(bb.statements[end].expr, update_label, state)
     assert(state.changed)
-    assert(isa(new_last_stmt,Array))
-    assert(length(new_last_stmt) == 1)
-    bb.statements[end].expr = new_last_stmt[1]
+    bb.statements[end].expr = new_last_stmt
 end
 
 @doc """

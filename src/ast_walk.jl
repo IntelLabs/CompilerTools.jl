@@ -34,7 +34,14 @@ function dprintln(level,msgs...)
     end
 end
 
-export AstWalk
+# Return this value to indicate to AstWalk to recursively process the given node.
+immutable ASTWALK_RECURSE
+end
+
+immutable ASTWALK_REMOVE
+end
+
+export AstWalk, ASTWALK_RECURSE, ASTWALK_REMOVE
 
 @doc """
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
@@ -56,12 +63,12 @@ function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_le
   dprintln(3,"from_lambda pre-convert param = ", param, " typeof(param) = ", typeof(param))
   for i = 1:length(param)
     dprintln(3,"from_lambda param[i] = ", param[i], " typeof(param[i]) = ", typeof(param[i]))
-    param[i] = get_one(from_expr(param[i], depth, callback, cbdata, top_level_number, false, read))
+    param[i] = from_expr(param[i], depth, callback, cbdata, top_level_number, false, read)
   end
   dprintln(3,"from_lambda post-convert param = ", param, " typeof(param) = ", typeof(param))
 
   dprintln(3,"from_lambda pre-convert body = ", body, " typeof(body) = ", typeof(body))
-  body = get_one(from_expr(body, depth, callback, cbdata, top_level_number, false, read))
+  body = from_expr(body, depth, callback, cbdata, top_level_number, false, read)
   dprintln(3,"from_lambda post-convert body = ", body, " typeof(body) = ", typeof(body))
   if typeof(body) != Expr || body.head != :body
     dprintln(0,"AstWalk from_lambda got a non-body returned from procesing body")
@@ -88,10 +95,11 @@ function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
     dprintln(2,"Processing top-level ast #",i," depth=",depth)
 
     dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
-    new_exprs = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
-    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_exprs)
-    assert(isa(new_exprs,Array))
-    append!(body, new_exprs)
+    new_expr = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
+    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
+    if new_expr != ASTWALK_REMOVE
+      push!(body, new_expr)
+    end
   end
 
   return body
@@ -109,10 +117,11 @@ function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_lev
   for i = 1:len
     dprintln(2,"Processing ast #",i," depth=",depth)
     dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
-    new_exprs = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
-    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_exprs)
-    assert(isa(new_exprs,Array))
-    append!(body, new_exprs)
+    new_expr = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
+    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
+    if new_expr != ASTWALK_REMOVE
+      push!(body, new_expr)
+    end
   end
 
   return body
@@ -125,9 +134,9 @@ Recursively process the left and right hand sides with AstWalk.
 function from_assignment(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
 #  assert(length(ast) == 2)
   dprintln(3,"from_assignment, lhs = ", ast[1])
-  ast[1] = get_one(from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false))
+  ast[1] = from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false)
   dprintln(3,"from_assignment, rhs = ", ast[2])
-  ast[2] = get_one(from_expr(ast[2], depth, callback, cbdata, top_level_number, false, read))
+  ast[2] = from_expr(ast[2], depth, callback, cbdata, top_level_number, false, read)
   return ast
 end
 
@@ -145,7 +154,7 @@ function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
   end
   # symbols don't need to be translated
   if typeof(fun) != Symbol
-      fun = get_one(from_expr(fun, depth, callback, cbdata, top_level_number, false, read))
+      fun = from_expr(fun, depth, callback, cbdata, top_level_number, false, read)
   end
   args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
 
@@ -174,26 +183,6 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
 end
 
 @doc """
-Callbacks return an array of AST nodes but in most cases this doesn't make sense to replace an AST node with multiple nodes
-so we use this function in those cases to assert that the callback returned an array, that it is of length 1 and then we
-return that one entry.
-"""
-function get_one(ast)
-  assert(isa(ast,Array))
-  assert(length(ast) == 1)
-  ast[1]
-end
-
-@doc """
-Return one element array with element x.
-"""
-function asArray(x :: ANY)
-  ret = Any[]
-  push!(ret, x)
-  return ret
-end
-
-@doc """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
@@ -207,7 +196,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
 
   ret = callback(ast, cbdata, top_level_number, is_top_level, read)
   dprintln(2,"callback ret = ",ret)
-  if ret != nothing
+  if ret != ASTWALK_RECURSE
       return ret
   end
 
@@ -234,7 +223,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         assert(length(args) == 2)
         dprintln(3, ":: args[1] = ", args[1])
         dprintln(3, ":: args[2] = ", args[2])
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :return
         args = from_exprs(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :call
@@ -254,15 +243,15 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :gotoifnot
         assert(length(args) == 2)
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :getindex
         args = from_exprs(args,depth, callback, cbdata, top_level_number, read)
     elseif head == :new
         args = from_exprs(args,depth, callback, cbdata, top_level_number, read)
     elseif head == :arraysize
         assert(length(args) == 2)
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, read))
-        args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
+        args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :alloc
         assert(length(args) == 2)
         args[2] = from_exprs(args[2], depth, callback, cbdata, top_level_number, read)
@@ -270,11 +259,11 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :type_goto
         assert(length(args) == 2)
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, read))
-        args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
+        args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :tuple
         for i = 1:length(args)
-          args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :enter
         # skip
@@ -286,83 +275,81 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :static_typeof
         for i = 1:length(args)
-          args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
    elseif head == :ccall
         for i = 1:length(args)
-          args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :function
 	  dprintln(3,"in function head")
-	  args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
+	  args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :vcat
 	    dprintln(3,"in vcat head")
 	    #skip
     elseif head == :ref
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :meta
 	    # ignore :meta for now. TODO: we might need to walk its args.
     elseif head == :comprehension
 	    # args are either Expr or Symbol
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :typed_comprehension
 	    # args are either Expr or Symbol
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :(:)
 	    # args are either Expr or Symbol
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :const
 	    dump(ast,1000)
 	    # ignore :const for now. 
     elseif head == :for
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head in Set([:(+=), :(/=), :(*=), :(-=)])
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata, top_level_number, false, false))
-        args[2] = get_one(from_expr(args[2], depth, callback, cbdata, top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, false)
+        args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :if
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :comparison
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :while
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :let
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :local
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :quote
 	    for i = 1:length(args)
-		    args[i] = get_one(from_expr(args[i], depth, callback, cbdata, top_level_number, false, read))
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
     elseif head == :simdloop
         # skip
     elseif head == :macrocall
         for i = 1:length(args)
-            args[i] = get_one(from_expr(args[i], depth, callback, cbdata,
-                              top_level_number, false, read))
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :(...)
-        args[1] = get_one(from_expr(args[1], depth, callback, cbdata,
-                          top_level_number, false, read))
+        args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     else
         throw(string("from_expr: unknown Expr head :", head, " ", ast))
     end
@@ -413,7 +400,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
   elseif isa(ast,Tuple)
     new_tt = Expr(:tuple)
     for i = 1:length(ast)
-      push!(new_tt.args, get_one(from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read)))
+      push!(new_tt.args, from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read))
     end
     new_tt.typ = asttyp
     ast = eval(new_tt)
@@ -425,8 +412,8 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
     throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
   end
-  dprintln(3,"Before asArray return for ", ast)
-  return asArray(ast)
+  dprintln(3,"Before return for ", ast)
+  return ast
 end
 
 end
