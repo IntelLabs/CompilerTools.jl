@@ -45,5 +45,7 @@ end
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives, cb_func1, nothing)
 
 @test (in(:A, handled))
-#TODO: D is not detected now.
-#@test (in(:D, handled))
+@test (in(:D_arr, handled) == false)
+@test (in(:B, handled) == false)
+#TODO: C is not detected now.
+#@test (in(:C, handled))
