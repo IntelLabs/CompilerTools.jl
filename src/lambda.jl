@@ -146,17 +146,6 @@ end
 Adds symbols and gensyms to their corresponding sets in CountSymbolState when they are seen in the AST.
 """
 function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_level, read)
-#  if state.callback != nothing
-#    ret = state.callback(x)
-#    if ret != nothing
-#      assert(isa(ret, Array))
-#      for a in ret
-#        CompilerTools.AstWalker.AstWalk(a, count_symbols, state)
-#      end
-#      return [x]
-#    end
-#  end
-
   xtyp = typeof(x)
 
   if xtyp == Symbol
@@ -166,7 +155,7 @@ function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_le
   elseif xtyp == GenSym
     push!(state.used_gensyms, x.id)
   end
-  return nothing
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -504,14 +493,14 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFun
   function update_sym(expr :: ANY, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
-        return [dict[expr]]
+        return dict[expr]
       end
     elseif isa(expr, SymbolNode)
       if haskey(dict, expr.name)
-        return [dict[expr.name]]
+        return dict[expr.name]
       end
     end
-    return nothing
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
   end
 
   if expr == nothing
@@ -522,16 +511,16 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFun
   if isa(expr,Array)
     for i = 1:length(expr)
       if AstWalkFunc == nothing
-        expr[i] = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(expr[i], update_sym, dict))
+        expr[i] = CompilerTools.AstWalker.AstWalk(expr[i], update_sym, dict)
       else
-        expr[i] = CompilerTools.AstWalker.get_one(AstWalkFunc(expr[i], update_sym, dict))
+        expr[i] = AstWalkFunc(expr[i], update_sym, dict)
       end
     end
   else
     if AstWalkFunc == nothing
-      expr = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(expr, update_sym, dict))
+      expr = CompilerTools.AstWalker.AstWalk(expr, update_sym, dict)
     else
-      expr = CompilerTools.AstWalker.get_one(AstWalkFunc(expr, update_sym, dict))
+      expr = AstWalkFunc(expr, update_sym, dict)
     end
   end
   return expr

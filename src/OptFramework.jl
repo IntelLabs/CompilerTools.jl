@@ -196,19 +196,19 @@ For each label in the code, replace that label with the rhs of the label map.
 function update_labels(x, state :: lmstate, top_level_number, is_top_level, read)
   asttyp = typeof(x)
   if asttyp == LabelNode
-    return [LabelNode(state.label_map[x.label])]
+    return LabelNode(state.label_map[x.label])
   elseif asttyp == GotoNode
-    return [GotoNode(state.label_map[x.label])]
+    return GotoNode(state.label_map[x.label])
   elseif asttyp == Expr
     head = x.head
     args = x.args
     if head == :gotoifnot
       else_label = args[2]
       x.args[2] = state.label_map[else_label]
-      return [x]
+      return x
     end
   end
-  return nothing
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -241,7 +241,7 @@ function create_label_map(x, state :: lmstate, top_level_number, is_top_level, r
   else
     state.last_was_label = false
   end
-  return nothing
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -277,7 +277,7 @@ function cleanupASTLabels(ast)
   CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
   #dprintln(3,"label mapping = ", state.label_map)
   state.last_was_label = false
-  body = CompilerTools.AstWalker.get_one(CompilerTools.AstWalker.AstWalk(body, update_labels, state))
+  body = CompilerTools.AstWalker.AstWalk(body, update_labels, state)
   body.args = removeDupLabels(body.args)
   ast.args[3] = body
   return ast
@@ -428,10 +428,7 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
 
       # Recursively process the arguments to this function possibly finding other calls to replace.
       for i = 2:length(x.args)
-        new_arg = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, per_site_opt_set)
-        assert(isa(new_arg,Array))
-        assert(length(new_arg) == 1)
-        x.args[i] = new_arg[1]
+        x.args[i] = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, per_site_opt_set)
       end
 
       trampoline_func = symbol(string("opt_calls_trampoline_", real_func))
@@ -442,10 +439,10 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
 
       dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
-      return [x]
+      return x
     end    
   end
-  nothing
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -454,10 +451,8 @@ When @acc is used at a function's callsite, we use AstWalk to search for callsit
 function convert_expr(per_site_opt_set, ast)
   dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
   res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
-  assert(isa(res,Array))
-  assert(length(res) == 1)
-  dprintln(2,"converted expression = ", res[1])
-  return esc(res[1])
+  dprintln(2,"converted expression = ", res)
+  return esc(res)
 end
 
 @doc """
