@@ -2,12 +2,12 @@
 #
 # 1. Only objects pointed to by variables, but not elements of arrays or other structs
 # 2. We only consider variables that are assigned once
-# 3. No inter-precedural (i.e. function call) analysis
+# 3. Very limited inter-precedural (i.e. function call) analysis
 #
-# The only useful result from this alias analysis is whether
-# some variable definitely doesn't alias with anything else.
+# The only useful result from this alias analysis is whether a variable definitely 
+# doesn't alias with anything else, or its aliases are no longer alive. 
 #
-# We are NOT interested in the set of potential aliased variables.
+# We are NOT interested in the set of potentially aliased variables.
 #
 # The algorithm is basically an abstract interpreter of Julia AST.
 
@@ -16,9 +16,6 @@ module AliasAnalysis
 using Base.uncompressed_ast
 using CompilerTools.LambdaHandling
 using CompilerTools
-
-#import CompilerTools
-
 
 DEBUG_LVL=0
 
@@ -45,6 +42,7 @@ const Unknown  = -1
 const NotArray = 0
 
 type State
+  linfo  :: LambdaInfo
   baseID :: Int
   locals :: Dict{SymGen, Int}
   revmap :: Dict{Int, Set{SymGen}}
@@ -53,7 +51,7 @@ type State
   liveness :: CompilerTools.LivenessAnalysis.BlockLiveness
 end
 
-init_state(liveness) = State(0, Dict{SymGen,Int}(), Dict{Int, Set{SymGen}}(), 0, 0, liveness)
+init_state(linfo, liveness) = State(linfo, 0, Dict{SymGen,Int}(), Dict{Int, Set{SymGen}}(), 0, 0, liveness)
 
 function increaseNestLevel(state)
 state.nest_level = state.nest_level + 1
@@ -167,9 +165,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   local lhs = ast[1]
   local rhs = ast[2]
   dprintln(2, "AA ", lhs, " = ", rhs)
-  if isa(lhs, SymbolNode)
-    lhs = lhs.name
-  end
+  lhs = toSymGen(lhs)
   assert(isa(lhs, Symbol) || isa(lhs, GenSym))
   if lookup(state, lhs) != NotArray
     rhs = from_expr(state, rhs, callback, cbdata)
@@ -209,13 +205,56 @@ function from_call(state, expr :: Expr)
   fun = isa(fun, TopNode) ? fun.name : fun
   fun = isa(fun, GlobalRef) ? fun.name : fun
   if is(fun, :arrayref) || is(fun, :arrayset) || is(fun, :getindex) || is(fun, :setindex!)
-    # This is actually an conservative answer since arrayref might return
+    # This is actually a conservative answer since arrayref might return
     # an array too, but we don't consider it as a case to handle.
-    return NotArray
+    return Unknown
+  elseif fun == :ccall && (args[1] == QuoteNode(:jl_new_array) || args[1] == QuoteNode(:jl_alloc_array_1d) || 
+         args[1] == QuoteNode(:jl_alloc_array_2d) || args[1] == QuoteNode(:jl_alloc_array_3d))
+    return next_node(state)
+  elseif isa(ast[1], GlobalRef) && isFromBase(ast[1]) && endswith(string(fun), '!')
+    # if the function is from base, and follow julia convention of ending with !, and
+    # only one input is an array, then we consider it aliases the output
+    alias = nothing
+    for exp in args
+      if (isa(exp, Expr) && (exp.typ == nothing || !iselementarytype(exp.typ)))
+        # non-flattened input AST is not handled
+        alias = Unknown
+      elseif isa(exp, SymNodeGen) 
+        # A local var
+        typ = getType(exp, state.linfo)
+        if !iselementarytype(typ)
+          # complicated type
+          if isarray(typ)
+            # an array type!
+            if !is(alias, nothing) # more than one array as input
+              alias = Unknown
+            else
+              # remember possible match
+              alias = lookup(state, toSymGen(exp))
+            end
+          else  
+            # non array, non elementary type
+            alias = Unknown
+          end
+        end
+      end
+    end
+    alias = is(alias, nothing) ? Unknown : alias
+    if alias == Unknown
+      # if we don't know the result, it could alias any input
+      for exp in args
+        if isa(exp, SymbolNode)
+          update_unknown(state, exp.name)
+        elseif isa(exp, Symbol)
+          update_unknown(state, exp)
+        end
+      end
+    end
+    return alias
   else
     dprintln(2, "AA: unknown call ", fun)
-    # For unknown calls, conservative assumption is that after
-    # the call, its array type arguments might alias each other.
+    # For unknown calls, conservative assumption is that the result
+    # might alias one of (or an element of) the non-leaf-type inputs.
     for exp in args
       if isa(exp, SymbolNode)
         update_unknown(state, exp.name)
@@ -298,13 +337,21 @@ function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = noth
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
-  elseif is(asttyp, SymbolNode)
+  elseif isa(ast, SymNodeGen)
     dprintln(2, " ", ast)
-    return lookup(state, ast.name)
+    return lookup(state, toSymGen(ast))
   else
     dprintln(2, " not handled ", ast)
   end
   return Unknown
+end
+
+function isFromBase(x::GlobalRef)
+  startswith(string(Base.resolve(x, force=true).mod), "Base")
+end
+
+function iselementarytype(typ)
+  isa(typ, DataType) && (typ.name == Type.name || eltype(typ) == typ)
 end
 
 function isarray(typ)
@@ -316,17 +363,16 @@ function isbitarray(typ)
 end
 
 
-function analyze_lambda_body(body :: Expr, lambdaInfo :: CompilerTools.LambdaHandling.LambdaInfo, liveness, callback, cbdata :: ANY)
-  local state = init_state(liveness)
+function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, callback, cbdata :: ANY)
+  local state = init_state(lambdaInfo, liveness)
   dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
-  # FIXME: surprisingly the first value printed above is false!
   for (v, vd) in lambdaInfo.var_defs
     if !(isarray(vd.typ) || isbitarray(vd.typ))
       update_notarray(state, v)
     end
   end
   for v in lambdaInfo.input_params
-    vtyp = CompilerTools.LambdaHandling.getType(v, lambdaInfo)
+    vtyp = getType(v, lambdaInfo)
     # Note we assume all input parameters do not aliasing each other,
     # which is a very strong assumption. This may require reconsideration.
     # Update: changed to assum nothing by default.
@@ -359,8 +405,8 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: CompilerTools.LambdaHan
 end
 
 function analyze_lambda(expr :: Expr, liveness, callback, cbdata :: ANY)
-  lambdaInfo = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(expr)
-  analyze_lambda_body(CompilerTools.LambdaHandling.getBody(expr), lambdaInfo, liveness, callback, cbdata)
+  lambdaInfo = lambdaExprToLambdaInfo(expr)
+  analyze_lambda_body(getBody(expr), lambdaInfo, liveness, callback, cbdata)
 end
 
 end
