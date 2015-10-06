@@ -303,6 +303,11 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
 	    for i = 1:length(args)
 		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
 	    end
+    elseif head == :(->) || head == :(&&) || head == :(||)
+	    # args are either Expr or Symbol
+	    for i = 1:length(args)
+		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	    end
     elseif head == :(:)
 	    # args are either Expr or Symbol
 	    for i = 1:length(args)
