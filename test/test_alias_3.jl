@@ -21,7 +21,13 @@ function test_loops(x::Int, y::Int, z::Int, s::Int)
 	  if( s > 0 )
 	      E = A
 	  end
-	  
+	  for i = 1:x
+	      if( i%2 == 1 )
+	      	  for j = 1:y
+		      A[i,j] /= 2
+		  end
+	      end
+	  end
          return E
 
 end
@@ -45,5 +51,5 @@ handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives, cb_func1, nothi
 @test (in(:E, handled) == false)
 @test (in(:B, handled) == false)
 @test (in(:D_arr, handled) == false)
-#@test (in(:A, handled) == false)
+@test (in(:A, handled) == false)
 
