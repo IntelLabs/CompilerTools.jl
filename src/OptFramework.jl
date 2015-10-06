@@ -370,6 +370,12 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
 end
 
 @doc """
+A hack to get around Julia's type inference. This is essentially an identity conversion,
+but forces inferred return type to be the given type.
+"""
+identical{T}(t::Type{T}, x::T)=x
+
+@doc """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
 function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
@@ -378,6 +384,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
   dprintln(3, "call_sig_arg_typs = ", temp_tuple)
+  static_typeof_ret = Expr(:static_typeof, :ret)
   wrapper_ast = :(function $(new_func)($(call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
@@ -402,7 +409,10 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
            CompilerTools.OptFramework.gOptFrameworkDict[fs] = func_to_call
          end
          CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
-         func_to_call($(call_sig_args...))
+         if 1 < 0
+           ret = $real_func($(call_sig_args...))
+         end
+         CompilerTools.OptFramework.identical($static_typeof_ret, func_to_call($(call_sig_args...)))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
   func = Core.eval(current_module(), wrapper_ast)
@@ -470,7 +480,7 @@ function convert_function(per_site_opt_set, ast)
   call_sig_args = ast.args[1].args[2:end]
   real_fname = gensym(string(fname))
   ast.args[1].args[1] = real_fname
-  println(3, "Initial code = ", ast)
+  dprintln(3, "Initial code = ", ast)
   for i in 1:length(opt_set)
     x = opt_set[i]
     if x.level == PASS_MACRO
