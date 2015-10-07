@@ -370,6 +370,12 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
 end
 
 @doc """
+A hack to get around Julia's type inference. This is essentially an identity conversion,
+but forces inferred return type to be the given type.
+"""
+identical{T}(t::Type{T}, x::T)=x
+
+@doc """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
 function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
@@ -405,7 +411,10 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
            CompilerTools.OptFramework.gOptFrameworkDict[fs] = func_to_call
          end
          CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
-         func_to_call($(new_call_sig_args...))
+         if 1 < 0
+           ret = $real_func($(new_call_sig_args...))
+         end
+         CompilerTools.OptFramework.identical($static_typeof_ret, func_to_call($(call_sig_args...)))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
   func = Core.eval(current_module(), wrapper_ast)
