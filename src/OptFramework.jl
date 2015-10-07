@@ -414,7 +414,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
          if 1 < 0
            ret = $real_func($(new_call_sig_args...))
          end
-         CompilerTools.OptFramework.identical($static_typeof_ret, func_to_call($(call_sig_args...)))
+         CompilerTools.OptFramework.identical($static_typeof_ret, func_to_call($(new_call_sig_args...)))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
   func = Core.eval(current_module(), wrapper_ast)
