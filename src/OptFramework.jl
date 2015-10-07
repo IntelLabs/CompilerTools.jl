@@ -377,9 +377,12 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
   dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
+  new_call_sig_args = Symbol[ symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
+  dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   dprintln(3, "call_sig_arg_typs = ", temp_tuple)
-  wrapper_ast = :(function $(new_func)($(call_sig_args...))
-         call_sig_arg_typs = Any[ typeof(x) for x in tuple($(call_sig_args...)) ]
+  wrapper_ast = :(function $(new_func)($(new_call_sig_args...))
+         CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
+         call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
          fs = ($real_func, call_sig_arg_tuple, opt_set)
@@ -402,7 +405,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
            CompilerTools.OptFramework.gOptFrameworkDict[fs] = func_to_call
          end
          CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
-         func_to_call($(call_sig_args...))
+         func_to_call($(new_call_sig_args...))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
   func = Core.eval(current_module(), wrapper_ast)
@@ -470,12 +473,12 @@ function convert_function(per_site_opt_set, ast)
   call_sig_args = ast.args[1].args[2:end]
   real_fname = gensym(string(fname))
   ast.args[1].args[1] = real_fname
-  println(3, "Initial code = ", ast)
+  dprintln(3, "Initial code = ", ast)
   for i in 1:length(opt_set)
     x = opt_set[i]
     if x.level == PASS_MACRO
       ast = x.func(ref, ast, nothing) # macro level transformation only takes input ast as its argument
-      println(3, "After pass[", i, "], AST = ", ast)
+      dprintln(3, "After pass[", i, "], AST = ", ast)
     end
   end
   Core.eval(mod, ast)
