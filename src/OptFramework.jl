@@ -290,15 +290,15 @@ function tfuncPresent(func, tt)
   m = methods(func, tt)[1]
   def = m.func.code
   if is(def.tfunc, nothing)
-    dprintln(1, "tfunc NOT present before code_typed")
+    dprintln(2, "tfunc NOT present before code_typed")
     code_typed(func, tt)
     if is(def.tfunc, nothing) 
       error("tfunc still NOT present after code_typed")
     else
-      dprintln(1, "tfunc present after code_typed")
+      dprintln(2, "tfunc present after code_typed")
     end
   else
-    dprintln(1, "tfunc present on call")
+    dprintln(2, "tfunc present on call")
   end 
 end
 
@@ -397,7 +397,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
            tic()
            process_res = CompilerTools.OptFramework.processFuncCall($real_func, call_sig_arg_tuple, opt_set)
            t = toc()
-           CompilerTools.OptFramework.dprintln(3,$real_func," optimization time = ", t)
+           CompilerTools.OptFramework.dprintln(1,$real_func," optimization time = ", t)
            if process_res != nothing
              # We did optimize it in some way we will call the optimized version.
              CompilerTools.OptFramework.dprintln(3,"processFuncCall DID optimize ", $real_func)
