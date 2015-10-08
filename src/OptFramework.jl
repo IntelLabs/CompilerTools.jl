@@ -461,10 +461,15 @@ end
 When @acc is used at a function's callsite, we use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.  That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
 """
 function convert_expr(per_site_opt_set, ast)
-  dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
-  res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
-  dprintln(2,"converted expression = ", res)
-  return esc(res)
+  if is(per_site_opt_set, nothing) && length(optPasses) == 0
+    # skip translation since opt_set is empty
+    return esc(ast)
+  else
+    dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
+    res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
+    dprintln(2,"converted expression = ", res)
+    return esc(res)
+  end
 end
 
 @doc """
@@ -473,25 +478,31 @@ When @acc is used at a function definition, it creates a trampoline function, wh
 function convert_function(per_site_opt_set, ast)
   # unlike convert_expr, we must eval per_site_opt_set statically
   opt_set = per_site_opt_set == nothing ? optPasses : evalPerSiteOptSet(per_site_opt_set)
-  assert(isa(ast, Expr) && (ast.head == :function))
-  assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
-  fname = ast.args[1].args[1]
-  assert(isa(fname, Symbol))
-  mod = current_module()
-  ref = GlobalRef(mod, fname)
-  call_sig_args = ast.args[1].args[2:end]
-  real_fname = gensym(string(fname))
-  ast.args[1].args[1] = real_fname
-  dprintln(3, "Initial code = ", ast)
-  for i in 1:length(opt_set)
-    x = opt_set[i]
-    if x.level == PASS_MACRO
-      ast = x.func(ref, ast, nothing) # macro level transformation only takes input ast as its argument
-      dprintln(3, "After pass[", i, "], AST = ", ast)
+  if !isa(opt_set, Array) || length(opt_set) == 0
+    # skip translation since opt_set is empty
+    Core.eval(current_module(), ast)
+  else
+    assert(isa(ast, Expr) && (ast.head == :function))
+    assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
+    fname = ast.args[1].args[1]
+    assert(isa(fname, Symbol))
+    mod = current_module()
+    ref = GlobalRef(mod, fname)
+    call_sig_args = ast.args[1].args[2:end]
+    real_fname = gensym(string(fname))
+    ast.args[1].args[1] = real_fname
+    dprintln(3, "Initial code = ", ast)
+    for i in 1:length(opt_set)
+      x = opt_set[i]
+      if x.level == PASS_MACRO
+        ast = x.func(ref, ast, nothing) # macro level transformation only takes input ast as its argument
+        dprintln(3, "After pass[", i, "], AST = ", ast)
+      end
     end
+    Core.eval(mod, ast)
+    makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
   end
-  Core.eval(mod, ast)
-  makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
+  return
 end
 
 @doc """
