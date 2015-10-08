@@ -55,7 +55,7 @@ function test_liveness_1(x::Int64, y::Int64, scale::Int64)
     return n;
 end
 
-tests = ["test_loops_1", "test_loops_2", "test_liveness_1", "test_liveness_2", "test_alias_1", "test_alias2_2", "test_alias_3"]
+tests = ["test_loops_1", "test_loops_2", "test_liveness_1", "test_liveness_2", "test_alias_1", "test_alias_2", "test_alias_3"]
 
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_in) == 10
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_out) == 10
