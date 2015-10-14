@@ -3,20 +3,20 @@ using Base.Test
 
 ## Tests for CompilerTools.LivenessAnalysis
 
-function test_liveness_1(x::Int64, y::Int64, scale::Int64)
-    Cr = (x - 256.0) / scale + 0.407476
-    Ci = (y - 256.0) / scale + 0.234204
-    I = 0.0
-        R = 0.0
+function test_liveness_1(x::Int64, y::Int64, s::Int64)
+    C1 = (x - 256.0) / s + 0.6
+    C2 = (y - 256.0) / s + 0.8
+    acc1 = 0.0
+        acc2 = 0.0
         I2 = 0.0
         R2 = 0.0
-    n = 0.0
-    while (R2+I2 < 2.0) && (n < 512.0)
-       I = (R+R)*I+Ci;
-       R = R2-I2+Cr;
-       R2 = R*R;
-       I2 = I*I;
-       n+=1.0;
+    n = 0
+    while (R2+I2 < 1.0) && (n < 512)
+       acc1 = (acc2+acc2)*acc1+C1;
+       acc2 = R2-I2+C2;
+       R2 = acc2*acc2;
+       I2 = acc1*acc1;
+       n += 1;
     end
     return n;
 end
