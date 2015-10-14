@@ -284,7 +284,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     elseif head == :function
 	  dprintln(3,"in function head")
 	  args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
-    elseif head == :vcat
+    elseif head == :vcat || head == :typed_vcat || head == :hcat || head == :typed_hcat
 	    dprintln(3,"in vcat head")
 	    #skip
     elseif head == :ref
