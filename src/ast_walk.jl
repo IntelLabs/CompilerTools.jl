@@ -269,6 +269,8 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :leave
         # skip
+    elseif head == :curly
+        # skip
     elseif head == :the_exception
         # skip
     elseif head == :&
@@ -356,7 +358,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     elseif head == :(...)
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     else
-        throw(string("from_expr: unknown Expr head :", head, " ", ast))
+        throw(string("from_expr: unknown Expr head :", head, " in ", ast))
     end
     ast.head = head
     ast.args = args
