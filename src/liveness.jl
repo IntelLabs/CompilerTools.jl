@@ -999,6 +999,8 @@ function from_expr(ast :: ANY, depth :: Int64, state :: expr_state, callback :: 
         from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :meta
         # Intentionally do nothing.
+    elseif head == :type_goto
+        # Intentionally do nothing.
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
