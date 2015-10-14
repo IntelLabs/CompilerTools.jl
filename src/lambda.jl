@@ -8,7 +8,7 @@ import Base.show
 
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaInfo
-export getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
+export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaInfo, lambdaInfoToLambdaExpr, getBody, getReturnType
 export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
