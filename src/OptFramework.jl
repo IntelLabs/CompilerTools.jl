@@ -396,7 +396,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
          if func_to_call == nothing
            tic()
            process_res = CompilerTools.OptFramework.processFuncCall($real_func, call_sig_arg_tuple, opt_set)
-           t = toc()
+           t = toq()
            CompilerTools.OptFramework.dprintln(1,$real_func," optimization time = ", t)
            if process_res != nothing
              # We did optimize it in some way we will call the optimized version.
