@@ -490,7 +490,10 @@ function convert_function(per_site_opt_set, ast)
     ref = GlobalRef(mod, fname)
     call_sig_args = ast.args[1].args[2:end]
     real_fname = gensym(string(fname))
-    ast.args[1].args[1] = real_fname
+    macro_only = all(Bool[p.level <= PASS_MACRO for p in opt_set])
+    if !macro_only 
+      ast.args[1].args[1] = real_fname
+    end
     dprintln(3, "Initial code = ", ast)
     for i in 1:length(opt_set)
       x = opt_set[i]
@@ -500,7 +503,9 @@ function convert_function(per_site_opt_set, ast)
       end
     end
     Core.eval(mod, ast)
-    makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
+    if !macro_only
+      makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
+    end
   end
   return
 end
