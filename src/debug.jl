@@ -23,23 +23,33 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
-#VERSION >= v"0.4.0-dev" && __precompile__()
+module DebugMsg
 
-module CompilerTools
+export init
 
-# package code goes here
-include("debug.jl")
-include("ast_walk.jl")
-include("lambda.jl")
-include("read-write-set.jl")
-include("CFGs.jl")
-include("liveness.jl")
-include("OptFramework.jl")
-include("udchains.jl")
-include("loops.jl")
-include("alias-analysis.jl")
+@doc """
+When this module is first loaded, we check if INTEL_DEV_MODE is set in environment.
+If it is not, then all debug messages will be surpressed.
+"""
+const INTEL_DEV_MODE=haskey(ENV, "INTEL_DEV_MODE")
 
-using .OptFramework
-export @acc
+@doc """
+A module using DebugMsg must call DebugMsg.init(), which expands to several local definitions
+that provide three functions: set_debug_level, dprint, dprintln.
+"""
+function init()
+  m = current_module()
+  Base.eval(m, :(DEBUG_LVL = 0))
+  if INTEL_DEV_MODE
+    Base.eval(m, :(function set_debug_level(l) global DEBUG_LVL = l end))
+    Base.eval(m, :(function dprint(l, msg...) if l <= DEBUG_LVL print(msg...) end end))
+    Base.eval(m, :(function dprintln(l, msg...) if l <= DEBUG_LVL println(msg...) end end))
+  else
+    Base.eval(m, :(function set_debug_level(l) end))
+    Base.eval(m, :(function dprint(l, msg...) end))
+    Base.eval(m, :(function dprintln(l, msg...) end))
+  end   
+end
 
-end # module
+end
+

@@ -38,29 +38,12 @@ THE POSSIBILITY OF SUCH DAMAGE.
 
 module AliasAnalysis
 
+import ..DebugMsg
+DebugMsg.init()
+
 using Base.uncompressed_ast
 using CompilerTools.LambdaHandling
 using CompilerTools
-
-DEBUG_LVL=0
-
-function set_debug_level(x)
-    global DEBUG_LVL = x
-end
-
-# A debug print routine.
-function dprint(level,msgs...)
-    if(DEBUG_LVL >= level)
-        print(msgs...)
-    end
-end
-
-# A debug print routine.
-function dprintln(level,msgs...)
-    if(DEBUG_LVL >= level)
-        println(msgs...)
-    end
-end
 
 # state to keep track of variable values
 const Unknown  = -1
