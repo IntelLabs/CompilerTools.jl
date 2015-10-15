@@ -28,10 +28,10 @@ module DebugMsg
 export init
 
 @doc """
-When this module is first loaded, we check if INTEL_DEV_MODE is set in environment.
+When this module is first loaded, we check if PROSPECT_DEV_MODE is set in environment.
 If it is not, then all debug messages will be surpressed.
 """
-const INTEL_DEV_MODE=haskey(ENV, "INTEL_DEV_MODE")
+const PROSPECT_DEV_MODE=haskey(ENV, "PROSPECT_DEV_MODE")
 
 @doc """
 A module using DebugMsg must call DebugMsg.init(), which expands to several local definitions
@@ -40,7 +40,7 @@ that provide three functions: set_debug_level, dprint, dprintln.
 function init()
   m = current_module()
   Base.eval(m, :(DEBUG_LVL = 0))
-  if INTEL_DEV_MODE
+  if PROSPECT_DEV_MODE
     Base.eval(m, :(function set_debug_level(l) global DEBUG_LVL = l end))
     Base.eval(m, :(function dprint(l, msg...) if l <= DEBUG_LVL print(msg...) end end))
     Base.eval(m, :(function dprintln(l, msg...) if l <= DEBUG_LVL println(msg...) end end))
