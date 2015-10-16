@@ -506,7 +506,7 @@ function convert_function(per_site_opt_set, opt_set, ast)
 end
 
 function is_function(expr)
-  isa(expr, Expr) && (is(expr.head, :function) || is(expr.head, :(=)) && is(expr.args[1], Expr) && is(expr.args[1].head, :call))
+  isa(expr, Expr) && (is(expr.head, :function) || is(expr.head, :(=))) && isa(expr.args[1], Expr) && is(expr.args[1].head, :call)
 end
 
 function convert_block(per_site_opt_set, opt_set, ast)
