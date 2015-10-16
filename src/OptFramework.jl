@@ -381,7 +381,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
   dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   wrapper_ast = :(function $(new_func)($(new_call_sig_args...))
-         CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
+         #CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
