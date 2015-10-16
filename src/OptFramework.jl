@@ -380,35 +380,40 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
   new_call_sig_args = Symbol[ symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
   dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   dprintln(3, "call_sig_arg_typs = ", temp_tuple)
+  static_typeof_ret = Expr(:static_typeof, :ret)
+  gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
+  proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
+  dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
+  idtc = GlobalRef(CompilerTools.OptFramework, :identical)
   wrapper_ast = :(function $(new_func)($(new_call_sig_args...))
          #CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
          fs = ($real_func, call_sig_arg_tuple, opt_set)
-         func_to_call = get(CompilerTools.OptFramework.gOptFrameworkDict, fs, nothing)
+         func_to_call = get($gofd, fs, nothing)
          if func_to_call == nothing
            tic()
-           process_res = CompilerTools.OptFramework.processFuncCall($real_func, call_sig_arg_tuple, opt_set)
+           process_res = $proc($real_func, call_sig_arg_tuple, opt_set)
            t = toq()
-           CompilerTools.OptFramework.dprintln(1,$real_func," optimization time = ", t)
+           $dpln(1,$real_func," optimization time = ", t)
            if process_res != nothing
              # We did optimize it in some way we will call the optimized version.
-             CompilerTools.OptFramework.dprintln(3,"processFuncCall DID optimize ", $real_func)
+             $dpln(3,"processFuncCall DID optimize ", $real_func)
              func_to_call = process_res
            else
              # We did not optimize it so we will call the original function.
-             CompilerTools.OptFramework.dprintln(3,"processFuncCall didn't optimize ", $real_func)
+             $dpln(3,"processFuncCall didn't optimize ", $real_func)
              func_to_call = $real_func
            end
            # Remember this optimization result for this function/type combination.
-           CompilerTools.OptFramework.gOptFrameworkDict[fs] = func_to_call
+           $gofd[fs] = func_to_call
          end
-         CompilerTools.OptFramework.dprintln(3,"calling ", func_to_call)
+         $dpln(3,"calling ", func_to_call)
          if 1 < 0
            ret = $real_func($(new_call_sig_args...))
          end
-         CompilerTools.OptFramework.identical($static_typeof_ret, func_to_call($(new_call_sig_args...)))
+         $idtc($static_typeof_ret, func_to_call($(new_call_sig_args...)))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
   func = Core.eval(current_module(), wrapper_ast)
