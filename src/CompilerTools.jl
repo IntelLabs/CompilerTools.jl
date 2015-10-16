@@ -39,7 +39,7 @@ include("udchains.jl")
 include("loops.jl")
 include("alias-analysis.jl")
 
-using .OptFramework
+importall .OptFramework
 export @acc
 
 end # module
