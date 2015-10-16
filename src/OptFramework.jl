@@ -30,7 +30,7 @@ DebugMsg.init()
 
 using CompilerTools
 
-export @acc, addOptPass
+export @acc, @noacc, addOptPass
 export PASS_MACRO, PASS_LOWERED, PASS_UNOPTTYPED, PASS_TYPED
 
 @doc """
@@ -479,30 +479,33 @@ end
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
 function convert_function(per_site_opt_set, opt_set, ast)
-    assert(isa(ast, Expr) && (ast.head == :function))
-    assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
     fname = ast.args[1].args[1]
     assert(isa(fname, Symbol))
     mod = current_module()
-    ref = GlobalRef(mod, fname)
     call_sig_args = ast.args[1].args[2:end]
-    real_fname = gensym(string(fname))
+    macro_ast = deepcopy(ast)
     macro_only = all(Bool[p.level <= PASS_MACRO for p in opt_set])
-    if !macro_only 
-      ast.args[1].args[1] = real_fname
-    end
+    real_fname = gensym(string(fname))
+    real_func = GlobalRef(mod, real_fname)
+    macro_fname = macro_only ? fname : gensym(string(fname))
+    macro_func = GlobalRef(mod, macro_fname)
+    ast.args[1].args[1] = real_fname 
+    macro_ast.args[1].args[1] = macro_fname 
     dprintln(3, "Initial code = ", ast)
     for i in 1:length(opt_set)
       x = opt_set[i]
       if x.level == PASS_MACRO
-        ast = x.func(ref, ast, nothing) # macro level transformation only takes input ast as its argument
-        dprintln(3, "After pass[", i, "], AST = ", ast)
+        macro_ast = x.func(macro_func, macro_ast, nothing) # macro level transformation only takes input ast as its argument
+        dprintln(3, "After pass[", i, "], AST = ", macro_ast)
       end
     end
     if !macro_only
-      ast = Expr(:block, ast, makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set))
+      ast = Expr(:block, ast, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
+    else
+      ast = Expr(:block, ast, macro_ast)
     end
-    return ast
+    gOptFrameworkDict[macro_func] = real_func
+    ast
 end
 
 function is_function(expr)
@@ -565,5 +568,57 @@ macro acc(ast1, ast2...)
   end
   esc(ast)
 end
+
+@doc """
+Find the optimizing target function (after @acc macro) for a wrapper function in the given module. 
+Return the input function if not found. Always return as a GlobalRef.
+"""
+function findTargetFunc(mod::Module, name::Symbol)
+   func = GlobalRef(mod, name)
+   get(gOptFrameworkDict, func, func) :: GlobalRef
+end
+
+@doc """
+Find the original (before @acc macro) function for a wrapper function in the given module. 
+Return the input function if not found. Always return as a GlobalRef.
+"""
+function findOriginalFunc(mod::Module, name::Symbol)
+   func = GlobalRef(mod, name)
+   orig = get(gOptFrameworkDict, func, func)
+   # we lookup twice because the redirection goes like this: wrapper -> macro -> ast
+   get(gOptFrameworkDict, orig, orig) :: GlobalRef
+end
+
+function recursive_noacc(ast::Symbol)
+   findoriginalfunc(current_module(), ast)
+end
+
+function recursive_noacc(ast::Expr)
+    start = 1
+    if is(ast.head, :(=))
+      start = 2
+    elseif is(ast.head, :call) && isa(ast.args[1], Symbol)
+      ast.args[1] = findOriginalFunc(current_module(), ast.args[1]) 
+      start = 2
+    end
+    for i = start:length(ast.args)
+      ast.args[i] = recursive_noacc(ast.args[i])
+    end
+    return ast 
+end
+
+function recursive_noacc(ast::ANY)
+    ast
+end
+
+@doc """
+The macro @noacc can be used at call site to specifically run the non-accelerated copy of an accelerated function. It has no effect and gives a warning when the given function is not found to have been accelerated. We do not support nested @acc or @noacc. 
+"""
+macro noacc(ast)
+  ast = recursive_noacc(ast)
+  println(ast)
+  esc(ast)
+end
+
 
 end   # end of module

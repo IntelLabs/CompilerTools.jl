@@ -40,6 +40,6 @@ include("loops.jl")
 include("alias-analysis.jl")
 
 importall .OptFramework
-export @acc
+export @acc, @noacc
 
 end # module
