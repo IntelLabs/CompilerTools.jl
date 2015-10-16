@@ -49,6 +49,8 @@ function init()
     Base.eval(m, :(function dprint(l, msg...) end))
     Base.eval(m, :(function dprintln(l, msg...) end))
   end   
+  Base.eval(m, :(macro dprint(l, msg...) if l <= DEBUG_LVL esc(Expr(:call, :print, msg...)) else Expr(:null) end end))
+  Base.eval(m, :(macro dprintln(l, msg...) if l <= DEBUG_LVL esc(Expr(:call, :println, msg...)) else Expr(:null) end end))
 end
 
 end
