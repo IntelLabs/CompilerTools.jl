@@ -372,7 +372,10 @@ identical{T}(t::Type{T}, x::T)=x
 @doc """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
-function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
+function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
+  mod = current_module()
+  new_func = GlobalRef(mod, new_fname)
+  real_func = GlobalRef(mod, real_fname)
   dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
   dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
@@ -385,7 +388,7 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
-  wrapper_ast = :(function $(new_func)($(new_call_sig_args...))
+  wrapper_ast = :(function $new_fname($(new_call_sig_args...))
          #CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
@@ -416,8 +419,8 @@ function makeWrapperFunc(new_func::Symbol, real_func::Symbol, call_sig_args::Arr
          $idtc($static_typeof_ret, func_to_call($(new_call_sig_args...)))
         end)
   dprintln(4,"wrapper_ast = ", wrapper_ast)
-  func = Core.eval(current_module(), wrapper_ast)
-  gOptFrameworkDict[func] = eval(GlobalRef(current_module(), real_func))
+  gOptFrameworkDict[new_func] = real_func
+  return wrapper_ast
 end
 
 @doc """
@@ -443,7 +446,8 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
       end
 
       trampoline_func = symbol(string("opt_calls_trampoline_", real_func))
-      makeWrapperFunc(trampoline_func, real_func, call_sig_args, per_site_opt_set) 
+      wrapper_ast = makeWrapperFunc(trampoline_func, real_func, call_sig_args, per_site_opt_set) 
+      Core.eval(current_module(), wrapper_ast)
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
       x.args = [ trampoline_func; x.args[2:end] ]
@@ -462,25 +466,19 @@ When @acc is used at a function's callsite, we use AstWalk to search for callsit
 function convert_expr(per_site_opt_set, ast)
   if is(per_site_opt_set, nothing) && length(optPasses) == 0
     # skip translation since opt_set is empty
-    return esc(ast)
+    return ast
   else
     dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
     res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
     dprintln(2,"converted expression = ", res)
-    return esc(res)
+    return res
   end
 end
 
 @doc """
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
-function convert_function(per_site_opt_set, ast)
-  # unlike convert_expr, we must eval per_site_opt_set statically
-  opt_set = per_site_opt_set == nothing ? optPasses : evalPerSiteOptSet(per_site_opt_set)
-  if !isa(opt_set, Array) || length(opt_set) == 0
-    # skip translation since opt_set is empty
-    Core.eval(current_module(), ast)
-  else
+function convert_function(per_site_opt_set, opt_set, ast)
     assert(isa(ast, Expr) && (ast.head == :function))
     assert(isa(ast.args[1], Expr) && (ast.args[1].head == :call)) 
     fname = ast.args[1].args[1]
@@ -501,12 +499,26 @@ function convert_function(per_site_opt_set, ast)
         dprintln(3, "After pass[", i, "], AST = ", ast)
       end
     end
-    Core.eval(mod, ast)
     if !macro_only
-      makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set)
+      ast = Expr(:block, ast, makeWrapperFunc(fname, real_fname, call_sig_args, per_site_opt_set))
+    end
+    return ast
+end
+
+function is_function(expr)
+  isa(expr, Expr) && (is(expr.head, :function) || is(expr.head, :(=)) && is(expr.args[1], Expr) && is(expr.args[1].head, :call))
+end
+
+function convert_block(per_site_opt_set, opt_set, ast)
+  for i = 1 : length(ast.args)
+    expr = ast.args[i]
+    if is_function(expr)
+      ast.args[i] = convert_function(per_site_opt_set, opt_set, expr)
+    elseif isa(expr, Expr) && is(expr.head, :block)
+      ast.args[i] = convert_block(per_site_opt_set, opt_set, expr)
     end
   end
-  return
+  return ast
 end
 
 @doc """
@@ -538,13 +550,20 @@ macro acc(ast1, ast2...)
     per_site_opt_set = ast1 
     ast = ast2[1]
   end
-  if isa(ast, Expr) && ast.head == :function
+  # unlike convert_expr, we must eval per_site_opt_set statically
+  opt_set = per_site_opt_set == nothing ? optPasses : evalPerSiteOptSet(per_site_opt_set)
+  if !isa(opt_set, Array) || length(opt_set) == 0
+    # skip translation since opt_set is empty
+  elseif is_function(ast)
     # used at function definition
-    convert_function(per_site_opt_set, ast)
+    ast = convert_function(per_site_opt_set, opt_set, ast)
+  elseif isa(ast, Expr) && ast.head == :block
+    ast = convert_block(per_site_opt_set, opt_set, ast)
   else
     # used at call site
-    convert_expr(per_site_opt_set, ast)
+    ast = convert_expr(per_site_opt_set, ast)
   end
+  esc(ast)
 end
 
 end   # end of module
