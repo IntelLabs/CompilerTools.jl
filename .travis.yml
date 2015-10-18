@@ -1,25 +1,13 @@
-language: julia
+# Use Ubuntu 14.04 on Travis.
+sudo: required
+dist: trusty
 
-os:
-  - linux
-  - osx
+# Because there's no Julia by default on the Travis Trusty beta, we have to install it.
+before_install:
+  - sudo add-apt-repository ppa:staticfloat/juliareleases -y
+  - sudo apt-get update -q
+  - sudo apt-get install julia -y
 
-julia:
-  - 0.4
-  - nightly
-
-branches:
-  only:
-    - master
-
-matrix:
-  allow_failures:
-    - julia: nightly
-
-notifications:
-  email: false
-
-# uncomment the following lines to override the default test script
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("CompilerTools"); Pkg.test("CompilerTools"; coverage=true)'
+ - julia -e 'Pkg.clone(pwd()); Pkg.build("CompilerTools"); Pkg.test("CompilerTools")'
