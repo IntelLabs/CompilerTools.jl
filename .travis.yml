@@ -2,6 +2,10 @@
 sudo: required
 dist: trusty
 
+os:
+  - linux
+  - osx
+
 # Because there's no Julia by default on the Travis Trusty beta, we have to install it.
 before_install:
   - sudo add-apt-repository ppa:staticfloat/juliareleases -y
