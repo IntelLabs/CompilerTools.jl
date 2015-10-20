@@ -856,14 +856,50 @@ function replaceSucc(cur_bb :: BasicBlock, orig_succ :: BasicBlock, new_succ :: 
 end
 
 @doc """
+Process a basic block and add its successors to the set of reachable blocks
+if it isn't already there.  If it is freshly added then recurse to adds its successors.
+"""
+function findReachable(reachable, cur :: Int, bbs :: Dict{Int,BasicBlock})
+  cur_bb = bbs[cur]
+
+  for i in cur_bb.succs
+    if !in(i.label, reachable)
+      push!(reachable, i.label)
+      findReachable(reachable, i.label, bbs)
+    end
+  end
+end
+
+@doc """
 This function simplifies the dict of basic blocks "bbs".
 One such simplification that is necessary for depth first numbering not to fail is the removal of dead blocks.
 Other simplifications can be seen commented out below and while they may make the graph nicer to look at they
 don't really add anything in terms of functionality.
 """
-function removeUselessBlocks(bbs)
+function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
   found_change = true
 
+  # Eliminate dead blocks by finding the set of reachable blocks and eliminating the others.
+  reachable = Set([-1])
+  findReachable(reachable, -1, bbs)
+
+  for i in bbs
+    label = i[1]
+    bb    = i[2]
+
+    # Dead blocks.
+    if !in(label, reachable)
+      # Dead blocks can point to live ones so eliminate those useless back-edges.
+      for j in bb.succs
+        delete!(j.preds, bb)
+      end
+
+      dprintln(3,"Removing dead block. ", bb)
+      delete!(bbs, label)
+    end
+  end
+
+if false
   while found_change
     found_change = false
 
@@ -897,18 +933,9 @@ function removeUselessBlocks(bbs)
 #            found_change = true
 #        end
 #      elseif length(bb.preds) == 0 && bb.label != CFG_ENTRY_BLOCK
-      if length(bb.preds) == 0 && bb.label != CFG_ENTRY_BLOCK
-        # dead code
-        for j in bb.succs
-          delete!(j.preds, bb)
-        end
-
-        dprintln(3,"Removing dead block. ", bb)
-        delete!(bbs, i[1])
-        found_change = true
-      end
     end
   end
+end
 end
 
 @doc """
