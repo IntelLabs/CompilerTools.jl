@@ -19,3 +19,4 @@ before_install:
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("CompilerTools"); Pkg.test("CompilerTools")'
+
