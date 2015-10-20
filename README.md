@@ -1,47 +1,10 @@
-Copyright (c) 2015, Intel Corporation
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-- Redistributions of source code must retain the above copyright notice,
-  this list of conditions and the following disclaimer.
-- Redistributions in binary form must reproduce the above copyright notice,
-  this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
-
-
 # CompilerTools
 
 [![Build Status](https://travis-ci.org/IntelLabs/CompilerTools.jl.svg?branch=master)](https://travis-ci.org/IntelLabs/CompilerTools.jl)
 
 This is the CompilerTools Julia package, part of the High Performance
-Scripting project at Intel Labs.  The ParallelAccelerator package
-depends on CompilerTools.
-
-## Prerequisites
-
-  * If you have not yet done so, install a *nightly build* of Julia.
-    See "Nightly builds" at the bottom of
-    http://julialang.org/downloads/ .
-
-## Installation
-
-Once you have a nightly build of Julia installed, run Julia and then
-run the command
-
-    Pkg.clone("https://github.com/IntelLabs/CompilerTools.jl.git")
-
-at the `julia>` prompt.  You will be prompted for your GitHub username
-and password.
+Scripting project at Intel Labs.  The
+[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator)
+package depends on CompilerTools.  See the
+[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator)
+README for installation and usage information.
