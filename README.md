@@ -4,7 +4,7 @@
 
 This is the CompilerTools Julia package, part of the High Performance
 Scripting project at Intel Labs.  The
-[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator)
+[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator.jl)
 package depends on CompilerTools.  See the
-[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator)
+[ParallelAccelerator](https://github.com/IntelLabs/ParallelAccelerator.jl)
 README for installation and usage information.
