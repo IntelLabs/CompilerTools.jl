@@ -590,15 +590,19 @@ function findOriginalFunc(mod::Module, name::Symbol)
 end
 
 function recursive_noacc(ast::Symbol)
-   findoriginalfunc(current_module(), ast)
+   if haskey(gOptFrameworkDict, GlobalRef(current_module(), ast))
+     findOriginalFunc(current_module(), ast)
+   else
+     ast
+   end
 end
 
 function recursive_noacc(ast::Expr)
     start = 1
     if is(ast.head, :(=))
       start = 2
-    elseif is(ast.head, :call) && isa(ast.args[1], Symbol)
-      ast.args[1] = findOriginalFunc(current_module(), ast.args[1]) 
+    elseif is(ast.head, :call) && isa(ast.args[1], Symbol)  
+      ast.args[1] = recursive_noacc(ast.args[1])
       start = 2
     end
     for i = start:length(ast.args)
@@ -616,7 +620,6 @@ The macro @noacc can be used at call site to specifically run the non-accelerate
 """
 macro noacc(ast)
   ast = recursive_noacc(ast)
-  println(ast)
   esc(ast)
 end
 
