@@ -289,7 +289,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
 	    end
     elseif head == :meta
 	    # ignore :meta for now. TODO: we might need to walk its args.
-    elseif head == :comprehension
+    elseif head == :comprehension || head == :vect
 	    # args are either Expr or Symbol
 	    for i = 1:length(args)
 		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
