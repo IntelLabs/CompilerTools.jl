@@ -298,6 +298,8 @@ function from_expr(ast :: ANY, depth, rws, callback, cbdata :: ANY)
     elseif head == :call1
         from_call(args, depth,rws, callback, cbdata)
         # TODO?: tuple
+    elseif head == symbol("'")
+        from_exprs(args, depth,rws, callback, cbdata)
     elseif head == :line
         # skip
     elseif head == :copyast

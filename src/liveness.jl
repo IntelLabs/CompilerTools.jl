@@ -991,6 +991,8 @@ function from_expr(ast :: ANY, depth :: Int64, state :: expr_state, callback :: 
         # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
     elseif head == :quote
         from_exprs(args, depth+1, state, callback, cbdata)
+    elseif head == symbol("'")
+        from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :meta
         # Intentionally do nothing.
     elseif head == :type_goto
