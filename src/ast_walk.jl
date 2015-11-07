@@ -349,7 +349,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         for i = 1:length(args)
             args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
-    elseif head == :(...)
+    elseif head == :(...) || head == :parameters || head == :kw
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     elseif head == symbol("'")
         for i = 1:length(args)
