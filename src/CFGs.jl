@@ -899,6 +899,43 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
     end
   end
 
+  # Merge blocks if they have the pattern
+  # stmt
+  # goto N
+  # N:
+  # stmt
+  while found_change
+    found_change = false
+
+    # For each basic block.
+    for i in bbs
+      bb = i[2]
+      # If a basic block has only one successor then either it is from a fallthrough or
+      # from a GotoNode.  If there is no fallthrough then it has to be a goto.
+      # If there is no other "goto N" in the code, in other words, block N has only one predecessor
+      # then we can eliminate the goto and the label.
+      if length(bb.succs) == 1 && bb.fallthrough_succ == nothing 
+          succ = first(bb.succs)
+          if succ.label != CFG_EXIT_BLOCK && length(succ.preds) == 1
+              dprintln(3, "Eliminating basic block ", succ.label, " via the \"goto N; N:\" pattern.")
+              dprintln(3, "Last BB statements = ", bb.statements[end])
+              assert(typeof(bb.statements[end].expr) == GotoNode)
+              bb.succs = succ.succs
+              bb.fallthrough_succ = succ.fallthrough_succ
+              bb.statements = [bb.statements[1:end-1]; succ.statements[1:end]]
+              for change_succ in bb.succs
+                  delete!(change_succ.preds, succ)
+                  push!(change_succ.preds, bb)
+              end
+              delete!(bbs, succ.label)
+
+              found_change = true
+              break
+          end
+      end
+    end
+  end
+
 if false
   while found_change
     found_change = false
