@@ -686,6 +686,7 @@ function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base.LinAlg,:norm), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_B), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_Bc), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:box), force = true))
 #  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
 end
 
@@ -824,10 +825,15 @@ end
 Count the number of times that the symbol in "s" is defined in all the basic blocks.
 """
 function countSymbolDefs(s, lives)
+  dprintln(3,"countSymbolDefs: ", s)
   count = 0
   for (j,bb) in lives.basic_blocks
+    dprintln(3,"Examining block ", j.label)
     for stmt in bb.statements
-      if in(s, stmt.def) count += 1 end
+      if in(s, stmt.def) 
+          dprintln(3, "Found symbol defined in block ", j.label, " in statement: ", stmt)
+          count += 1 
+      end
     end
   end
   return count
