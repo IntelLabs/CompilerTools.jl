@@ -442,7 +442,7 @@ function compute_live_ranges(state :: expr_state, dfn)
             if bb_index == -2
               # Special case for final block.
               # Treat input arrays as live at end of function.
-              accum = Set{SymGen}(state.ref_params)
+              #accum = Set{SymGen}(state.ref_params)
               dprintln(3,"Final block live_out = ", accum)
             else
               # The live_out of this block is the union of the live_in of every successor block.
