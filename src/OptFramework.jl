@@ -478,13 +478,13 @@ end
 @doc """
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
-function convert_function(per_site_opt_set, opt_set, ast)
+function convert_function(per_site_opt_set, opt_set, macros, ast)
     fname = ast.args[1].args[1]
     assert(isa(fname, Symbol))
     mod = current_module()
     call_sig_args = ast.args[1].args[2:end]
     macro_ast = deepcopy(ast)
-    macro_only = all(Bool[p.level <= PASS_MACRO for p in opt_set])
+    macro_only = all(Bool[p.level <= PASS_MACRO for p in opt_set]) || (length(macros) > 0 && macros[1] == symbol("@inline"))
     real_fname = gensym(string(fname))
     real_func = GlobalRef(mod, real_fname)
     macro_fname = macro_only ? fname : gensym(string(fname))
@@ -499,6 +499,10 @@ function convert_function(per_site_opt_set, opt_set, ast)
         dprintln(3, "After pass[", i, "], AST = ", macro_ast)
       end
     end
+    if length(macros) > 0
+       ast = Expr(:macrocall, macros..., ast)
+       macro_ast = Expr(:macrocall, macros..., macro_ast)
+    end
     if !macro_only
       ast = Expr(:block, ast, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
     else
@@ -512,16 +516,35 @@ function is_function(expr)
   isa(expr, Expr) && (is(expr.head, :function) || is(expr.head, :(=))) && isa(expr.args[1], Expr) && is(expr.args[1].head, :call)
 end
 
-function convert_block(per_site_opt_set, opt_set, ast)
+function is_block(expr)
+  isa(expr, Expr) && is(expr.head, :block)
+end
+
+function is_macro(expr)
+  isa(expr, Expr) && is(expr.head, :macrocall)
+end
+
+function convert_block(per_site_opt_set, opt_set, macros, ast)
   for i = 1 : length(ast.args)
     expr = ast.args[i]
     if is_function(expr)
-      ast.args[i] = convert_function(per_site_opt_set, opt_set, expr)
-    elseif isa(expr, Expr) && is(expr.head, :block)
-      ast.args[i] = convert_block(per_site_opt_set, opt_set, expr)
+      ast.args[i] = convert_function(per_site_opt_set, opt_set, macros, expr)
+    elseif is_block(expr)
+      ast.args[i] = convert_block(per_site_opt_set, opt_set, macros, expr)
+    elseif is_macro(expr)
+      ast.args[i] = convert_macro(per_site_opt_set, opt_set, macros, expr)
     end
   end
   return ast
+end
+
+function convert_macro(per_site_opt_set, opt_set, macros, ast)
+  if is_function(ast.args[end])
+    macros = vcat(macros, ast.args[1:end-1])
+    convert_function(per_site_opt_set, opt_set, macros, ast.args[end])
+  else
+    return ast
+  end
 end
 
 @doc """
@@ -559,9 +582,11 @@ macro acc(ast1, ast2...)
     # skip translation since opt_set is empty
   elseif is_function(ast)
     # used at function definition
-    ast = convert_function(per_site_opt_set, opt_set, ast)
-  elseif isa(ast, Expr) && ast.head == :block
-    ast = convert_block(per_site_opt_set, opt_set, ast)
+    ast = convert_function(per_site_opt_set, opt_set, Any[], ast)
+  elseif is_block(ast)
+    ast = convert_block(per_site_opt_set, opt_set, Any[], ast)
+  elseif is_macro(ast)
+    ast = convert_macro(per_site_opt_set, opt_set, Any[], ast)
   else
     # used at call site
     ast = convert_expr(per_site_opt_set, ast)
