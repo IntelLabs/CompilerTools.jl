@@ -139,17 +139,39 @@ end
 @doc """
 Adds symbols and gensyms to their corresponding sets in CountSymbolState when they are seen in the AST.
 """
-function count_symbols(x, state :: CountSymbolState, top_level_number, is_top_level, read)
-  xtyp = typeof(x)
-
-  if xtyp == Symbol
+function count_symbols(x::Symbol,
+                       state::CountSymbolState,
+                       top_level_number,
+                       is_top_level,
+                       read)
     push!(state.used_symbols, x)
-  elseif xtyp == SymbolNode
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function count_symbols(x::SymbolNode,
+                       state::CountSymbolState,
+                       top_level_number,
+                       is_top_level,
+                       read)
     push!(state.used_symbols, x.name)
-  elseif xtyp == GenSym
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function count_symbols(x::GenSym,
+                       state::CountSymbolState,
+                       top_level_number,
+                       is_top_level,
+                       read)
     push!(state.used_gensyms, x.id)
-  end
-  return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function count_symbols(x::ANY,
+                       state::CountSymbolState,
+                       top_level_number,
+                       is_top_level,
+                       read)
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 @doc """
@@ -211,31 +233,31 @@ end
 @doc """
 Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
 """
-function getType(x :: ANY, li :: LambdaInfo)
-  xtyp = typeof(x)
-
-  if xtyp == Symbol
+function getType(x::Symbol, li::LambdaInfo)
     if haskey(li.var_defs, x) li.var_defs[x].typ
     elseif haskey(li.escaping_defs, x) li.escaping_defs[x].typ
     else 
-      res = eval(x)
-      res_typ = typeof(res)
-      dprintln(3, "getType Symbol x = ", x, " eval(x) = ", res, " typeof(res) = ", res_typ)
-      if res_typ == DataType
-        return res_typ
-      else
-        throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
-      end
+        res = eval(x)
+        res_typ = typeof(res)
+        dprintln(3, "getType Symbol x = ", x, " eval(x) = ", res, " typeof(res) = ", res_typ)
+        if res_typ == DataType
+            return res_typ
+        else
+            throw(string("getType called with ", x, " which is not found in LambdaInfo: ", li))
+        end
     end
-  elseif xtyp == SymbolNode
-    return x.typ
-  elseif xtyp == GenSym
+end
+
+function getType(x::GenSym, li::LambdaInfo)
     return li.gen_sym_typs[x.id + 1]
-  elseif xtyp == Expr
+end
+
+function getType(x::Union{SymbolNode,Expr}, li::LambdaInfo)
     return x.typ
-  else
-    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", xtyp))
-  end
+end
+
+function getType(x::Any, li::LambdaInfo)
+    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
 end
 
 @doc """

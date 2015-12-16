@@ -191,17 +191,16 @@ end
 In various places we need a SymGen type which is the union of Symbol and GenSym.
 This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
 """
-function toSymGen(x)
-  xtyp = typeof(x)
-  if xtyp == Symbol
+function toSymGen(x::Union{Symbol,GenSym})
     return x
-  elseif xtyp == SymbolNode
+end
+
+function toSymGen(x::SymbolNode)
     return x.name
-  elseif xtyp == GenSym
-    return x
-  else
-    throw(string("Found object type ", xtyp, " for object ", x, " in toSymGen and don't know what to do with it."))
-  end
+end
+
+function toSymGen(x::Any)
+    throw(string("Found object type ", typeof(x), " for object ", x, " in toSymGen and don't know what to do with it."))
 end
 
 @doc """
@@ -212,7 +211,7 @@ function from_assignment(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWrite
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
-  lhs_type = typeof(lhs)
+  # lhs_type = typeof(lhs)
   push!(rws.writeSet.scalars, toSymGen(lhs))
   from_expr(rhs, depth, rws, callback, cbdata)
 end
@@ -295,13 +294,15 @@ The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
 """
-function from_expr(ast :: ANY, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-  if typeof(ast) == LambdaStaticData
-      ast = uncompressed_ast(ast)
-  end
-  dprintln(2,"RWS from_expr depth=", depth," ")
-  local asttyp = typeof(ast)
-  if asttyp == Expr
+function from_expr(ast :: LambdaStaticData, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+    ast = uncompressed_ast(ast)
+    from_expr(ast, depth, rws, callback, cbdata)
+    return rws
+end
+
+function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+    dprintln(2,"RWS from_expr depth=", depth," ")
+
     dprint(2,"RWS Expr ")
     local head = ast.head
     local args = ast.args
@@ -352,58 +353,106 @@ function from_expr(ast :: ANY, depth :: Integer, rws :: ReadWriteSetType, callba
     else
         #println("from_expr: unknown Expr head :", head)
         if tryCallback(ast, callback, cbdata, depth, rws)
-          throw(string("from_expr: unknown Expr head :", head))
+            throw(string("from_expr: unknown Expr head :", head))
         end
     end
-  elseif asttyp == LabelNode
-    # skip
-  elseif asttyp == GotoNode
-    # skip
-  elseif asttyp == LineNumberNode
-    # skip
-  elseif asttyp == Symbol
+
+    return rws
+end
+
+function from_expr(ast::Union{LabelNode,GotoNode,LineNumberNode,DataType,Module,NewvarNode},
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
+    return rws
+end
+
+function from_expr(ast::Union{Symbol,GenSym},
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
     push!(rws.readSet.scalars, ast)
-    dprintln(3,"RWS Symbol type")
-  elseif asttyp == SymbolNode # name, typ
+    dprintln(3,"RWS ", typeof(ast), " type")
+
+    return rws
+end
+
+function from_expr(ast::SymbolNode,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
     push!(rws.readSet.scalars, ast.name)
     dprintln(3,"RWS SymbolNode type")
-  elseif asttyp == GenSym
-    push!(rws.readSet.scalars, ast)
-    dprintln(3,"RWS GenSym type")
-  elseif asttyp == TopNode    # name
-    dprintln(3,"RWS TopNode type")
-    #skip
-  elseif asttyp == ASCIIString || asttyp == UTF8String
-    dprintln(3,"RWS ASCIIString type")
-    #skip
-  elseif asttyp == GlobalRef 
+
+    return rws
+end
+
+function from_expr(ast::Union{TopNode,ASCIIString,UTF8String},
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
+    # skip
+    dprintln(3,"RWS ", typeof(ast), " type")
+
+    return rws
+end
+
+function from_expr(ast::GlobalRef,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
     local mod  = ast.mod
     local name = ast.name
     dprintln(3,"RWS GlobalRef type ",typeof(mod))
-    #warn(string("from_expr: GetfieldNode typeof(mod)=", typeof(mod)))
-  elseif asttyp == DataType
-    # skip
-  elseif asttyp == QuoteNode
+    # warn(string("from_expr: GetfieldNode typeof(mod)=", typeof(mod)))
+
+    return rws
+end
+
+function from_expr(ast::QuoteNode,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
     local value = ast.value
-    #TODO: fields: value
+    # TODO: fields: value
     dprintln(3,"RWS QuoteNode type ",typeof(value))
-    #warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
-  elseif isbits(asttyp)
-    #skip
-  elseif asttyp == Module
-    #skip
-  elseif asttyp == NewvarNode
-    #skip
-  elseif asttyp == ReadWriteSetType
-    merge!(rws, ast) 
-  else
-    if tryCallback(ast, callback, cbdata, depth, rws)
-      throw(string("from_expr: unknown ast :", asttyp))
+    # warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
+
+    return rws
+end
+
+function from_expr(ast::Any,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
+    asttyp = typeof(ast)
+
+    if isbits(asttyp)
+        #skip
+    else
+        if tryCallback(ast, callback, cbdata, depth, rws)
+            throw(string("from_expr: unknown ast :", asttyp))
+        end
+        #dprintln(2,"RWS from_expr: unknown AST (", typeof(ast), ",", ast, ")")
+        #warn(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
     end
-    #dprintln(2,"RWS from_expr: unknown AST (", typeof(ast), ",", ast, ")")
-    #warn(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
-  end
-  return rws
+    return rws
+end
+
+function from_expr(ast::ReadWriteSetType,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
+    merge!(rws, ast)
+    return rws
 end
 
 end

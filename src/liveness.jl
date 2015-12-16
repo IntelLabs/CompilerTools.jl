@@ -288,26 +288,28 @@ Here we extract this common behavior where x can be a liveness or CFG basic bloc
 bl is BlockLiveness type as returned by a previous LivenessAnalysis.
 field is the name of the field requested.
 """
-function get_info_internal(x, bl :: BlockLiveness, field)
-    if typeof(x) == BasicBlock
-        return getfield(x, field)
-    elseif typeof(x) == CFGs.BasicBlock
-        bb = bl.basic_blocks[x]
-        return getfield(bb, field)
-    elseif typeof(x) == TopLevelStatement
-        return getfield(x, field)
-    elseif typeof(x) == CFGs.TopLevelStatement
-        for i in bl.basic_blocks
-          for j in i[2].statements
+function get_info_internal(x::Union{BasicBlock,TopLevelStatement}, bl::BlockLiveness, field)
+    return getfield(x, field)
+end
+
+function get_info_internal(x::CFGs.BasicBlock, bl::BlockLiveness, field)
+    bb = bl.basic_blocks[x]
+    return getfield(bb, field)
+end
+
+function get_info_internal(x::CFGs.TopLevelStatement, bl::BlockLiveness, field)
+    for i in bl.basic_blocks
+        for j in i[2].statements
             if x == j.tls
-              return getfield(j, field)
+                return getfield(j, field)
             end
-          end
         end
-        throw(string("Couldn't find liveness statement corresponding to cfg statement. "))
-    else
-      throw(string("get_info_internal called with non-BB and non-TopLevelStatement input."))
     end
+    throw(string("Couldn't find liveness statement corresponding to cfg statement. "))
+end
+
+function get_info_internal(x::Any, bl::BlockLiveness, field)
+    throw(string("get_info_internal called with non-BB and non-TopLevelStatement input."))
 end
 
 @doc """
@@ -919,32 +921,54 @@ end
 @doc """
 Generic routine for how to walk most AST node types.
 """
-function from_expr(ast :: ANY, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-  if typeof(ast) == LambdaStaticData
-      # ast = uncompressed_ast(ast)
-      # skip processing LambdaStaticData
-      return nothing
-  end
-  local asttyp = typeof(ast)
-  dprintln(2,"from_expr depth=",depth," ", " asttyp = ", asttyp)
-
-  handled = callback(ast, cbdata)
-  if handled != nothing
-#    addStatement(top_level, state, ast)
-    if length(handled) > 0
-      dprintln(3,"Processing expression from callback for ", ast)
-      dprintln(3,handled)
-      from_exprs(handled, depth+1, state, callback, cbdata)
-      dprintln(3,"Done processing expression from callback.")
-    end
+function from_expr(ast::LambdaStaticData,
+                   depth::Int64,
+                   state::expr_state,
+                   callback::Function,
+                   cbdata::ANY)
+    # skip processing LambdaStaticData
     return nothing
-  end
+end
 
-  if isa(ast, Tuple)
+function from_expr(ast::ANY,
+                   depth::Int64,
+                   state::expr_state,
+                   callback::Function,
+                   cbdata::ANY)
+    dprintln(2,"from_expr depth=",depth," ", " asttyp = ", typeof(ast))
+
+    handled = callback(ast, cbdata)
+    if handled != nothing
+        if length(handled) > 0
+            dprintln(3,"Processing expression from callback for ", ast)
+            dprintln(3,handled)
+            from_exprs(handled, depth+1, state, callback, cbdata)
+            dprintln(3,"Done processing expression from callback.")
+        end
+        return nothing
+    end
+
+    from_expr_helper(ast, depth, state, callback, cbdata)
+
+end
+
+function from_expr_helper(ast::Tuple,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # N.B. This also handles the empty tuple correctly.
+
     for i = 1:length(ast)
         from_expr(ast[i], depth, state, callback, cbdata)
     end
-  elseif asttyp == Expr
+end
+
+function from_expr_helper(ast::Expr,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
     #addStatement(top_level, state, ast)
 
     dprint(2,"Expr ")
@@ -958,120 +982,129 @@ function from_expr(ast :: ANY, depth :: Int64, state :: expr_state, callback :: 
         dprintln(0,":body found in from_expr")
         throw(string(":body found in from_expr"))
     elseif head == :(=)
-        from_assignment(args,depth,state, callback, cbdata)
+        from_assignment(args, depth, state, callback, cbdata)
     elseif head == :return
-        from_return(args,depth,state, callback, cbdata)
-    elseif head == :call
-        from_call(args,depth,state, callback, cbdata)
+        from_return(args, depth, state, callback, cbdata)
+    elseif head == :call || head == :call1
+        from_call(args, depth, state, callback, cbdata)
         # TODO: catch domain IR result here
-    elseif head == :call1
-        from_call(args,depth,state, callback, cbdata)
         # TODO?: tuple
-    elseif head == :line
-        # skip
-    elseif head == :arraysize
-        from_exprs(args, depth+1, state, callback, cbdata)
-        # skip
-    elseif head == :alloc
-        from_exprs(args[2], depth+1, state, callback, cbdata)
-        # skip
-    elseif head == :copy
-        from_exprs(args, depth+1, state, callback, cbdata)
-        # skip
-    elseif head == :assert || head == :select || head == :ranges || head == :range || head == :tomask
-        from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == :copyast
-        dprintln(2,"copyast type")
-        # skip
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
-    elseif head == :new
+    elseif head == :line || head == :boundscheck || head == :meta || head == :type_goto
+        # Intentionally do nothing.
+    elseif head == :copyast
+        dprintln(2,"copyast type")
+        # Intentionally do nothing.
+    elseif head == :alloc
+        from_exprs(args[2], depth+1, state, callback, cbdata)
+    elseif head == :assert || head == :select || head == :ranges || head == :range ||
+        head == :tomask || head == :arraysize || head == :copy || head == :new ||
+        head == :tuple || head == :getindex || head == :quote || head == symbol("'")
         from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == :tuple
-        from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == :getindex
-        from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == :boundscheck
     elseif head == :(.)
         # skip handling fields of a type
         # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
-    elseif head == :quote
-        from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == symbol("'")
-        from_exprs(args, depth+1, state, callback, cbdata)
-    elseif head == :meta
-        # Intentionally do nothing.
-    elseif head == :type_goto
-        # Intentionally do nothing.
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
-  elseif asttyp == LabelNode
+end
+
+function from_expr_helper(ast::LabelNode,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
     assert(false)
-#    from_label(ast.label, state, callback, cbdata)
-  elseif asttyp == GotoNode
-#    INTENTIONALLY DO NOTHING
-  elseif asttyp == Symbol
-    #addStatement(top_level, state, ast)
-    dprintln(2,"Symbol type ", ast)
+    # from_label(ast.label, state, callback, cbdata)
+end
+
+function from_expr_helper(ast::Union{GotoNode,LineNumberNode,TopNode,Module},
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # Intentionally do nothing.
+end
+
+function from_expr_helper(ast::Union{Symbol,GenSym},
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # addStatement(top_level, state, ast)
+    dprintln(2, typeof(ast), " type ", ast)
     add_access(state.cur_bb, ast, state.read)
-  elseif asttyp == LineNumberNode
-    #skip
-  elseif asttyp == SymbolNode # name, typ
-    #addStatement(top_level, state, ast)
+end
+
+function from_expr_helper(ast::SymbolNode,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # addStatement(top_level, state, ast)
     dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read)
-  elseif asttyp == GenSym
-    dprintln(2,"GenSym type ", ast)
-    add_access(state.cur_bb, ast, state.read)
-  elseif asttyp == TopNode    # name
-    #skip
-  elseif isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
-    #addStatement(top_level, state, ast)
-    dprintln(3,"GetfieldNode type ",typeof(ast.value), " ", ast)
-  elseif isdefined(:GlobalRef) && asttyp == GlobalRef
-    #addStatement(top_level, state, ast)
-    dprintln(3,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
-  elseif asttyp == QuoteNode
-    #addStatement(top_level, state, ast)
+end
+
+function from_expr_helper(ast::Union{DataType,ASCIIString,UTF8String,NewvarNode,Void},
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # addStatement(top_level, state, ast)
+end
+
+function from_expr_helper(ast::QuoteNode,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # addStatement(top_level, state, ast)
     local value = ast.value
     #TODO: fields: value
     dprintln(3,"QuoteNode type ",typeof(value))
-  # elseif asttyp == Int64 || asttyp == Int32 || asttyp == Float64 || asttyp == Float32
-  elseif isbits(asttyp)
-    #addStatement(top_level, state, ast)
-    #skip
-  elseif asttyp.name == Array.name
-    #addStatement(top_level, state, ast)
-    dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
-    for i = 1:length(ast)
-      from_expr(ast[i], depth, state, callback, cbdata)
-    end
-  elseif asttyp == DataType
-    #addStatement(top_level, state, ast)
-  elseif asttyp == ()
-    #addStatement(top_level, state, ast)
-  elseif asttyp == ASCIIString || asttyp == UTF8String
-    #addStatement(top_level, state, ast)
-  elseif asttyp == NewvarNode
-    #addStatement(top_level, state, ast)
-  elseif asttyp == Void 
-    #addStatement(top_level, state, ast)
-  elseif asttyp == AccessSummary
+end
+
+function from_expr_helper(ast::AccessSummary,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
     dprintln(3, "Incorporating AccessSummary")
     for i in ast.use
-      add_access(state.cur_bb, i, true)
+        add_access(state.cur_bb, i, true)
     end
     for i in ast.def
-      add_access(state.cur_bb, i, false)
+        add_access(state.cur_bb, i, false)
     end  
-  elseif asttyp == Module
-    #skip
-  else
-    throw(string("from_expr: unknown AST type :", asttyp, " ", ast))
-  end
-  nothing
+end
+
+function from_expr_helper(ast::Any,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    asttyp = typeof(ast)
+
+    if isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
+        # addStatement(top_level, state, ast)
+        dprintln(3,"GetfieldNode type ",typeof(ast.value), " ", ast)
+    elseif isdefined(:GlobalRef) && asttyp == GlobalRef
+        # addStatement(top_level, state, ast)
+        dprintln(3,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
+    elseif isbits(asttyp)
+        # addStatement(top_level, state, ast)
+        # skip
+    elseif asttyp.name == Array.name
+        # addStatement(top_level, state, ast)
+        dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
+        for i = 1:length(ast)
+            from_expr(ast[i], depth, state, callback, cbdata)
+        end
+    else
+        throw(string("from_expr: unknown AST type :", asttyp, " ", ast))
+    end
 end
 
 end
-

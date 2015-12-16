@@ -20,4 +20,7 @@ matrix:
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("CompilerTools"); Pkg.test("CompilerTools")'
+  - julia --code-coverage=user test/runtests.jl
+after_success:
+      - julia -e 'cd(Pkg.dir("CompilerTools")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
 
