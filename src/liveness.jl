@@ -957,6 +957,8 @@ function from_expr_helper(ast::Tuple,
                           state::expr_state,
                           callback::Function,
                           cbdata::ANY)
+    # N.B. This also handles the empty tuple correctly.
+
     for i = 1:length(ast)
         from_expr(ast[i], depth, state, callback, cbdata)
     end
@@ -1045,8 +1047,7 @@ function from_expr_helper(ast::SymbolNode,
     add_access(state.cur_bb, ast.name, state.read)
 end
 
-# N.B.: `()` changed to `Tuple` in signature. -- LK
-function from_expr_helper(ast::Union{DataType,Tuple,ASCIIString,UTF8String,NewvarNode,Void},
+function from_expr_helper(ast::Union{DataType,ASCIIString,UTF8String,NewvarNode,Void},
                           depth::Int64,
                           state::expr_state,
                           callback::Function,

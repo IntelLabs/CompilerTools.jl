@@ -407,6 +407,9 @@ function from_expr_helper(ast::Tuple,
                           top_level_number,
                           is_top_level,
                           read)
+
+    # N.B. This also handles the empty tuple correctly.
+
     new_tt = Expr(:tuple)
     for i = 1:length(ast)
         push!(new_tt.args, from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read))
@@ -444,8 +447,6 @@ function from_expr_helper(ast::Any,
         dprintln(2,"GetfieldNode type ",typeof(ast.value), " ", ast)
     elseif isdefined(:GlobalRef) && asttyp == GlobalRef
         dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
-    elseif asttyp == ()
-        #skip
     elseif isbits(asttyp)
         #skip
     else
