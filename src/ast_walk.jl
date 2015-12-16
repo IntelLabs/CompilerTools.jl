@@ -183,19 +183,30 @@ The leaf nodes of the AST all have different types.
 There are some node types we don't currently recurse into.  Maybe this needs to be extended.
 """
 function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-  if typeof(ast) == LambdaStaticData
-      ast = uncompressed_ast(ast)
-  end
-  dprintln(2,"from_expr depth=",depth," ", " ", ast)
+    if typeof(ast) == LambdaStaticData
+        ast = uncompressed_ast(ast)
+    end
+    dprintln(2,"from_expr depth=",depth," ", " ", ast)
 
-  ret = callback(ast, cbdata, top_level_number, is_top_level, read)
-  dprintln(2,"callback ret = ",ret)
-  if ret != ASTWALK_RECURSE
-      return ret
-  end
+    ret = callback(ast, cbdata, top_level_number, is_top_level, read)
+    dprintln(2,"callback ret = ",ret)
+    if ret != ASTWALK_RECURSE
+        return ret
+    end
 
-  asttyp = typeof(ast)
-  if asttyp == Expr
+    ast = from_expr_helper(ast, depth, callback, cbdata, top_level_number, is_top_level, read)
+
+    dprintln(3,"Before return for ", ast)
+    return ast
+end
+
+function from_expr_helper(ast::Expr,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
     dprint(2,"Expr ")
     head = ast.head
     args = ast.args
@@ -257,7 +268,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :tuple
         for i = 1:length(args)
-          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :enter
         # skip
@@ -271,78 +282,78 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
         # skip
     elseif head == :static_typeof
         for i = 1:length(args)
-          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
-   elseif head == :ccall
+    elseif head == :ccall
         for i = 1:length(args)
-          args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :function
-	  dprintln(3,"in function head")
-	  args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
+	dprintln(3,"in function head")
+	args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :vcat || head == :typed_vcat || head == :hcat || head == :typed_hcat
-	    dprintln(3,"in vcat head")
-	    #skip
+	dprintln(3,"in vcat head")
+	#skip
     elseif head == :ref
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :meta
-	    # ignore :meta for now. TODO: we might need to walk its args.
+	# ignore :meta for now. TODO: we might need to walk its args.
     elseif head == :comprehension || head == :vect
-	    # args are either Expr or Symbol
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	# args are either Expr or Symbol
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :typed_comprehension
-	    # args are either Expr or Symbol
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	# args are either Expr or Symbol
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :(->) || head == :(&&) || head == :(||)
-	    # args are either Expr or Symbol
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	# args are either Expr or Symbol
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :(:)
-	    # args are either Expr or Symbol
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	# args are either Expr or Symbol
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :const
-	    dump(ast,1000)
-	    # ignore :const for now. 
+	dump(ast,1000)
+	# ignore :const for now.
     elseif head == :for
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head in Set([:(+=), :(/=), :(*=), :(-=)])
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, false)
         args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :if
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :comparison
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :while
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :let
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :local
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :quote
-	    for i = 1:length(args)
-		    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	    end
+	for i = 1:length(args)
+	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+	end
     elseif head == :simdloop
         # skip
     elseif head == :macrocall
@@ -360,66 +371,89 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     end
     ast.head = head
     ast.args = args
-#    ast = Expr(head, args...)
+    # ast = Expr(head, args...)
     ast.typ = typ
-  elseif asttyp == Symbol
-    dprintln(2,"Symbol type")
-    #skip
-  elseif asttyp == GenSym
-    dprintln(2,"GenSym type")
-    #skip
-  elseif asttyp == SymbolNode # name, typ
-    dprintln(2,"SymbolNode type")
-    #skip
-  elseif asttyp == TopNode    # name
-    dprintln(2,"TopNode type")
-    #skip
-  elseif isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
-    dprintln(2,"GetfieldNode type ",typeof(ast.value), " ", ast)
-  elseif isdefined(:GlobalRef) && asttyp == GlobalRef
-    dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
-  elseif asttyp == QuoteNode
-    value = ast.value
-    #TODO: fields: value
-    dprintln(2,"QuoteNode type ",typeof(value))
-  elseif asttyp == LineNumberNode
-    #skip
-  elseif asttyp == LabelNode
-    #skip
-  elseif asttyp == GotoNode
-    #skip
-  elseif asttyp == DataType
-    #skip
-  elseif asttyp == ()
-    #skip
-  elseif asttyp == ASCIIString || asttyp == UTF8String
-    #skip
-  elseif asttyp == NewvarNode
-    #skip
-  elseif asttyp == Void
-    #skip
-  elseif asttyp == Function
-    #skip
-  elseif isbits(asttyp)
-    #skip
-  elseif isa(ast,Tuple)
+
+    return ast
+end
+
+function from_expr_helper(ast::Union{Symbol,GenSym,SymbolNode,TopNode},
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+    dprintln(2, typeof(ast), " type")
+    # Intentionally do nothing.
+    return ast
+end
+
+function from_expr_helper(ast::Union{LineNumberNode,LabelNode,GotoNode,DataType,ASCIIString,UTF8String,NewvarNode,Void,Function,Module},
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+    # Intentionally do nothing.
+    return ast
+end
+
+function from_expr_helper(ast::Tuple,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
     new_tt = Expr(:tuple)
     for i = 1:length(ast)
-      push!(new_tt.args, from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read))
+        push!(new_tt.args, from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read))
     end
     new_tt.typ = asttyp
     ast = eval(new_tt)
-  elseif asttyp == Module
-    #skip
-  elseif asttyp == NewvarNode
-    #skip
-  else
-    println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
-    throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
-  end
-  dprintln(3,"Before return for ", ast)
-  return ast
+
+    return ast
+end
+
+function from_expr_helper(ast::QuoteNode,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+    value = ast.value
+    #TODO: fields: value
+    dprintln(2,"QuoteNode type ",typeof(value))
+
+    return ast
+end
+
+function from_expr_helper(ast::Any,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+    asttyp = typeof(ast)
+
+    if isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
+        dprintln(2,"GetfieldNode type ",typeof(ast.value), " ", ast)
+    elseif isdefined(:GlobalRef) && asttyp == GlobalRef
+        dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
+    elseif asttyp == ()
+        #skip
+    elseif isbits(asttyp)
+        #skip
+    else
+        println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
+        throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
+    end
+
+    return ast
 end
 
 end
-

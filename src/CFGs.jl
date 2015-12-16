@@ -250,13 +250,14 @@ label specified in this nodes is equal to the "old_label" in the UpdateLabelStat
 the "old_label" with "new_label" and sets the "changed" flag to true to indicate that update_label
 was successful.
 """
-function update_label(x, state :: UpdateLabelState, top_level_number, is_top_level, read)
-    asttype = typeof(x)
-    
-    if asttype == Expr
-      head = x.head
-      args = x.args
-      if head == :gotoifnot
+function update_label(x::Expr,
+                      state::UpdateLabelState,
+                      top_level_number,
+                      is_top_level,
+                      read)
+    head = x.head
+    args = x.args
+    if head == :gotoifnot
         # A :gotoifnot Expr node with the else_label in args[2]
         else_label = args[2]
         dprintln(3,"else_label = ", else_label, " old = ", state.old_label, " new = ", state.new_label)
@@ -268,18 +269,32 @@ function update_label(x, state :: UpdateLabelState, top_level_number, is_top_lev
         state.changed = true
         # Indicate we changed the current node.
         return x
-      end
-    elseif asttype == GotoNode
-      # The node is a GotoNode which has a "label" field.
-      # Assert that this GotoNode's label field is the old_label that we have been instructed to replace.
-      assert(x.label == state.old_label)
-      # Mark as successful label replacement.
-      state.changed = true
-      # Return a new node with the new label.  
-      # At some point there was a problem with updating the label in place as object's this type are considered immutable.
-      return GotoNode(state.new_label)
     end
 
+    # Indicate we didn't change anything.
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function update_label(x::GotoNode,
+                      state::UpdateLabelState,
+                      top_level_number,
+                      is_top_level,
+                      read)
+    # The node is a GotoNode which has a "label" field.
+    # Assert that this GotoNode's label field is the old_label that we have been instructed to replace.
+    assert(x.label == state.old_label)
+    # Mark as successful label replacement.
+    state.changed = true
+    # Return a new node with the new label.
+    # At some point there was a problem with updating the label in place as object's this type are considered immutable.
+    return GotoNode(state.new_label)
+end
+
+function update_label(x::ANY,
+                      state::UpdateLabelState,
+                      top_level_number,
+                      is_top_level,
+                      read)
     # Indicate we didn't change anything.
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
@@ -1104,28 +1119,33 @@ The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
 """
-function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
-  if typeof(ast) == LambdaStaticData
-      # ast = uncompressed_ast(ast)
-      # skip processing LambdaStaticData
-      return nothing
-  end
-  local asttyp = typeof(ast)
-  dprintln(2,"from_expr depth=",depth," ", " asttyp = ", asttyp)
-
-  handled = callback(ast, cbdata)
-  if handled != nothing
-    addStatement(top_level, state, ast)
-    if length(handled) > 0
-      dprintln(3,"Processing expression from callback for ", ast)
-      dprintln(3,handled)
-      from_exprs(handled, depth+1, state, callback, cbdata)
-      dprintln(3,"Done processing expression from callback.")
-    end
+function from_expr(ast::LambdaStaticData, depth, state, top_level, callback, cbdata)
+    # ast = uncompressed_ast(ast)
+    # skip processing LambdaStaticData
     return nothing
-  end
+end
 
-  if asttyp == Expr
+function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
+    dprintln(2,"from_expr depth=",depth," ", " asttyp = ", typeof(ast))
+
+    handled = callback(ast, cbdata)
+    if handled != nothing
+        addStatement(top_level, state, ast)
+        if length(handled) > 0
+            dprintln(3,"Processing expression from callback for ", ast)
+            dprintln(3,handled)
+            from_exprs(handled, depth+1, state, callback, cbdata)
+            dprintln(3,"Done processing expression from callback.")
+        end
+        return nothing
+    end
+
+    from_expr_helper(ast, depth, state, top_level, callback, cbdata)
+
+    return nothing
+end
+
+function from_expr_helper(ast::Expr, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
 
     dprint(2,"Expr ")
@@ -1142,15 +1162,19 @@ function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
     end
-  elseif asttyp == LabelNode
+end
+
+function from_expr_helper(ast::LabelNode, depth, state, top_level, callback, cbdata)
     from_label(ast.label, state, callback, cbdata)
-  elseif asttyp == GotoNode
+end
+
+function from_expr_helper(ast::GotoNode, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
     from_goto(ast.label, state, callback, cbdata)
-  else
+end
+
+function from_expr_helper(ast::ANY, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
-  end
-  nothing
 end
 
 @doc """
