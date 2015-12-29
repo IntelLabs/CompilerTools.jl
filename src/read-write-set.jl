@@ -53,6 +53,10 @@ type ReadWriteSetType
     ReadWriteSetType() = new(AccessSet(),AccessSet())
 end
 
+function getArraysAccessed(rws :: ReadWriteSetType)
+    return union(collect(keys(rws.readSet.arrays)), collect(keys(rws.writeSet.arrays)))
+end
+
 export from_exprs, ReadWriteSetType, AccessSet, set_debug_level, isRead, isWritten
 
 function merge!(outer :: AccessSet, inner :: AccessSet)
