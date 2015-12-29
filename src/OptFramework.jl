@@ -304,7 +304,7 @@ returns a new optimized function without modifying the input.  Argument explanat
 3) per_site_opt_set - the set of optimization passes to apply to this function.
 """
 function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_set :: ANY)
-  dprintln(3,"processFuncCall starting")
+  dprintln(3,"processFuncCall starting = ", func, " call_sig_arg_tuple = ", call_sig_arg_tuple)
   @assert (isa(func, Function)) ("processFuncCall can only optimize functions, but got " * typeof(func))
   if per_site_opt_set == nothing 
     per_site_opt_set = optPasses 
@@ -377,6 +377,12 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   new_func = GlobalRef(mod, new_fname)
   real_func = GlobalRef(mod, real_fname)
   dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
+
+  #bt = backtrace() ;
+  #s = sprint(io->Base.show_backtrace(io, bt))
+  #dprintln(3, "makeWrapperFunc backtrace ")
+  #dprintln(3, s)
+
   dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
