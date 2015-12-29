@@ -220,12 +220,14 @@ function add_access(bb, sym, read)
         if in(sym, tls.def)
             throw(string("Found a read after a write at the statement level in liveness analysis."))
         end
-        dprintln(3, "adding sym to tls.use")
+        dprintln(3, "adding sym to tls.use ", sym)
         push!(tls.use, sym)
     else # must be a write
-        dprintln(3, "adding sym to tls.def")
+        dprintln(3, "adding sym to tls.def ", sym)
         push!(tls.def, sym)
     end
+
+    dprintln(3, "tls after = ", tls)
 
     # Handle access modifications at the basic block level.
     if in(sym, bb.use)
@@ -235,13 +237,15 @@ function add_access(bb, sym, read)
         end
     elseif read
         if !in(sym, bb.def)
-            dprintln(3, "adding sym to bb.use")
+            dprintln(3, "adding sym to bb.use ", sym)
             push!(bb.use, sym)
         end
     else # must be a write
-        dprintln(3, "adding sym to bb.def")
+        dprintln(3, "adding sym to bb.def ", sym)
         push!(bb.def, sym)
     end
+
+    dprintln(4, "bb after = ", bb)
 
     nothing
 end
@@ -575,9 +579,10 @@ function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_stat
   end
   dprintln(3,"liveness from_assignment handling lhs")
   # Handle the left-hand side of the assignment which is being written.
+  read_save = state.read
   state.read = false
   from_expr(lhs, depth, state, callback, cbdata)
-  state.read = true
+  state.read = read_save
   dprintln(3,"liveness from_assignment done handling lhs")
 end
 
@@ -803,16 +808,19 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   # For each argument.
   for i = 1:length(args)
     argtyp = typeOfOpr(args[i], state.li)
-    dprintln(2,"cur arg = ", args[i], " type = ", argtyp)
+    dprintln(2,"cur arg = ", args[i], " type = ", argtyp, " state.read = ", state.read)
+    read_cache = state.read
 
+    state.read = true
     # We can always potentially read first.
     from_expr(args[i], depth+1, state, callback, cbdata)
     if unmodified_args[i] == 0
       # The argument could be modified so treat it as a "def".
       state.read = false
       from_expr(args[i], depth+1, state, callback, cbdata)
-      state.read = true
+#      state.read = true
     end
+    state.read = read_cache
   end
 end
 
@@ -935,7 +943,7 @@ function from_expr(ast::ANY,
                    state::expr_state,
                    callback::Function,
                    cbdata::ANY)
-    dprintln(2,"from_expr depth=",depth," ", " asttyp = ", typeof(ast))
+    dprintln(2,"from_expr ast = ", ast, " depth = ",depth," ", " asttyp = ", typeof(ast), " state.read = ", state.read)
 
     handled = callback(ast, cbdata)
     if handled != nothing
@@ -949,7 +957,6 @@ function from_expr(ast::ANY,
     end
 
     from_expr_helper(ast, depth, state, callback, cbdata)
-
 end
 
 function from_expr_helper(ast::Tuple,
@@ -970,6 +977,8 @@ function from_expr_helper(ast::Expr,
                           callback::Function,
                           cbdata::ANY)
     #addStatement(top_level, state, ast)
+    read_save = state.read
+    state.read = true
 
     dprint(2,"Expr ")
     local head = ast.head
@@ -1000,7 +1009,8 @@ function from_expr_helper(ast::Expr,
         from_exprs(args[2], depth+1, state, callback, cbdata)
     elseif head == :assert || head == :select || head == :ranges || head == :range ||
         head == :tomask || head == :arraysize || head == :copy || head == :new ||
-        head == :tuple || head == :getindex || head == :quote || head == symbol("'")
+        head == :tuple || head == :getindex || head == :quote || head == symbol("'") ||
+        head == :(&) || head == :(~) || head == :(|) || head == :($) || head == :(>>>) || head == :(>>) || head == :(<<)
         from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :(.)
         # skip handling fields of a type
@@ -1008,6 +1018,7 @@ function from_expr_helper(ast::Expr,
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
+    state.read = read_save
 end
 
 function from_expr_helper(ast::LabelNode,
@@ -1080,7 +1091,7 @@ function from_expr_helper(ast::AccessSummary,
     end  
 end
 
-function from_expr_helper(ast::Any,
+function from_expr_helper(ast::ANY,
                           depth::Int64,
                           state::expr_state,
                           callback::Function,
