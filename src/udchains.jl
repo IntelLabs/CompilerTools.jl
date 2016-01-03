@@ -32,7 +32,7 @@ using CompilerTools
 
 import Base.show
 
-@doc """
+"""
 Contains the UDchains for one basic block.
 """
 type UDInfo
@@ -44,7 +44,7 @@ type UDInfo
     end
 end
 
-@doc """
+"""
 Get the set of definition blocks reaching this block for a given symbol "s".
 """
 function getOrCreate(live :: Dict{Symbol, Set}, s :: Symbol)
@@ -54,7 +54,7 @@ function getOrCreate(live :: Dict{Symbol, Set}, s :: Symbol)
     return live[s]
 end
 
-@doc """
+"""
 Get the UDInfo for a specified basic block "bb" or create one if it doesn't already exist.
 """
 function getOrCreate(udchains :: Dict{CompilerTools.LivenessAnalysis.BasicBlock,UDInfo} , bb :: CompilerTools.LivenessAnalysis.BasicBlock)
@@ -64,7 +64,7 @@ function getOrCreate(udchains :: Dict{CompilerTools.LivenessAnalysis.BasicBlock,
     return udchains[bb]
 end
 
-@doc """
+"""
 Print the set part of a live in or live out dictiononary in a nice way if the debug level is set high enough.
 """
 function printSet(level, s)
@@ -77,7 +77,7 @@ function printSet(level, s)
     end
 end
 
-@doc """
+"""
 Print a live in or live out dictionary in a nice way if the debug level is set high enough.
 """
 function printLabels(level, dict)
@@ -88,7 +88,7 @@ function printLabels(level, dict)
     end
 end
 
-@doc """
+"""
 Print UDChains in a nice way if the debug level is set high enough.
 """
 function printUDInfo(level, ud)
@@ -100,7 +100,7 @@ function printUDInfo(level, ud)
     end
 end
 
-@doc """
+"""
 Get the Use-Definition chains at a basic block level given LivenessAnalysis.BlockLiveness as input in "bl".
 """
 function getUDChains(bl :: CompilerTools.LivenessAnalysis.BlockLiveness)

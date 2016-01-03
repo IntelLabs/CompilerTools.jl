@@ -34,7 +34,7 @@ using CompilerTools.AstWalker
 
 import Base.show
 
-@doc """
+"""
 Creates a typed Expr AST node.
 Convenence function that takes a type as first argument and the varargs thereafter.
 The varargs are used to form an Expr AST node and the type parameter is used to fill in the "typ" field of the Expr.
@@ -47,7 +47,7 @@ end
 
 export from_exprs, find_bb_for_statement, show
 
-@doc """
+"""
 Data structure to hold the index (relative to the beginning of the body of the function) of a top-level statement
 and the top-level statement itself.
 """
@@ -58,7 +58,7 @@ type TopLevelStatement
     TopLevelStatement(i, ex) = new(i, ex)
 end
 
-@doc """
+"""
 Overload of Base.show to pretty-print a TopLevelStatement.
 """
 function show(io::IO, tls::TopLevelStatement)
@@ -69,7 +69,7 @@ end
 const CFG_ENTRY_BLOCK = -1
 const CFG_EXIT_BLOCK  = -2
 
-@doc """
+"""
 Data structure to hold information about one basic block in the control-flow graph.
 This structure contains the following fields:
 1) label - an Int.  If positive, this basic block corresponds to a basic block declared in the AST through a label node.
@@ -96,7 +96,7 @@ type BasicBlock
     BasicBlock(label) = new(label, Set{BasicBlock}(), Set{BasicBlock}(), nothing, nothing, TopLevelStatement[])
 end
 
-@doc """
+"""
 Adds a top-level statement just encountered during a partial walk of the AST.
 First argument indicates if this statement is a top-level statement.
 Second argument is a object collecting information about the CFG as we go along.
@@ -119,7 +119,7 @@ end
 
 import Base.show
 
-@doc """
+"""
 Overload of Base.show to pretty-print a CFGS.BasicBlock object.
 """
 function show(io::IO, bb::BasicBlock)
@@ -146,7 +146,7 @@ function show(io::IO, bb::BasicBlock)
     end
 end
 
-@doc """
+"""
 Connect the "from" input argument basic block to the "to" input argument basic block.
 If the third argument "fallthrough" is true then the "to" block is also set as the "from" basic block's fallthrough successor.
 """
@@ -160,7 +160,7 @@ function connect(from, to, fallthrough)
     end
 end
 
-@doc """
+"""
 Collects information about the CFG as it is being constructed.
 Contains a dictionary of the currently known basic blocks that maps the label to a BasicBlock object.
 cur_bb is the currently active BasicBlock to which the next statement encountered should be added.
@@ -184,7 +184,7 @@ type expr_state
     end
 end
 
-@doc """
+"""
 The main data structure to hold information about the control flow graph.
 The basic_blocks field is a dictionary from basic block label to BasicBlock object.
 The depth_first_numbering is an array of length the number of basic blocks.  
@@ -199,7 +199,7 @@ type CFG
     end
 end
 
-@doc """
+"""
 Overload of Base.show to pretty-print a CFG object.
 """
 function show(io::IO, bl::CFG)
@@ -212,7 +212,7 @@ function show(io::IO, bl::CFG)
     end
 end
 
-@doc """
+"""
 Returns the maximum basic block label for the given CFG.
 """
 function getMaxBB(bl::CFG)
@@ -220,7 +220,7 @@ function getMaxBB(bl::CFG)
     maximum(collect(keys(bl.basic_blocks)))
 end
 
-@doc """
+"""
 Returns the minimum basic block label for the given CFG.
 """
 function getMinBB(bl::CFG)
@@ -228,7 +228,7 @@ function getMinBB(bl::CFG)
     minimum(collect(keys(bl.basic_blocks)))
 end
 
-@doc """
+"""
 The opaque callback data type for the update_label callback.
 It holds the old_label that should be changed to the new_label.
 It also holds a "changed" field that starts as false and gets set to true when the callback actually
@@ -244,7 +244,7 @@ type UpdateLabelState
     end
 end
 
-@doc """
+"""
 An AstWalk callback that pattern matches GotoNode's and :gotoifnot Expr nodes and determines if the
 label specified in this nodes is equal to the "old_label" in the UpdateLabelState and if so replaces
 the "old_label" with "new_label" and sets the "changed" flag to true to indicate that update_label
@@ -299,7 +299,7 @@ function update_label(x::ANY,
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-@doc """
+"""
 BasicBlock bb currently is known to contain a jump to the BasicBlock after.
 This function changes bb so that it no longer jumps to after but to "new_bb" instead.
 The jump has to be in the last statement of the BasicBlock.
@@ -313,7 +313,7 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     bb.statements[end].expr = new_last_stmt
 end
 
-@doc """
+"""
 Given a CFG in input parameter "bl" and a basic block label "after" in that CFG,
 insert a new basic block into the CFG before block "after".  
 Returns a tuple of the new basic block created and if needed a GotoNode AST node to be inserted at the end of the new
@@ -389,7 +389,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
     (new_bb, new_goto_stmt)
 end
 
-@doc """
+"""
 Get the maximum statement index for a given BasicBlock.
 """
 function getMaxStatementNum(bb :: BasicBlock)
@@ -402,7 +402,7 @@ function getMaxStatementNum(bb :: BasicBlock)
     return res
 end
 
-@doc """
+"""
 Get a possible new statement number by finding the maximum statement value in any BasicBlock in the given CFG and adding 1.
 """
 function getDistinctStatementNum(bl :: CFG)
@@ -415,7 +415,7 @@ function getDistinctStatementNum(bl :: CFG)
     return res + 1
 end
 
-@doc """
+"""
 Modifies the CFG to create a conditional (i.e., if statement) that wraps a certain region of the CFG whose entry block is
 "first" and whose last block is "last".
 Takes a parameters:
@@ -504,7 +504,7 @@ function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merg
     (new_bb, cond_ft)
 end
 
-@doc """
+"""
 Insert a new basic block into the CFG "bl" between the basic blocks whose labels are "before" and "after".
 Returns a tuple of the new basic block created and if needed a GotoNode AST node to be inserted at the end of the new
 basic block so that it will jump to the "after" basic block.  The user of this function is expected to insert
@@ -566,14 +566,14 @@ function insertBetween(bl :: CFG, before :: Int, after :: Int)
     (new_bb, new_goto_stmt)
 end
 
-@doc """
+"""
 Insert into an array "a" with a given "value" at the specified index "idx".
 """
 function insertat!(a, value, idx)
    splice!(a, idx:idx, [value, a[idx]])
 end
 
-@doc """
+"""
 For a given CFG "bl" and a "block" in that CFG, add a new statement "new_stmt" to the basic block
 after statement index "stmt_idx".
 """
@@ -581,7 +581,7 @@ function insertStatementAfter(bl :: CFG, block, stmt_idx, new_stmt)
     insertStatementInternal(bl, block, stmt_idx, new_stmt, true)
 end
 
-@doc """
+"""
 For a given CFG "bl" and a "block" in that CFG, add a new statement "new_stmt" to the basic block
 before statement index "stmt_idx".
 """
@@ -617,7 +617,7 @@ function insertStatementInternal(bl :: CFG, block, stmt_idx, new_stmt, after :: 
     assert(false) 
 end
 
-@doc """
+"""
 Given a CFG "bl" and a basic "block", add statement "stmt" to the end of that block.
 """
 function addStatementToEndOfBlock(bl :: CFG, block, stmt)
@@ -632,7 +632,7 @@ function addStatementToEndOfBlock(bl :: CFG, block, stmt)
     from_expr(stmt, 1, live_res, true, not_handled, nothing)
 end
 
-@doc """
+"""
 Determine a valid and reasonable order of basic blocks in which to reconstruct a :body Expr.
 Also useful for printing in a reasonable order.
 """
@@ -662,7 +662,7 @@ function getBbBodyOrder(bl :: CFG)
     return res
 end
 
-@doc """
+"""
 Create the array of statements that go in a :body Expr given a CFG "bl".
 """
 function createFunctionBody(bl :: CFG)
@@ -693,7 +693,7 @@ function createFunctionBody(bl :: CFG)
     return res
 end
 
-@doc """
+"""
 Search for a statement with the given number in the CFG "bl".
 Returns the statement corresponding to the given number or "nothing" if the statement number is not found.
 """
@@ -711,7 +711,7 @@ function find_top_number(top_number::Int, bl::CFG)
   nothing
 end
 
-@doc """
+"""
 Find the basic block that contains a given statement number.
 Returns the basic block label of the basic block that contains the given statement number or "nothing" if the statement number is not found.
 """
@@ -731,7 +731,7 @@ function find_bb_for_statement(top_number::Int, bl::CFG)
   nothing
 end
 
-@doc """
+"""
 The recursive heart of depth first numbering.
 """
 function compute_dfn_internal(basic_blocks, cur_bb, cur_dfn, visited, bbs_df_order)
@@ -752,7 +752,7 @@ function compute_dfn_internal(basic_blocks, cur_bb, cur_dfn, visited, bbs_df_ord
     cur_dfn - 1                       # Decrement the next depth first number to use.
 end
 
-@doc """
+"""
 Computes the depth first numbering of the basic block graph.
 """
 function compute_dfn(basic_blocks)
@@ -770,14 +770,14 @@ function compute_dfn(basic_blocks)
     bbs_df_order
 end
 
-@doc """
+"""
 Connect the current basic block as a fallthrough to the final invisible basic block (-2).
 """
 function connect_finish(state)
     connect(state.cur_bb, state.basic_blocks[CFG_EXIT_BLOCK], true)
 end
 
-@doc """
+"""
 Prints a CFG "bl" with varying degrees of verbosity from debug level 2 up to 4.
 Additionally, at debug level 4 and graphviz bbs.dot file is generated that can be used to visualize the basic block structure of the function.
 """
@@ -809,13 +809,13 @@ function dump_bb(bl :: CFG)
     end
 end
 
-@doc """
+"""
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
-@doc """
+"""
 To help construct the CFG given a lambda, we recursively process the body of the lambda.
 """
 function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
@@ -828,7 +828,7 @@ function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
   from_expr(body, depth, state, false, callback, cbdata)
 end
 
-@doc """
+"""
 Process an array of expressions.
 We know that the first array of expressions we will find is for the lambda body.
 top_level_number starts out 0 and if we find it to be 0 then we know that we're processing the array of expr for the body
@@ -853,7 +853,7 @@ function from_exprs(ast::Array{Any,1}, depth, state, callback, cbdata)
   nothing
 end
 
-@doc """
+"""
 For a given basic block "cur_bb", replace one of its successors "orig_succ" with a different successor "new_succ".
 """
 function replaceSucc(cur_bb :: BasicBlock, orig_succ :: BasicBlock, new_succ :: BasicBlock)
@@ -870,7 +870,7 @@ function replaceSucc(cur_bb :: BasicBlock, orig_succ :: BasicBlock, new_succ :: 
   end
 end
 
-@doc """
+"""
 Process a basic block and add its successors to the set of reachable blocks
 if it isn't already there.  If it is freshly added then recurse to adds its successors.
 """
@@ -885,7 +885,7 @@ function findReachable(reachable, cur :: Int, bbs :: Dict{Int,BasicBlock})
   end
 end
 
-@doc """
+"""
 This function simplifies the dict of basic blocks "bbs".
 One such simplification that is necessary for depth first numbering not to fail is the removal of dead blocks.
 Other simplifications can be seen commented out below and while they may make the graph nicer to look at they
@@ -990,14 +990,14 @@ if false
 end
 end
 
-@doc """
+"""
 A default callback that handles no extra AST node types.
 """
 function not_handled(a,b)
   nothing
 end
 
-@doc """
+"""
 The main entry point to construct a control-flow graph.
 Typically you would pass in a :lambda Expr here.
 """
@@ -1006,7 +1006,7 @@ function from_ast(ast::Any)
   from_expr(ast, not_handled, nothing)
 end
 
-@doc """
+"""
 Another entry point to construct a control-flow graph but one that allows you to pass a callback and some opaque object
 so that non-standard node types can be processed.
 """
@@ -1031,7 +1031,7 @@ function from_expr(ast::Any, callback, cbdata)
   return ret
 end
 
-@doc """
+"""
 Process LabelNode for CFG construction.
 """
 function from_label(label, state, callback, cbdata)
@@ -1047,7 +1047,7 @@ function from_label(label, state, callback, cbdata)
     nothing
 end
 
-@doc """
+"""
 Process a GotoNode for CFG construction.
 """
 function from_goto(label, state, callback, cbdata)
@@ -1064,7 +1064,7 @@ function from_goto(label, state, callback, cbdata)
     nothing
 end
 
-@doc """
+"""
 Process a :return Expr for CFG construction.
 """
 function from_return(args, depth, state, callback, cbdata)
@@ -1077,7 +1077,7 @@ function from_return(args, depth, state, callback, cbdata)
     nothing
 end
 
-@doc """
+"""
 Process a :gotoifnot Expr not for CFG construction.
 """
 function from_if(args, depth, state, callback, cbdata)
@@ -1114,7 +1114,7 @@ function from_if(args, depth, state, callback, cbdata)
     nothing
 end
 
-@doc """
+"""
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
@@ -1177,7 +1177,7 @@ function from_expr_helper(ast::ANY, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
 end
 
-@doc """
+"""
 Compute the dominators of the CFG.
 """
 function compute_dominators(bl :: CFG)
@@ -1241,7 +1241,7 @@ function compute_dominators(bl :: CFG)
   return dom_dict
 end
 
-@doc """
+"""
 Compute the inverse dominators of the CFG.
 """
 function compute_inverse_dominators(bl :: CFG)

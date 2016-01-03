@@ -49,7 +49,7 @@ const ISASSIGNEDBYINNERFUNCTION = 4
 const ISCONST = 8
 const ISASSIGNEDONCE = 16
 
-@doc """
+"""
 Type aliases for different unions of Symbol, SymbolNode, and GenSym.
 """
 typealias SymGen     Union{Symbol, GenSym}
@@ -57,7 +57,7 @@ typealias SymNodeGen Union{SymbolNode, GenSym}
 typealias SymAllGen  Union{Symbol, SymbolNode, GenSym}
 typealias SymAll     Union{Symbol, SymbolNode}
 
-@doc """
+"""
 Represents the triple stored in a lambda's args[2][1].
 The triple is 1) the Symbol of an input parameter or local variable, 2) the type of that Symbol, and 3) a descriptor for that symbol.
 The descriptor can be 0 if the variable is an input parameter, 1 if it is captured, 2 if it is assigned within the function, 4 if
@@ -73,7 +73,7 @@ type VarDef
   end
 end
 
-@doc """
+"""
 An internal format for storing a lambda expression's args[1] and args[2].
 The input parameters are stored as a Set since they must be unique and it makes for faster searching.
 The VarDefs are stored as a dictionary from symbol to VarDef since type lookups are reasonably frequent and need to be fast.
@@ -93,7 +93,7 @@ type LambdaInfo
   end
 end
 
-@doc """
+"""
 Pretty print a LambdaInfo.
 """
 function show(io :: IO, li :: LambdaInfo)
@@ -124,7 +124,7 @@ function show(io :: IO, li :: LambdaInfo)
   end
 end
 
-@doc """
+"""
 Holds symbols and gensyms that are seen in a given AST when using the specified callback to handle non-standard Julia AST types.
 """
 type CountSymbolState
@@ -136,7 +136,7 @@ type CountSymbolState
   end
 end
 
-@doc """
+"""
 Adds symbols and gensyms to their corresponding sets in CountSymbolState when they are seen in the AST.
 """
 function count_symbols(x::Symbol,
@@ -174,7 +174,7 @@ function count_symbols(x::ANY,
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-@doc """
+"""
 Eliminates unused symbols from the LambdaInfo var_defs.
 Takes a LambdaInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
@@ -213,7 +213,7 @@ function eliminateUnusedLocals!(li :: LambdaInfo, body :: Expr, AstWalkFunc = no
   return body
 end
 
-@doc """
+"""
 Add Symbol "s" as input parameter to LambdaInfo "li".
 """
 function addInputParameter(vd :: VarDef, li :: LambdaInfo)
@@ -221,7 +221,7 @@ function addInputParameter(vd :: VarDef, li :: LambdaInfo)
   addLocalVariable(vd, li)
 end
 
-@doc """
+"""
 Add all variable in "collection" as input parameters to LambdaInfo "li".
 """
 function addInputParameters(collection, li :: LambdaInfo)
@@ -230,7 +230,7 @@ function addInputParameters(collection, li :: LambdaInfo)
   end
 end
 
-@doc """
+"""
 Returns the type of a Symbol or GenSym in "x" from LambdaInfo in "li".
 """
 function getType(x::Symbol, li::LambdaInfo)
@@ -260,56 +260,56 @@ function getType(x::Any, li::LambdaInfo)
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
 end
 
-@doc """
+"""
 Returns the descriptor for a local variable or input parameter "x" from LambdaInfo in "li".
 """
 function getDesc(x :: Symbol, li :: LambdaInfo)
   return li.var_defs[x].desc
 end
 
-@doc """
+"""
 Returns the VarDef for a Symbol in LambdaInfo in "li"
 """
 function getVarDef(s :: Symbol, li :: LambdaInfo)
   return li.var_defs[s]
 end
 
-@doc """
+"""
 Returns true if the Symbol in "s" is an input parameter in LambdaInfo in "li".
 """
 function isInputParameter(s :: Symbol, li :: LambdaInfo)
   return in(s, li.input_params)
 end
 
-@doc """
+"""
 Returns true if the Symbol in "s" is a local variable in LambdaInfo in "li".
 """
 function isLocalVariable(s :: Symbol, li :: LambdaInfo)
   return haskey(li.var_defs, s) && !isInputParameter(s, li)
 end
 
-@doc """
+"""
 Returns an array of Symbols for local variables.
 """
 function getLocalVariables(li :: LambdaInfo)
   return setdiff(collect(keys(li.var_defs)), li.input_params)
 end
 
-@doc """
+"""
 Returns true if the Symbol in "s" is an escaping variable in LambdaInfo in "li".
 """
 function isEscapingVariable(s :: Symbol, li :: LambdaInfo)
   return haskey(li.escaping_defs, s) && !isInputParameter(s, li)
 end
 
-@doc """
+"""
 Returns true if the GenSym in "s" is a GenSym in LambdaInfo in "li".
 """
 function isLocalGenSym(s :: GenSym, li :: LambdaInfo)
   return s.id >= 0 && s.id < size(li.gen_sym_typs, 1)
 end
 
-@doc """
+"""
 Add multiple local variables from some collection type.
 """
 function addLocalVariables(collection, li :: LambdaInfo)
@@ -318,14 +318,14 @@ function addLocalVariables(collection, li :: LambdaInfo)
   end
 end
 
-@doc """
+"""
 Adds a local variable from a VarDef to the given LambdaInfo.
 """
 function addLocalVariable(vd :: VarDef, li :: LambdaInfo)
   addLocalVariable(vd.name, vd.typ, vd.desc, li)
 end
 
-@doc """
+"""
 Add one or more bitfields in "desc_flag" to the descriptor for a variable.
 """
 function addDescFlag(s :: Symbol, desc_flag :: Int64, li :: LambdaInfo)
@@ -338,7 +338,7 @@ function addDescFlag(s :: Symbol, desc_flag :: Int64, li :: LambdaInfo)
   end
 end
 
-@doc """
+"""
 Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
@@ -358,7 +358,7 @@ function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   return false
 end
 
-@doc """
+"""
 Adds a new escaping variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
@@ -379,14 +379,14 @@ function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   return false
 end
 
-@doc """
+"""
 Adds a new escaping variable from a VarDef in parameter "vd" into LambdaInfo "li".
 """
 function addEscapingVariable(vd :: VarDef, li :: LambdaInfo)
   addEscapingVariable(vd.name, vd.typ, vd.desc, li)
 end
 
-@doc """
+"""
 Add a new GenSym to the LambdaInfo in "li" with the given type in "typ".
 Returns the new GenSym.
 """
@@ -395,7 +395,7 @@ function addGenSym(typ, li :: LambdaInfo)
   return GenSym(length(li.gen_sym_typs) - 1) 
 end
 
-@doc """
+"""
 Add a local variable to the function corresponding to LambdaInfo in "li" with name (as String), type and descriptor.
 Returns true if variable already existed and was updated, false otherwise.
 """
@@ -403,7 +403,7 @@ function addLocalVar(name :: AbstractString, typ, desc :: Int64, li :: LambdaInf
   addLocalVar(Symbol(name), typ, desc, li)
 end
 
-@doc """
+"""
 Add a local variable to the function corresponding to LambdaInfo in "li" with name (as Symbol), type and descriptor.
 Returns true if variable already existed and was updated, false otherwise.
 """
@@ -419,7 +419,7 @@ function addLocalVar(name :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   return false
 end
 
-@doc """
+"""
 Remove a local variable from lambda "li" given the variable's "name".
 Returns true if the variable existed and it was removed, false otherwise.
 """
@@ -432,7 +432,7 @@ function removeLocalVar(name :: Symbol, li :: LambdaInfo)
   end
 end
 
-@doc """
+"""
 Convert the lambda expression's args[2][1] from Array{Array{Any,1},1} to a Dict{Symbol,VarDef}.
 The internal triples are extracted and asserted that name and desc are of the appropriate type.
 """
@@ -455,7 +455,7 @@ function createVarDict(x :: Array{Any, 1})
   return ret
 end
 
-@doc """
+"""
 Replace the symbols in an expression "expr" with those defined in the
 dictionary "dict".  Return the result expression, which may share part of the
 input expression, but the input "expr" remains intact and is not modified.
@@ -498,7 +498,7 @@ function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
 end
 
 
-@doc """
+"""
 Replace the symbols in an expression "expr" with those defined in the
 dictionary "dict".  Return the result expression, which may share part of the
 input expression, and the input "expr" may be modified inplace and shall not be used
@@ -542,7 +542,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFun
   return expr
 end
 
-@doc """
+"""
 Merge "inner" lambdaInfo into "outer", and "outer" is changed as result.  Note
 that the input_params, static_parameter_names, and escaping_defs of "outer" do
 not change, other fields are merged. The GenSyms in "inner" will need to adjust
@@ -579,7 +579,7 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   return dict
 end
 
-@doc """
+"""
 Convert a lambda expression into our internal storage format, LambdaInfo.
 The input is asserted to be an expression whose head is :lambda.
 """
@@ -621,14 +621,14 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   return ret
 end
 
-@doc """
+"""
 Returns the type of the lambda as stored in LambdaInfo "li" and as extracted during lambdaExprToLambdaInfo.
 """
 function getReturnType(li :: LambdaInfo)
   return li.return_type
 end
 
-@doc """
+"""
 Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
 and the inferred return type of the input method.
@@ -639,7 +639,7 @@ function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Tuple; optimize = tru
   return Base.uncompressed_ast(lambda), ty
 end
 
-@doc """
+"""
 Convert the Dict{Symbol,VarDef} internal storage format from a dictionary back into an array of Any triples.
 """
 function dictToArray(x :: Dict{Symbol,VarDef})
@@ -650,7 +650,7 @@ function dictToArray(x :: Dict{Symbol,VarDef})
   return ret
 end
 
-@doc """
+"""
 Create the args[2] part of a lambda expression given an object of our internal storage format LambdaInfo.
 """
 function createMeta(lambdaInfo :: LambdaInfo)
@@ -664,7 +664,7 @@ function createMeta(lambdaInfo :: LambdaInfo)
   return ret
 end
 
-@doc """
+"""
 Convert our internal storage format, LambdaInfo, back into a lambda expression.
 This takes a LambdaInfo and a body as input parameters.
 This body can be a body expression or you can pass "nothing" if you want but then you will probably need to set the body in args[3] manually by yourself.
@@ -675,7 +675,7 @@ function lambdaInfoToLambdaExpr(lambdaInfo :: LambdaInfo, body)
   return Expr(:lambda, lambdaInfo.input_params, createMeta(lambdaInfo), body)
 end
 
-@doc """
+"""
 Update the descriptor part of the VarDef dealing with whether the variable is assigned or not in the function.
 Takes the lambdaInfo and a dictionary that maps symbols names to the number of times they are statically assigned in the function.
 """
@@ -700,7 +700,7 @@ function updateAssignedDesc(lambdaInfo :: LambdaInfo, symbol_assigns :: Dict{Sym
   end
 end
 
-@doc """
+"""
 Returns the body expression part of a lambda expression.
 """
 function getBody(lambda :: Expr)
@@ -708,7 +708,7 @@ function getBody(lambda :: Expr)
   return lambda.args[3]
 end
 
-@doc """
+"""
 Returns an array of Symbols corresponding to those parameters to the method that are going to be passed by reference.
 In short, isbits() types are passed by value and !isbits() types are passed by reference.
 """

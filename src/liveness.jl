@@ -36,7 +36,7 @@ import Base.show
 
 include("function-descriptions.jl")
 
-@doc """
+"""
 Convenience function to create an Expr and make sure the type is filled in as well.
 The first arg is the type of the Expr and the rest of the args are the constructors args to Expr.
 """
@@ -55,7 +55,7 @@ end
 
 SymGen = Union{Symbol, GenSym}
 
-@doc """
+"""
 Liveness information for a TopLevelStatement in the CFG.
 Contains a pointer to the corresponding CFG TopLevelStatement.
 Contains def, use, live_in, and live_out for the current statement.
@@ -71,7 +71,7 @@ type TopLevelStatement
     TopLevelStatement(t) = new(t, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}())
 end
 
-@doc """
+"""
 Overload of Base.show to pretty-print a LivenessAnalysis.TopLevelStatement.
 """
 function show(io::IO, tls::TopLevelStatement)
@@ -104,7 +104,7 @@ function show(io::IO, tls::TopLevelStatement)
     println(io, "Expr: ", tls.tls.expr)
 end
 
-@doc """
+"""
 Sometimes if new AST nodes are introduced then we need to ask for their def and use set as a whole
 and then incorporate that into our liveness analysis directly.
 """
@@ -113,7 +113,7 @@ type AccessSummary
     use
 end
 
-@doc """
+"""
 Liveness information for a BasicBlock.
 Contains a pointer to the corresponding CFG BasicBlock.
 Contains def, use, live_in, and live_out for this basic block.
@@ -132,7 +132,7 @@ type BasicBlock
     BasicBlock(bb) = new(bb, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), TopLevelStatement[])
 end
 
-@doc """
+"""
 Overload of Base.show to pretty-print a LivenessAnalysis.BasicBlock.
 """
 function show(io::IO, bb::BasicBlock)
@@ -184,7 +184,7 @@ function show(io::IO, bb::BasicBlock)
     end
 end
 
-@doc """
+"""
 Called when AST traversal finds some Symbol "sym" in a basic block "bb".
 "read" is true if the symbol is being used and false if it is being defined.
 """
@@ -250,7 +250,7 @@ function add_access(bb, sym, read)
     nothing
 end
 
-@doc """
+"""
 Holds the state during the AST traversal.
 cfg = the control flow graph from the CFGs module.
 map = our own map of CFG basic blocks to our own basic block information with liveness in it.
@@ -272,7 +272,7 @@ type expr_state
     end
 end
 
-@doc """
+"""
 The main return type from LivenessAnalysis.
 Contains a dictionary that maps CFG basic block to liveness basic blocks.
 Also contains the corresponding CFG.
@@ -286,7 +286,7 @@ type BlockLiveness
     end
 end
 
-@doc """
+"""
 The live_in, live_out, def, and use routines are all effectively the same but just extract a different field name.
 Here we extract this common behavior where x can be a liveness or CFG basic block or a liveness or CFG statement.
 bl is BlockLiveness type as returned by a previous LivenessAnalysis.
@@ -316,35 +316,35 @@ function get_info_internal(x::Any, bl::BlockLiveness, field)
     throw(string("get_info_internal called with non-BB and non-TopLevelStatement input."))
 end
 
-@doc """
+"""
 Get the live_in information for "x" where x can be a liveness or CFG basic block or a liveness or CFG statement.
 """
 function live_in(x, bl :: BlockLiveness)
     get_info_internal(x, bl, :live_in)
 end
 
-@doc """
+"""
 Get the live_out information for "x" where x can be a liveness or CFG basic block or a liveness or CFG statement.
 """
 function live_out(x, bl :: BlockLiveness)
     get_info_internal(x, bl, :live_out)
 end
 
-@doc """
+"""
 Get the def information for "x" where x can be a liveness or CFG basic block or a liveness or CFG statement.
 """
 function def(x, bl :: BlockLiveness)
     get_info_internal(x, bl, :def)
 end
 
-@doc """
+"""
 Get the use information for "x" where x can be a liveness or CFG basic block or a liveness or CFG statement.
 """
 function use(x, bl :: BlockLiveness)
     get_info_internal(x, bl, :use)
 end
 
-@doc """
+"""
 Overload of Base.show to pretty-print BlockLiveness type.
 """
 function show(io::IO, bl::BlockLiveness)
@@ -362,14 +362,14 @@ function show(io::IO, bl::BlockLiveness)
     end
 end
 
-@doc """
+"""
 Query if the symbol in argument "x" is defined in live_info which can be a BasicBlock or TopLevelStatement.
 """
 function isDef(x :: SymGen, live_info)
   in(x, live_info.def)
 end
 
-@doc """
+"""
 Search for a statement with the given top-level number in the liveness information.
 Returns a LivenessAnalysis.TopLevelStatement having that top-level number or "nothing" if no such statement could be found.
 """
@@ -388,7 +388,7 @@ function find_top_number(top_number::Int, bl::BlockLiveness)
 end
 
 
-@doc """
+"""
 Search for a basic block containing a statement with the given top-level number in the liveness information.
 Returns a basic block label of a block having that top-level number or "nothing" if no such statement could be found.
 """
@@ -409,7 +409,7 @@ function find_bb_for_statement(top_number::Int, bl::BlockLiveness)
   nothing
 end
 
-@doc """
+"""
 Clear the live_in and live_out data corresponding to all basic blocks and statements and then recompute liveness information.
 """
 function recompute_live_ranges(state, dfn)
@@ -427,7 +427,7 @@ function recompute_live_ranges(state, dfn)
     nothing
 end
 
-@doc """
+"""
 Compute the live_in and live_out information for each basic block and statement.
 """
 function compute_live_ranges(state :: expr_state, dfn)
@@ -496,7 +496,7 @@ function compute_live_ranges(state :: expr_state, dfn)
     nothing
 end
 
-@doc """
+"""
 Dump a bunch of debugging information about BlockLiveness.
 """
 function dump_bb(bl :: BlockLiveness)
@@ -527,13 +527,13 @@ function dump_bb(bl :: BlockLiveness)
     end
 end
 
-@doc """
+"""
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
-@doc """
+"""
 Walk through a lambda expression.
 We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
 We don't recurse into the body here because from_expr handles that with fromCFG.
@@ -545,7 +545,7 @@ function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback 
   dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
-@doc """
+"""
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
@@ -561,7 +561,7 @@ function from_exprs(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, ca
   nothing
 end
 
-@doc """
+"""
 Walk through an assignment expression.
 """
 function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
@@ -586,14 +586,14 @@ function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_stat
   dprintln(3,"liveness from_assignment done handling lhs")
 end
 
-@doc """
+"""
 Add an entry the dictionary of which arguments can be modified by which functions.
 """
 function addUnmodifiedParams(func, signature :: Array{DataType,1}, unmodifieds, state :: expr_state)
   state.params_not_modified[(func, signature)] = unmodifieds
 end
 
-@doc """
+"""
 Get the type of some AST node.
 """
 function typeOfOpr(x :: ANY, li :: LambdaInfo)
@@ -632,7 +632,7 @@ function typeOfOpr(x :: ANY, li :: LambdaInfo)
   return ret
 end
 
-@doc """
+"""
 Returns true if a parameter is passed by reference.
 isbits types are not passed by ref but everything else is (is this always true..any exceptions?)
 """
@@ -698,7 +698,7 @@ function __init__()
 #  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
 end
 
-@doc """
+"""
 For a given function and signature, return which parameters can be modified by the function.
 If we have cached this information previously then return that, else cache the information for some
 well-known functions or default to presuming that all arguments could be modified.
@@ -775,7 +775,7 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
   return state.params_not_modified[fs]
 end
 
-@doc """
+"""
 Walk through a call expression.
 """
 function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
@@ -825,14 +825,14 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   end
 end
 
-@doc """
+"""
 The default callback that processes no non-standard Julia AST nodes.
 """
 function not_handled(a,b)
   nothing
 end
 
-@doc """
+"""
 Count the number of times that the symbol in "s" is defined in all the basic blocks.
 """
 function countSymbolDefs(s, lives)
@@ -850,7 +850,7 @@ function countSymbolDefs(s, lives)
   return count
 end
 
-@doc """
+"""
 ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
@@ -866,14 +866,14 @@ function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, n
   fromCFG(live_res, cfg, callback, cbdata)
 end
 
-@doc """
+"""
 This function gives you the option of calling the ENTRY point from_expr with an ast and several optional named arguments.
 """
 function from_expr(ast :: Expr; callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
   from_expr(ast, callback, cbdata, no_mod)
 end
 
-@doc """
+"""
 Extract liveness information from the CFG.
 """
 function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
@@ -904,7 +904,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
   return ret
 end
 
-@doc """
+"""
 Process a return Expr node which is just a recursive processing of all of its args.
 """
 function from_return(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
@@ -913,7 +913,7 @@ function from_return(args, depth :: Int64, state :: expr_state, callback :: Func
     nothing
 end
 
-@doc """
+"""
 Process a gotoifnot which is just a recursive processing of its first arg which is the conditional.
 """
 function from_if(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
@@ -927,7 +927,7 @@ function from_if(args, depth :: Int64, state :: expr_state, callback :: Function
     nothing
 end
 
-@doc """
+"""
 Generic routine for how to walk most AST node types.
 """
 function from_expr(ast::LambdaStaticData,

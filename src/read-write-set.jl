@@ -35,7 +35,7 @@ import Base.show
 
 #SymGen = Union{Symbol, GenSym}
 
-@doc """
+"""
 Holds which scalars and which array are accessed and for array which index expressions are used.
 """
 type AccessSet
@@ -44,7 +44,7 @@ type AccessSet
     AccessSet() = new(Set{SymGen}(), Dict{SymGen, Array{Array{Any,1},1}}())
 end
 
-@doc """
+"""
 Stores which scalars and arrays are read or written in some code region.
 """
 type ReadWriteSetType
@@ -77,7 +77,7 @@ function merge!(outer :: ReadWriteSetType, inner :: ReadWriteSetType)
     merge!(outer.writeSet, inner.writeSet)
 end
 
-@doc """
+"""
 Return true if some symbol in "sym" is read either as a scalar or array within the computed ReadWriteSetType.
 """
 function isRead(sym :: SymGen, rws :: ReadWriteSetType)
@@ -90,7 +90,7 @@ function isRead(sym :: SymGen, rws :: ReadWriteSetType)
     end
 end
 
-@doc """
+"""
 Return true if some symbol in "sym" is written either as a scalar or array within the computed ReadWriteSetType.
 """
 function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
@@ -103,7 +103,7 @@ function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
     end
 end
 
-@doc """
+"""
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
@@ -111,7 +111,7 @@ uncompressed_ast(l::LambdaStaticData) =
 
 typealias CallbackType Union{Function, Void}
 
-@doc """
+"""
 Walk through a lambda expression.
 We just need to recurse through the lambda body and can ignore the rest.
 """
@@ -122,7 +122,7 @@ function from_lambda(ast :: Expr, depth, rws :: ReadWriteSetType, callback :: Ca
   return ast
 end
 
-@doc """
+"""
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
@@ -130,7 +130,7 @@ function from_exprs(ast::Array)
   from_exprs(ast, 1, ReadWriteSetType(), nothing, nothing)
 end
 
-@doc """
+"""
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
@@ -139,7 +139,7 @@ function from_exprs(ast :: Array, callback :: CallbackType, cbdata :: ANY)
   from_exprs(ast, 1, ReadWriteSetType(), callback, cbdata)
 end
 
-@doc """
+"""
 Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 """
@@ -147,7 +147,7 @@ function from_expr(ast :: ANY)
   from_expr(ast, 1, ReadWriteSetType(), nothing, nothing)
 end
 
-@doc """
+"""
 Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
@@ -156,7 +156,7 @@ function from_expr(ast :: ANY, callback :: CallbackType, cbdata :: ANY)
   from_expr(ast, 1, ReadWriteSetType(), callback, cbdata)
 end
 
-@doc """
+"""
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
@@ -174,7 +174,7 @@ function from_exprs(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, cal
   rws
 end
 
-@doc """
+"""
 Walk through a tuple.
 Just recursively call from_exprs on the internal tuple array to process each part of the tuple.
 """
@@ -182,7 +182,7 @@ function from_tuple(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, cal
   from_exprs(ast, depth+1, rws, callback, cbdata)
 end
 
-@doc """
+"""
 Process a :(::) AST node.
 Just process the symbol part of the :(::) node in ast[1] (which is args of the node passed in).
 """
@@ -191,7 +191,7 @@ function from_coloncolon(ast :: Array, depth :: Integer, rws :: ReadWriteSetType
   from_expr(ast[1], depth+1, rws, callback, cbdata)
 end
 
-@doc """
+"""
 In various places we need a SymGen type which is the union of Symbol and GenSym.
 This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
 """
@@ -207,7 +207,7 @@ function toSymGen(x::Any)
     throw(string("Found object type ", typeof(x), " for object ", x, " in toSymGen and don't know what to do with it."))
 end
 
-@doc """
+"""
 Process an assignment AST node.
 The left-hand side of the assignment is added to the writeSet.
 """
@@ -220,7 +220,7 @@ function from_assignment(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWrite
   from_expr(rhs, depth, rws, callback, cbdata)
 end
 
-@doc """
+"""
 Takes a dictionary of symbol to an array of index expression.
 Takes an array in "array_name" being accessed with expression "index_expr".
 Makes sure there is an entry in the dictionary for this array and adds the index expression to this array.
@@ -234,7 +234,7 @@ function addIndexExpr!(this_dict, array_name, index_expr)
   push!(this_dict[key], index_expr)
 end
 
-@doc """
+"""
 Process :call Expr nodes to find arrayref and arrayset calls and adding the corresponding index expressions to the read and write sets respectively.
 """
 function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
@@ -275,7 +275,7 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
   end
 end
 
-@doc """
+"""
 If an AST node is not recognized then we try the passing the node to the callback to see if 
 it was able to process it.  If so, then we process the regular Julia statement returned by
 the callback.
@@ -293,7 +293,7 @@ function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth 
   return true
 end
 
-@doc """
+"""
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.

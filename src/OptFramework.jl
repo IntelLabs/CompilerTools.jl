@@ -33,7 +33,7 @@ using CompilerTools
 export @acc, @noacc, addOptPass
 export PASS_MACRO, PASS_LOWERED, PASS_UNOPTTYPED, PASS_TYPED
 
-@doc """
+"""
 Creates a typed Expr AST node.
 Convenence function that takes a type as first argument and the varargs thereafter.
 The varargs are used to form an Expr AST node and the type parameter is used to fill in the "typ" field of the Expr.
@@ -49,7 +49,7 @@ const PASS_LOWERED = 1 :: Int
 const PASS_UNOPTTYPED = 2 :: Int
 const PASS_TYPED = 3 :: Int
 
-@doc """
+"""
 pretty print pass level number as string.
 """
 function dumpLevel(level)
@@ -61,7 +61,7 @@ function dumpLevel(level)
   end
 end
 
-@doc """
+"""
 A data structure that holds information about one high-level optimization pass to run.
 "func" is the callback function that does the optimization pass and should have the signature (GlobalRef, Expr, Tuple) where the GlobalRef provides the locate of the function to be optimized, Expr is the AST input to this pass, and Tuple is a tuple of all parameter types of the functions. It must return either an optimized Expr, or a Function.
 "level" indicates at which level this pass is to be run. 
@@ -74,7 +74,7 @@ end
 # Stores the default set of optimization passes if they are not specified on a line-by-line basis.
 optPasses = OptPass[]
 
-@doc """
+"""
 Set the default set of optimization passes to apply with the @acc macro. 
 """
 function setOptPasses(passes :: Array{OptPass,1})
@@ -83,7 +83,7 @@ function setOptPasses(passes :: Array{OptPass,1})
   end
 end
 
-@doc """
+"""
 Add an optimization pass. If this is going to be called multiple times then you need some external way of corrdinating the code/modules that are calling this function so that optimization passes are added in some sane order.
 """
 function addOptPass(pass :: OptPass)
@@ -98,14 +98,14 @@ function addOptPass(pass :: OptPass)
   push!(optPasses, pass) 
 end
 
-@doc """
+"""
 Same as the other addOptPass but with a pass call back function and pass level as input.
 """
 function addOptPass(func, level)
   addOptPass(OptPass(func, level))
 end
 
-@doc """
+"""
 Retrieve the AST of the given function "func" and signature "sig" for at the given pass "level".
 """
 function getCodeAtLevel(func, sig, level)
@@ -128,7 +128,7 @@ function getCodeAtLevel(func, sig, level)
   return ast[1]
 end
 
-@doc """
+"""
 convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
 """
 function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
@@ -162,12 +162,12 @@ function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
   end 
 end
 
-@doc """
+"""
 A global memo-table that maps both: the triple (function, signature, optPasses) to the trampoline function, and the trampoline function to the real function.
 """
 gOptFrameworkDict = Dict{Any,Any}()
 
-@doc """
+"""
 The callback state variable used by create_label_map and update_labels.
 label_map is a dictionary mapping old label ID's in the old AST with new label ID's in the new AST.
 next_block_num is a monotonically increasing integer starting from 0 so label occur sequentially in the new AST.
@@ -183,7 +183,7 @@ type lmstate
   end
 end
 
-@doc """
+"""
 An AstWalk callback that applies the label map created during create_label_map AstWalk.
 For each label in the code, replace that label with the rhs of the label map.
 """
@@ -205,7 +205,7 @@ function update_labels(x, state :: lmstate, top_level_number, is_top_level, read
   return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-@doc """
+"""
 An AstWalk callback that collects information about labels in an AST.
 The labels in AST are generally not sequential but to feed back into a Function Expr
 correctly they need to be.  So, we keep a map from the old label in the AST to a new label
@@ -238,7 +238,7 @@ function create_label_map(x, state :: lmstate, top_level_number, is_top_level, r
   return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-@doc """
+"""
 Sometimes update_labels creates two label nodes that are the same.
 This function removes such duplicate labels.
 """
@@ -260,7 +260,7 @@ function removeDupLabels(stmts)
   ret
 end
 
-@doc """
+"""
 Clean up the labels in AST by renaming them, and removing duplicates.
 """
 function cleanupASTLabels(ast)
@@ -277,7 +277,7 @@ function cleanupASTLabels(ast)
   return ast
 end
 
-@doc """
+"""
 Makes sure that a newly created function is correctly present in the internal Julia method table.
 """
 function tfuncPresent(func, tt)
@@ -296,7 +296,7 @@ function tfuncPresent(func, tt)
   end 
 end
 
-@doc """
+"""
 Takes a function, a signature, and a set of optimizations and applies that set of optimizations to the function,
 returns a new optimized function without modifying the input.  Argument explanation follows:
 1) func - the function being optimized
@@ -363,13 +363,13 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   end
 end
 
-@doc """
+"""
 A hack to get around Julia's type inference. This is essentially an identity conversion,
 but forces inferred return type to be the given type.
 """
 identical{T}(t::Type{T}, x::T)=x
 
-@doc """
+"""
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
 function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
@@ -429,7 +429,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   return wrapper_ast
 end
 
-@doc """
+"""
 An AstWalk callback function.
 Finds call sites in the AST and replaces them with calls to newly generated trampoline functions.
 These trampolines functions allow us to capture runtime types which in turn enables optimization passes to run on fully typed AST.
@@ -466,7 +466,7 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
   return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-@doc """
+"""
 When @acc is used at a function's callsite, we use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.  That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
 """
 function convert_expr(per_site_opt_set, ast)
@@ -481,7 +481,7 @@ function convert_expr(per_site_opt_set, ast)
   end
 end
 
-@doc """
+"""
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
 function convert_function(per_site_opt_set, opt_set, macros, ast)
@@ -553,7 +553,7 @@ function convert_macro(per_site_opt_set, opt_set, macros, ast)
   end
 end
 
-@doc """
+"""
 Statically evaluate per-site optimization passes setting, and return the result.
 """
 function evalPerSiteOptSet(per_site_opt_set)
@@ -565,7 +565,7 @@ function evalPerSiteOptSet(per_site_opt_set)
 end
 
 
-@doc """
+"""
 The @acc macro comes in two forms:
 1) @acc expression
 3) @acc function ... end
@@ -600,7 +600,7 @@ macro acc(ast1, ast2...)
   esc(ast)
 end
 
-@doc """
+"""
 Find the optimizing target function (after @acc macro) for a wrapper function in the given module. 
 Return the input function if not found. Always return as a GlobalRef.
 """
@@ -609,7 +609,7 @@ function findTargetFunc(mod::Module, name::Symbol)
    get(gOptFrameworkDict, func, func) :: GlobalRef
 end
 
-@doc """
+"""
 Find the original (before @acc macro) function for a wrapper function in the given module. 
 Return the input function if not found. Always return as a GlobalRef.
 """
@@ -646,7 +646,7 @@ function recursive_noacc(ast::ANY)
     ast
 end
 
-@doc """
+"""
 The macro @noacc can be used at call site to specifically run the non-accelerated copy of an accelerated function. It has no effect and gives a warning when the given function is not found to have been accelerated. We do not support nested @acc or @noacc. 
 """
 macro noacc(ast)

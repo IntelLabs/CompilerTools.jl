@@ -231,7 +231,7 @@ function_descriptions  = [
     bwdTriSolve!_Desc
 ]
 
-@doc """
+"""
 Takes a module and a function both as Strings. Looks up the specified module as
 part of the "Main" module and then looks and returns the Function object
 corresponding to the "func" String in that module.
@@ -250,7 +250,7 @@ function get_function_from_string(mod :: AbstractString, func :: AbstractString)
     return eval(:($modobj.$fsym))
 end
 
-@doc """
+"""
 Convert the function_descriptions table into a dictionary that can be passed to
 LivenessAnalysis to indicate which args are unmodified by which functions.
 """

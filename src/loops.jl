@@ -32,7 +32,7 @@ using CompilerTools
 import Base.show
 export DomLoops, Loop
 
-@doc """
+"""
 A type to hold information about a loop.
 A loop has a "head" that dominates all the other blocks in the loop.
 A loop has a back_edge which is a block that has "head" as one of its successors.
@@ -48,7 +48,7 @@ type Loop
     end
 end
 
-@doc """
+"""
 A type that holds information about which basic blocks dominate which other blocks.
 It also contains an array "loops" of all the loops discovered within the function.
 The same basic block may occur as a member in multiple loop entries if those loops are nested.
@@ -59,7 +59,7 @@ type DomLoops
     loops    :: Array{Loop,1}
 end
 
-@doc """
+"""
 Takes a DomLoops object containing loop information about the function.
 Returns true if the given basic block label "bb" is in some loop in the function.
 """
@@ -73,7 +73,7 @@ function isInLoop(dl :: DomLoops, bb :: Int)
     return false
 end
 
-@doc """
+"""
 Finds those computations within a loop that are iteration invariant.
 Takes as input:
    l - the Loop to find invariants in
@@ -178,7 +178,7 @@ function findLoopInvariants(l :: Loop,
     return all_uses
 end
 
-@doc """
+"""
 Add to the "members" of the loop being accumulated given "cur_bb" which is known to be a member of the loop.
 """
 function flm_internal(cur_bb, members, bbs)
@@ -196,7 +196,7 @@ function flm_internal(cur_bb, members, bbs)
     members
 end
 
-@doc """
+"""
 Find all the members of the loop as specified by the "head" basic block and the "back_edge" basic block.
 Also takes the dictionary of labels to basic blocks.
 Start with just the head of the loop as a member and then starts recursing with the back_edge using flm_internal.
@@ -206,7 +206,7 @@ function findLoopMembers(head, back_edge, bbs)
     flm_internal(back_edge, members, bbs)
 end
 
-@doc """
+"""
 Find the loops in a CFGs.CFG in "bl".
 """
 function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)

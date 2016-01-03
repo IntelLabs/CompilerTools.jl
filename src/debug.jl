@@ -27,13 +27,13 @@ module DebugMsg
 
 export init
 
-@doc """
+"""
 When this module is first loaded, we check if PROSPECT_DEV_MODE is set in environment.
 If it is not, then all debug messages will be surpressed.
 """
 const PROSPECT_DEV_MODE=haskey(ENV, "PROSPECT_DEV_MODE")
 
-@doc """
+"""
 A module using DebugMsg must call DebugMsg.init(), which expands to several local definitions
 that provide three functions: set_debug_level, dprint, dprintln.
 """

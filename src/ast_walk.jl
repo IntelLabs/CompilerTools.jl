@@ -37,13 +37,13 @@ end
 
 export AstWalk, ASTWALK_RECURSE, ASTWALK_REMOVE
 
-@doc """
+"""
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
-@doc """
+"""
 AstWalk through a lambda expression.
 Walk through each input parameters and the body of the lambda.
 """
@@ -76,7 +76,7 @@ function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_le
   return ast
 end
 
-@doc """
+"""
 AstWalk through a function body.
 """
 function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
@@ -99,7 +99,7 @@ function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
   return body
 end
 
-@doc """
+"""
 AstWalk through an array of expressions.
 """
 function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
@@ -121,7 +121,7 @@ function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_lev
   return body
 end
 
-@doc """
+"""
 AstWalk through an assignment expression.
 Recursively process the left and right hand sides with AstWalk.
 """
@@ -134,7 +134,7 @@ function from_assignment(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, to
   return ast
 end
 
-@doc """
+"""
 AstWalk through a call expression.
 Recursively process the name of the function and each of its arguments.
 """
@@ -155,7 +155,7 @@ function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
   return [fun; args]
 end
 
-@doc """
+"""
 Entry point into the code to perform an AST walk.
 You generally pass a lambda expression as the first argument.
 The third argument is an object that is opaque to AstWalk but that is passed to every callback.
@@ -176,7 +176,7 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
 end
 
-@doc """
+"""
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
