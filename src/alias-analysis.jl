@@ -198,7 +198,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   end
 end
 
-function from_call(state, expr :: Expr)
+function from_call(state, expr :: Expr, callback, cbdata)
   # The assumption here is that the program has already been translated
   # by DomainIR, and all args are either SymbolNode or Constant.
   local head = expr.head
@@ -212,7 +212,10 @@ function from_call(state, expr :: Expr)
   #dprintln(2, "AA from_call: new fun=", fun)
   fun = isa(fun, TopNode) ? fun.name : fun
   fun = isa(fun, GlobalRef) ? fun.name : fun
-  if is(fun, :arrayref) || is(fun, :arrayset) || is(fun, :getindex) || is(fun, :setindex!)
+  if is(fun, :reshape)
+    # assume reshape's return result to always alias its first argument
+    return from_expr(state, args[1], callback, cbdata)
+  elseif is(fun, :arrayref) || is(fun, :arrayset) || is(fun, :getindex) || is(fun, :setindex!)
     # This is actually a conservative answer since arrayref might return
     # an array too, but we don't consider it as a case to handle.
     return Unknown
@@ -320,10 +323,10 @@ function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = noth
     elseif is(head, :return)
         return from_return(state, ast, callback, cbdata)
     elseif is(head, :call)
-        return from_call(state, ast)
+        return from_call(state, ast, callback, cbdata)
         # TODO: catch domain IR result here
     elseif is(head, :call1)
-      return from_call(state, ast)
+      return from_call(state, ast, callback, cbdata)
     elseif is(head, :method)
         # skip
     elseif is(head, :line)
