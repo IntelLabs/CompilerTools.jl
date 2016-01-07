@@ -286,6 +286,32 @@ type BlockLiveness
     end
 end
 
+function is_internal(x :: SymGen, bl :: BlockLiveness, field)
+    for entry in bl.basic_blocks
+        if in(x, getfield(entry[2], field))
+            return true
+        end
+    end
+    
+    return false
+end
+
+function is_livein(x :: SymGen, bl :: BlockLiveness)
+    return is_internal(x, bl, :live_in)
+end
+
+function is_liveout(x :: SymGen, bl :: BlockLiveness)
+    return is_internal(x, bl, :live_out)
+end
+
+function is_def(x :: SymGen, bl :: BlockLiveness)
+    return is_internal(x, bl, :def)
+end
+
+function is_use(x :: SymGen, bl :: BlockLiveness)
+    return is_internal(x, bl, :use)
+end
+
 """
 The live_in, live_out, def, and use routines are all effectively the same but just extract a different field name.
 Here we extract this common behavior where x can be a liveness or CFG basic block or a liveness or CFG statement.
