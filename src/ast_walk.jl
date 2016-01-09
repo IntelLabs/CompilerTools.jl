@@ -25,13 +25,18 @@ THE POSSIBILITY OF SUCH DAMAGE.
 
 module AstWalker
 
+# See the documentation on the AstWalk function for a description of how to use this module.
+
 import ..DebugMsg
 DebugMsg.init()
 
-# Return this value to indicate to AstWalk to recursively process the given node.
+# Return this value to indicate to AstWalk that you didn't process the current node
+# and that AstWalk should recursively process the given node.
 immutable ASTWALK_RECURSE
 end
 
+# Return this node to indicate that AstWalk should remove the current node from
+# the container in which it resides.
 immutable ASTWALK_REMOVE
 end
 
@@ -55,6 +60,7 @@ function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_le
   body  = ast[3]
 
   dprintln(3,"from_lambda pre-convert param = ", param, " typeof(param) = ", typeof(param))
+  # AstWalk over each incoming parameter to the lambda.
   for i = 1:length(param)
     dprintln(3,"from_lambda param[i] = ", param[i], " typeof(param[i]) = ", typeof(param[i]))
     param[i] = from_expr(param[i], depth, callback, cbdata, top_level_number, false, read)
@@ -62,8 +68,10 @@ function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_le
   dprintln(3,"from_lambda post-convert param = ", param, " typeof(param) = ", typeof(param))
 
   dprintln(3,"from_lambda pre-convert body = ", body, " typeof(body) = ", typeof(body))
+  # AstWalk over the body of the function.
   body = from_expr(body, depth, callback, cbdata, top_level_number, false, read)
   dprintln(3,"from_lambda post-convert body = ", body, " typeof(body) = ", typeof(body))
+  # Make sure that what comes back is still a body type.
   if typeof(body) != Expr || body.head != :body
     dprintln(0,"AstWalk from_lambda got a non-body returned from procesing body")
     dprintln(0,body)
@@ -81,21 +89,27 @@ AstWalk through a function body.
 """
 function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   len = length(ast)
+  # We need to differentiate top-level statements from non-top level and so this function handles the 
+  # top-level ones.
   top_level = true
 
   body = Any[]
 
+  # AstWalk over each statement in a lambda body.
   for i = 1:len
     dprintln(2,"Processing top-level ast #",i," depth=",depth)
 
     dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
     new_expr = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
     dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
+    # If the return result doesn't indicate the statement should be removed then put the new version
+    # of the statement (new_expr) into the new body.
     if new_expr != ASTWALK_REMOVE
       push!(body, new_expr)
     end
   end
 
+  # Return the updated body.
   return body
 end
 
@@ -104,6 +118,8 @@ AstWalk through an array of expressions.
 """
 function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   len = length(ast)
+  # We need to differentiate top-level statements from non-top level and so this function handles the 
+  # non-top-level ones.
   top_level = false
 
   body = Any[]
@@ -126,7 +142,7 @@ AstWalk through an assignment expression.
 Recursively process the left and right hand sides with AstWalk.
 """
 function from_assignment(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
-#  assert(length(ast) == 2)
+  # Process an assignment statement by process first the left-hand side and then the right.
   dprintln(3,"from_assignment, lhs = ", ast[1])
   ast[1] = from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false)
   dprintln(3,"from_assignment, rhs = ", ast[2])
@@ -140,16 +156,19 @@ Recursively process the name of the function and each of its arguments.
 """
 function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   assert(length(ast) >= 1)
+  # A call is a function followed by its arguments.  Extract these parts below.
   fun  = ast[1]
   args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
   if length(args) > 0
     dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
-  # symbols don't need to be translated
+  # Symbols don't need to be translated.
   if typeof(fun) != Symbol
+      # I suppose this "if" could be wrong.  If you wanted to replace all "x" functions with "y" then you'd need this wouldn't you?
       fun = from_expr(fun, depth, callback, cbdata, top_level_number, false, read)
   end
+  # Process the arguments to the function recursively.
   args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
 
   return [fun; args]
@@ -157,7 +176,17 @@ end
 
 """
 Entry point into the code to perform an AST walk.
-You generally pass a lambda expression as the first argument.
+
+This function will cause every node in the AST to be visited and a callback invoked on each one.
+The callback can record information about nodes it sees through the opaque cbdata parameter.
+The callback can also cause the current node to be replaced in the AST by returning a new AST
+node.  If the callback doesn't wish to change the node then it returns ASTWALK_RECURSE which causes
+AstWalk to recursively process the sub-trees under the current AST node.  If you want to modify the
+current AST node and want the sub-trees of that AST node to be processed first then you manually have
+to recursively call AstWalk on each one.  There are some cases where you don't want to recursively 
+process the sub-trees first and so this recursive process has to be left up to the user.
+
+You generally pass a lambda expression as the first argument although any AST node is acceptable.
 The third argument is an object that is opaque to AstWalk but that is passed to every callback.
 You can use this object to collect data about the AST as it is walked or to hold information on
 how to change the AST as you are walking over it.
@@ -169,8 +198,6 @@ are as follows:
     3) Specifies the index of the body's statement that is currently being processed.
     4) True if the current AST node being walked is the root of a top-level statement, false if the AST node is a sub-tree of a top-level statement.
     5) True if the AST node is being read, false if it is being written.
-The callback should return an array of items.  It does this because in some cases it makes sense to return multiple things so
-all callbacks have to to keep the interface consistent.
 """
 function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
@@ -188,18 +215,25 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     end
     dprintln(2,"from_expr depth=",depth," ", " ", ast)
 
+    # For each AST node, we first call the user-provided callback to see if they want to do something
+    # with the node.
     ret = callback(ast, cbdata, top_level_number, is_top_level, read)
     dprintln(2,"callback ret = ",ret)
+    # If the return value of the callback isn't ASTWALK_RECURSE then the callback is replaced the current
+    # AST node with "ret".
     if ret != ASTWALK_RECURSE
         return ret
     end
 
+    # The user callback didn't replace the AST node so recursively process it.
+    # We have a different from_expr_helper that is accurately typed for each possible AST node type.
     ast = from_expr_helper(ast, depth, callback, cbdata, top_level_number, is_top_level, read)
 
     dprintln(3,"Before return for ", ast)
     return ast
 end
 
+# Handle recursively walking over an Expr type AST node.
 function from_expr_helper(ast::Expr,
                           depth,
                           callback,
@@ -207,6 +241,12 @@ function from_expr_helper(ast::Expr,
                           top_level_number,
                           is_top_level,
                           read)
+    # If you have an assignment with an Expr as its left-hand side then you get here with "read = false"
+    # but that doesn't  mean the whole Expr is written.  In fact, none of it is written so we set read
+    # back to true and then restore in the incoming read value at the end.
+    read_save = read
+    read = true
+
     dprint(2,"Expr ")
     head = ast.head
     args = ast.args
@@ -371,12 +411,15 @@ function from_expr_helper(ast::Expr,
     end
     ast.head = head
     ast.args = args
-    # ast = Expr(head, args...)
-    ast.typ = typ
+    ast.typ  = typ
+
+    read = read_save
 
     return ast
 end
 
+# The following are for non-Expr AST nodes are generally leaf nodes of the AST where no 
+# recursive processing is possible.
 function from_expr_helper(ast::Union{Symbol,GenSym,SymbolNode,TopNode},
                           depth,
                           callback,
@@ -434,7 +477,10 @@ function from_expr_helper(ast::QuoteNode,
     return ast
 end
 
-function from_expr_helper(ast::Any,
+"""
+The catchall function to process other kinds of AST nodes.
+"""
+function from_expr_helper(ast::ANY,
                           depth,
                           callback,
                           cbdata::ANY,

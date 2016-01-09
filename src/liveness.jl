@@ -185,7 +185,7 @@ function show(io::IO, bb::BasicBlock)
 end
 
 """
-Called when AST traversal finds some Symbol "sym" in a basic block "bb".
+Called when AST traversal finds some Symbol or GenSym "sym" in a basic block "bb".
 "read" is true if the symbol is being used and false if it is being defined.
 """
 function add_access(bb, sym, read)
@@ -195,11 +195,12 @@ function add_access(bb, sym, read)
     end
 
     assert(length(bb.statements) != 0)
-    tls = bb.statements[end]    # Get the statements to which we will add access information.
+    tls = bb.statements[end]    # Get the statement to which we will add access information.
     dprintln(3, "tls = ", tls)
     write = !read
 
     # If this synbol is already in the statement then it is already in the basic block as a whole.
+    # Therefore nothing would change if we did the rest of the function and we can shortcut quit here.
     if in(sym, tls.def)
         dprintln(3, "sym already in tls.def")
         return nothing
@@ -214,6 +215,7 @@ function add_access(bb, sym, read)
     if in(sym, tls.use)
         if write
             dprintln(3, "sym already in tls.use so adding to def")
+            # Handle write after read for a statement.
             push!(tls.def, sym)
         end
     elseif read
@@ -221,9 +223,11 @@ function add_access(bb, sym, read)
             throw(string("Found a read after a write at the statement level in liveness analysis."))
         end
         dprintln(3, "adding sym to tls.use ", sym)
+        # Record the first use of this sym in this statement.
         push!(tls.use, sym)
     else # must be a write
         dprintln(3, "adding sym to tls.def ", sym)
+        # Record the first def of this sym in this statement.
         push!(tls.def, sym)
     end
 
@@ -233,6 +237,7 @@ function add_access(bb, sym, read)
     if in(sym, bb.use)
         if write
             dprintln(3, "sym already in bb.use so adding to def")
+            # Handle write after read for a  basic block.
             push!(bb.def, sym)
         end
     elseif read
@@ -286,6 +291,9 @@ type BlockLiveness
     end
 end
 
+"""
+Helper function to say if the given SymGen is in some basic block in "bl" for the given field (which is :def, :use, :live_in, or :live_out).
+"""
 function is_internal(x :: SymGen, bl :: BlockLiveness, field)
     for entry in bl.basic_blocks
         if in(x, getfield(entry[2], field))
@@ -296,18 +304,30 @@ function is_internal(x :: SymGen, bl :: BlockLiveness, field)
     return false
 end
 
+"""
+Returns true if SymGen x is part of the live_in field in some basic block in bl.
+"""
 function is_livein(x :: SymGen, bl :: BlockLiveness)
     return is_internal(x, bl, :live_in)
 end
 
+"""
+Returns true if SymGen x is part of the live_out field in some basic block in bl.
+"""
 function is_liveout(x :: SymGen, bl :: BlockLiveness)
     return is_internal(x, bl, :live_out)
 end
 
+"""
+Returns true if SymGen x is part of the def field in some basic block in bl.
+"""
 function is_def(x :: SymGen, bl :: BlockLiveness)
     return is_internal(x, bl, :def)
 end
 
+"""
+Returns true if SymGen x is part of the use field in some basic block in bl.
+"""
 function is_use(x :: SymGen, bl :: BlockLiveness)
     return is_internal(x, bl, :use)
 end
@@ -466,18 +486,18 @@ function compute_live_ranges(state :: expr_state, dfn)
         found_change = false
 
         # For each basic block in reverse depth-first order.
+        # This order optimizes the convergence time but isn't necessary for correctness.
         for i = length(dfn):-1:1
             bb_index = dfn[i]
-            bb = state.map[bbs[bb_index]]
+            bb = state.map[bbs[bb_index]]   # get the basic block
 
             accum = Set{SymGen}()
             if bb_index == -2
               # Special case for final block.
-              # Treat input arrays as live at end of function.
-              #accum = Set{SymGen}(state.ref_params)
               dprintln(3,"Final block live_out = ", accum)
+              # Nothing is live out of the final block.
             else
-              # The live_out of this block is the union of the live_in of every successor block.
+              # The live_out of any non-final block is the union of the live_in of every successor block.
               for j in bb.cfgbb.succs
                 accum = union(accum, state.map[j].live_in)
               end
@@ -498,7 +518,6 @@ function compute_live_ranges(state :: expr_state, dfn)
                 found_change = true
             end
         end
-
     end
 
     # Compute the intra-block live ranges using the inter-block live ranges.
@@ -810,10 +829,12 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   local args = ast[2:end]
   dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
    
-  # Form the signature of the call in a tuple.
+  # Form the signature of the call in an array.
   arg_type_array = DataType[]
+  # For each argument to the call.
   for i = 1:length(args)
     dprintln(3, "arg ", i, " = ", args[i], " typeof arg = ", typeof(args[i]))
+    # Make sure the type of the argument resolves to a DataType.
     too = typeOfOpr(args[i], state.li)
     if !isa(too, DataType)
       dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
@@ -823,6 +844,13 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   dprintln(3, "arg_type_array = ", arg_type_array)
   #arg_type_tuple = Tuple{arg_type_array...}
   # See which arguments to the function can be modified by the function.
+
+  # We can do better/tighter analysis if we know which arguments to some call are modified.
+  # bits type arguments are never modified.
+  # non-bits types argument may be modified unless we know otherwise.
+  # We prime a dictionary with some common, well-known functions and record that their non-bits type
+  # arguments are not modified.
+  # getUnmodifiedArgs returns an array to indicate which args to the call may be modified.
   unmodified_args = getUnmodifiedArgs(fun, args, arg_type_array, state)
   assert(length(unmodified_args) == length(args))
   dprintln(3,"unmodified_args = ", unmodified_args)
@@ -1003,8 +1031,10 @@ function from_expr_helper(ast::Expr,
                           state::expr_state,
                           callback::Function,
                           cbdata::ANY)
-    #addStatement(top_level, state, ast)
-    read_save = state.read
+    # If you have an assignment with an Expr as its left-hand side then you get here with "read = false"
+    # but that doesn't  mean the whole Expr is written.  In fact, none of it is written so we set read
+    # back to true and then restore in the incoming read value at the end.
+    read_save  = state.read
     state.read = true
 
     dprint(2,"Expr ")
