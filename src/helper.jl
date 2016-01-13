@@ -30,7 +30,7 @@ module Helper
 
 using ..LambdaHandling
 
-export TypedExpr, isArrayType, isCall, isTopNode, toSymGen
+export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple
 
 
 """
@@ -97,6 +97,22 @@ function toSymGen(x :: GenSym)
     return x
 end
 
+
+"""
+Returns true if input "a" is a tuple and each element of the tuple of isbits type.
+"""
+function isbitstuple(a::Tuple)
+    for i in a
+        if !isbits(i)
+            return false
+        end
+    end
+    return true
+end
+
+function isbitstuple(a::Any)
+    return false
+end
 
 end # module Helper
 
