@@ -991,6 +991,7 @@ function from_expr(ast::ANY,
     dprintln(2,"from_expr ast = ", ast, " depth = ",depth," ", " asttyp = ", typeof(ast), " state.read = ", state.read)
 
     handled = callback(ast, cbdata)
+    dprintln(3,"callback handled ", handled)
     if handled != nothing
         if length(handled) > 0
             dprintln(3,"Processing expression from callback for ", ast)
