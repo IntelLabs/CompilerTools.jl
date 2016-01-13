@@ -31,19 +31,10 @@ DebugMsg.init()
 
 using CompilerTools
 using CompilerTools.AstWalker
+using CompilerTools.Helper
 
 import Base.show
 
-"""
-Creates a typed Expr AST node.
-Convenence function that takes a type as first argument and the varargs thereafter.
-The varargs are used to form an Expr AST node and the type parameter is used to fill in the "typ" field of the Expr.
-"""
-function TypedExpr(typ, rest...)
-    res = Expr(rest...)
-    res.typ = typ
-    res
-end
 
 export from_exprs, find_bb_for_statement, show
 
