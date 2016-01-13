@@ -31,6 +31,7 @@ module CompilerTools
 include("debug.jl")
 include("ast_walk.jl")
 include("lambda.jl")
+include("helper.jl")
 include("read-write-set.jl")
 include("CFGs.jl")
 include("liveness.jl")
