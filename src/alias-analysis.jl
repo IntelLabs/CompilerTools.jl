@@ -279,28 +279,32 @@ function from_return(state, expr :: Expr, callback, cbdata :: ANY)
   end
 end
 
-function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = nothing)
-  if isa(ast, LambdaStaticData)
-    ast = uncompressed_ast(ast)
-  end
+function from_expr(state, ast::LambdaStaticData, callback=not_handled, cbdata :: ANY = nothing)
+    return from_expr(state, uncompressed_ast(ast), callback, cbdata)
+end
 
-  # "nothing" output means couldn't be handled
-  handled = callback(ast, state, cbdata)
-  if isa(handled, Array)
+
+function process_callback(handled::Array, state, ast, callback, cbdata)
     dprintln(3,"Processing expression from callback for ", ast) 
     dprintln(3,handled)
     return from_exprs(state, handled, callback, cbdata)
-    # AST node replaced
-  elseif isa(handled, Expr)
-    ast = handled
-  elseif isa(handled,Integer)
+end
+
+# AST node replaced
+function process_callback(handled::Expr, state, ast, callback, cbdata)
+    return from_expr_inner(state, handled, callback, cbdata)
+end
+
+function process_callback(handled::Integer, state, ast, callback, cbdata)
     return handled
-  end
+end
 
+function process_callback(handled::Any, state, ast, callback, cbdata)
+    return from_expr_inner(state, ast, callback, cbdata)
+end
 
-  local asttyp = typeof(ast)
-  dprint(2, "AA from_expr: ", asttyp)
-  if is(asttyp, Expr)
+function from_expr_inner(state, ast::Expr, callback, cbdata)
+    
     local head = ast.head
     local args = ast.args
     local typ  = ast.typ
@@ -339,23 +343,40 @@ function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = noth
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
-  elseif isa(ast, SymNodeGen)
+
+  return Unknown
+end
+
+function from_expr_inner(state, ast::SymNodeGen, callback, cbdata)
     dprintln(2, " ", ast)
     return lookup(state, toSymGen(ast))
-  else
-    dprintln(2, " not handled ", ast)
-  end
+end
+
+function from_expr_inner(state, ast::ANY, callback, cbdata)
+  dprintln(2, " not handled ", ast)
   return Unknown
+end
+
+
+function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = nothing)
+
+  # "nothing" output means couldn't be handled
+  handled = callback(ast, state, cbdata)
+   return process_callback(handled, state, ast, callback, cbdata);
+
 end
 
 function isFromBase(x::GlobalRef)
   startswith(string(Base.resolve(x, force=true).mod), "Base")
 end
 
-function iselementarytype(typ)
-  isa(typ, DataType) && (typ.name == Type.name || eltype(typ) == typ)
+function iselementarytype(typ::DataType)
+  (typ.name == Type.name || eltype(typ) == typ)
 end
 
+function iselementarytype(typ::Any)
+  return false
+end
 
 function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, callback, cbdata :: ANY)
   local state = init_state(lambdaInfo, liveness)
