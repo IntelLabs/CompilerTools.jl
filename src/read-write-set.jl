@@ -27,6 +27,7 @@ module ReadWriteSet
 
 using CompilerTools
 using CompilerTools.LambdaHandling
+using CompilerTools.Helper
 
 import ..DebugMsg
 DebugMsg.init()
@@ -189,22 +190,6 @@ Just process the symbol part of the :(::) node in ast[1] (which is args of the n
 function from_coloncolon(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
   assert(length(ast) == 2)
   from_expr(ast[1], depth+1, rws, callback, cbdata)
-end
-
-"""
-In various places we need a SymGen type which is the union of Symbol and GenSym.
-This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
-"""
-function toSymGen(x::Union{Symbol,GenSym})
-    return x
-end
-
-function toSymGen(x::SymbolNode)
-    return x.name
-end
-
-function toSymGen(x::Any)
-    throw(string("Found object type ", typeof(x), " for object ", x, " in toSymGen and don't know what to do with it."))
 end
 
 """
