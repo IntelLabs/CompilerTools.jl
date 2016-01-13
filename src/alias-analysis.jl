@@ -44,6 +44,7 @@ DebugMsg.init()
 using Base.uncompressed_ast
 using CompilerTools.LambdaHandling
 using CompilerTools
+using CompilerTools.Helper
 
 # state to keep track of variable values
 const Unknown  = -1
@@ -111,16 +112,6 @@ function update(state, v, w)
     update_notarray(state, v)
   else
     update_unknown(state, v)
-  end
-end
-
-function toSymGen(x)
-  if isa(x, SymbolNode)
-    x.name
-  elseif isa(x, GenSym) || isa(x, Symbol) 
-    x
-  else
-    error("Expecting Symbol, SymbolNode, or GenSym, but got ", x)
   end
 end
 
@@ -235,7 +226,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
         typ = getType(exp, state.linfo)
         if !iselementarytype(typ)
           # complicated type
-          if isarray(typ)
+          if isArrayType(typ)
             # an array type!
             if !is(alias, nothing) # more than one array as input
               alias = Unknown
@@ -365,20 +356,12 @@ function iselementarytype(typ)
   isa(typ, DataType) && (typ.name == Type.name || eltype(typ) == typ)
 end
 
-function isarray(typ)
-  isa(typ, DataType) && is(typ.name, Array.name)
-end
-
-function isbitarray(typ)
-  isa(typ, DataType) && is(typ.name, BitArray.name)
-end
-
 
 function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, callback, cbdata :: ANY)
   local state = init_state(lambdaInfo, liveness)
   dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   for (v, vd) in lambdaInfo.var_defs
-    if !(isarray(vd.typ) || isbitarray(vd.typ))
+    if !isArrayType(vd.typ)
       update_notarray(state, v)
     end
   end
@@ -387,7 +370,7 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, c
     # Note we assume all input parameters do not aliasing each other,
     # which is a very strong assumption. This may require reconsideration.
     # Update: changed to assum nothing by default.
-    if isarray(vtyp) || isbitarray(vtyp)
+    if isArrayType(vtyp)
       #update_node(state, v, next_node(state))
       update_unknown(state, v)
     end
