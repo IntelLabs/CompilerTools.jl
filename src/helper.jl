@@ -30,7 +30,7 @@ module Helper
 
 using ..LambdaHandling
 
-export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple
+export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple, isPtrType
 
 
 """
@@ -46,24 +46,21 @@ end
 Returns true if the incoming type in "typ" is an array type.
 """
 function isArrayType(typ::DataType)
-    return (typ.name == Array.name || typ.name == BitArray.name)
-end
-
-
-"""
-Returns true if a given SymbolNode "x" is an Array type.
-"""
-function isArrayType(x :: SymbolNode)
-    the_type = x.typ
-    if typeof(the_type) == DataType
-        return isArrayType(x.typ)
-    end
-    return false
+    return (typ<:Array) || (typ<:BitArray)
 end
 
 function isArrayType(x::ANY)
     return false
 end
+
+function isPtrType(typ::DataType)
+    typ<:Ptr
+end
+
+function isPtrType(typ::ANY)
+    return false
+end
+
 
 function isCall(node::Expr)
     return node.head==:call
