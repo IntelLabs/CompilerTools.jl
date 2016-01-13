@@ -29,20 +29,11 @@ import ..DebugMsg
 DebugMsg.init()
 
 using CompilerTools
+using CompilerTools.Helper
 
 export @acc, @noacc, addOptPass
 export PASS_MACRO, PASS_LOWERED, PASS_UNOPTTYPED, PASS_TYPED
 
-"""
-Creates a typed Expr AST node.
-Convenence function that takes a type as first argument and the varargs thereafter.
-The varargs are used to form an Expr AST node and the type parameter is used to fill in the "typ" field of the Expr.
-"""
-function TypedExpr(typ, rest...)
-    res = Expr(rest...)
-    res.typ = typ
-    res
-end
 
 const PASS_MACRO = 0 :: Int
 const PASS_LOWERED = 1 :: Int
@@ -187,13 +178,15 @@ end
 An AstWalk callback that applies the label map created during create_label_map AstWalk.
 For each label in the code, replace that label with the rhs of the label map.
 """
-function update_labels(x, state :: lmstate, top_level_number, is_top_level, read)
-  asttyp = typeof(x)
-  if asttyp == LabelNode
+function update_labels(x::LabelNode, state :: lmstate, top_level_number, is_top_level, read)
     return LabelNode(state.label_map[x.label])
-  elseif asttyp == GotoNode
+end
+
+function update_labels(x::GotoNode, state :: lmstate, top_level_number, is_top_level, read)
     return GotoNode(state.label_map[x.label])
-  elseif asttyp == Expr
+end
+
+function update_labels(x::Expr, state :: lmstate, top_level_number, is_top_level, read)
     head = x.head
     args = x.args
     if head == :gotoifnot
@@ -201,9 +194,13 @@ function update_labels(x, state :: lmstate, top_level_number, is_top_level, read
       x.args[2] = state.label_map[else_label]
       return x
     end
-  end
-  return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
+
+function update_labels(x::ANY, state :: lmstate, top_level_number, is_top_level, read)
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
 
 """
 An AstWalk callback that collects information about labels in an AST.
@@ -222,9 +219,7 @@ of the label map.  For example, if you had the code:
    5 -> 3, 4 -> 3.
 This indicates that uses of both label 5 and label 4 in the code will become label 3 in the modified AST.
 """
-function create_label_map(x, state :: lmstate, top_level_number, is_top_level, read)
-  asttyp = typeof(x)
-  if asttyp == LabelNode
+function create_label_map(x::LabelNode, state :: lmstate, top_level_number, is_top_level, read)
     if state.last_was_label
       state.label_map[x.label] = state.next_block_num-1
     else
@@ -232,10 +227,12 @@ function create_label_map(x, state :: lmstate, top_level_number, is_top_level, r
       state.next_block_num += 1
     end
     state.last_was_label = true
-  else
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function create_label_map(x::ANY, state :: lmstate, top_level_number, is_top_level, read)
     state.last_was_label = false
-  end
-  return CompilerTools.AstWalker.ASTWALK_RECURSE
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 """

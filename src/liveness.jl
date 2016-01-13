@@ -29,22 +29,13 @@ import ..DebugMsg
 DebugMsg.init()
 
 using CompilerTools
+using CompilerTools.Helper
 using CompilerTools.CFGs
 using CompilerTools.LambdaHandling
 
 import Base.show
 
 include("function-descriptions.jl")
-
-"""
-Convenience function to create an Expr and make sure the type is filled in as well.
-The first arg is the type of the Expr and the rest of the args are the constructors args to Expr.
-"""
-function TypedExpr(typ, rest...)
-    res = Expr(rest...)
-    res.typ = typ
-    res
-end
 
 export BlockLiveness, find_bb_for_statement, show
 
@@ -53,7 +44,6 @@ type Access
     read
 end
 
-SymGen = Union{Symbol, GenSym}
 
 """
 Liveness information for a TopLevelStatement in the CFG.
