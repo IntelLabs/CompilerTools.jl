@@ -30,7 +30,7 @@ module Helper
 
 using ..LambdaHandling
 
-export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple, isPtrType
+export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple, isPtrType, isIntType
 
 
 """
@@ -108,6 +108,15 @@ function isbitstuple(a::Tuple)
 end
 
 function isbitstuple(a::Any)
+    return false
+end
+
+function isIntType(typ::DataType)
+    is(typ, Int64)  || is(typ, Int32)  || is(typ, Int16)  || is(typ, Int8)  || 
+    is(typ, UInt64) || is(typ, UInt32) || is(typ, UInt16) || is(typ, UInt8)
+end
+
+function isIntType(typ::ANY)
     return false
 end
 
