@@ -631,13 +631,19 @@ end
 """
 Get the type of some AST node.
 """
-function typeOfOpr(x :: ANY, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = ", typeof(x))
-  if isa(x, Expr) ret = x.typ
-  elseif isa(x, Symbol)
-    ret = getType(x, li)
-  elseif isa(x, SymbolNode)
-    typ1 = getType(x.name, li)
+function typeOfOpr(x::Expr, li :: LambdaInfo)
+  dprintln(3,"starting typeOfOpr, type = Expr")
+  return typeOfOpr_fixType(x.typ)
+end
+
+function typeOfOpr(x::SymGen, li :: LambdaInfo)
+  dprintln(3,"starting typeOfOpr, type = SymGen")
+  return typeOfOpr_fixType(getType(x, li))
+end
+
+function typeOfOpr(x::SymbolNode, li :: LambdaInfo)
+  dprintln(3,"starting typeOfOpr, type = SymbolNode")
+  typ1 = getType(x.name, li)
     if x.typ != typ1
       dprintln(2, "typeOfOpr x.typ and lambda type different")
       dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
@@ -645,26 +651,31 @@ function typeOfOpr(x :: ANY, li :: LambdaInfo)
     end
     assert(x.typ <: typ1)
     assert(isa(x.typ, Type))
-     ret = x.typ
-  elseif isa(x, GenSym) ret = getType(x, li)
-  elseif isa(x, GlobalRef) ret = typeof(eval(x))
-  elseif isa(x, SimpleVector)
+  return typeOfOpr_fixType(x.typ)
+end
+
+function typeOfOpr(x::GlobalRef, li :: LambdaInfo)
+  dprintln(3,"starting typeOfOpr, type = GlobalRef")
+  return typeOfOpr_fixType(typeof(eval(x)))
+end
+
+function typeOfOpr(x::SimpleVector, li :: LambdaInfo)
+    dprintln(3,"starting typeOfOpr, type = SimpleVector")
     svec_types = [ typeOfOpr(x[i], li) for i = 1:length(x) ]
-    ret = Tuple{svec_types...}
-  else ret = typeof(x)
-  end
+    return Tuple{svec_types...}
+end
 
-  if typeof(ret) != DataType
-    dprintln(3,"Final typeof(ret) != DataType, instead = ", typeof(ret))
-    if typeof(ret) == Union
-      ret = Tuple{ret.types...} 
-    else
-      dprintln(2, "typeof(ret) != DataType")
-      throw(string("typeOfOpr found SymbolNode type that was not a DataType or a Union of DataTypes."))
-    end
-  end
+function typeOfOpr(x::Any, li :: LambdaInfo)
+  dprintln(3,"starting typeOfOpr, type = ",typeof(x))
+  return typeOfOpr_fixType(typeof(x))
+end
 
-  return ret
+function typeOfOpr_fixType(ret::DataType)
+    return ret
+end
+
+function typeOfOpr_fixType(ret::Union)
+    return Tuple{ret.types...}
 end
 
 """
