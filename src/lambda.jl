@@ -65,7 +65,7 @@ it is assigned by an inner function, 8 if it is const, and 16 if it is assigned 
 """
 type VarDef
   name :: Symbol
-  typ
+  typ  :: DataType
   desc :: Int64
 
   function VarDef(n, t, d)
@@ -86,7 +86,7 @@ type LambdaInfo
   gen_sym_typs  :: Array{Any,1}
   escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
-  return_type
+  return_type   :: Any
 
   function LambdaInfo()
     new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
@@ -633,8 +633,8 @@ Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
 and the inferred return type of the input method.
 """
-function lambdaTypeinf(lambda :: LambdaStaticData, typs :: Tuple; optimize = true)
-  (tree, ty) = Core.Inference.typeinf_uncached(lambda, to_tuple_type(typs), Core.svec(), optimize = optimize)
+function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
+  (tree, ty) = Core.Inference.typeinf_uncached(lambda, Tuple{typs...}, Core.svec(), optimize = optimize)
   lambda.ast = tree
   ast::Expr = Base.uncompressed_ast(lambda)
   return ast, ty

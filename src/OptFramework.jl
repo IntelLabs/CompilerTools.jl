@@ -99,7 +99,7 @@ end
 """
 Retrieve the AST of the given function "func" and signature "sig" for at the given pass "level".
 """
-function getCodeAtLevel(func, sig, level)
+function getCodeAtLevel(func, sig::Tuple, level)
   if level == PASS_MACRO 
     error("AST at macro level must be passed in, and cannot be obtained from inspecting the function itself")
   elseif level == PASS_LOWERED 
