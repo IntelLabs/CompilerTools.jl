@@ -634,7 +634,8 @@ Return both the inferred AST that is to a "code_typed(Function, (type,...))" cal
 and the inferred return type of the input method.
 """
 function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
-  (tree, ty) = Core.Inference.typeinf_uncached(lambda, Tuple{typs...}, Core.svec(), optimize = optimize)
+  t::Any = to_tuple_type(Tuple{typs...})
+  (tree, ty) = Core.Inference.typeinf_uncached(lambda, t, Core.svec(), optimize = optimize)
   lambda.ast = tree
   ast::Expr = Base.uncompressed_ast(lambda)
   return ast, ty
