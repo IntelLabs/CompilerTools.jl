@@ -922,13 +922,6 @@ function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, n
 end
 
 """
-This function gives you the option of calling the ENTRY point from_expr with an ast and several optional named arguments.
-"""
-function from_expr(ast :: Expr; callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
-  from_expr(ast, callback, cbdata, no_mod)
-end
-
-"""
 Extract liveness information from the CFG.
 """
 function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
