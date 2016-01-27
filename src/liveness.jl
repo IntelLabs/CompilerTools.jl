@@ -179,20 +179,20 @@ Called when AST traversal finds some Symbol or GenSym "sym" in a basic block "bb
 "read" is true if the symbol is being used and false if it is being defined.
 """
 function add_access(bb, sym, read)
-    dprintln(3,"add_access ", sym, " ", read, " ", typeof(bb), " ")
+    @dprintln(3,"add_access ", sym, " ", read, " ", typeof(bb), " ")
     if bb == nothing    # If not in a basic block this is dead code so ignore.
         return nothing
     end
 
     assert(length(bb.statements) != 0)
     tls = bb.statements[end]    # Get the statement to which we will add access information.
-    dprintln(3, "tls = ", tls)
+    @dprintln(3, "tls = ", tls)
     write = !read
 
     # If this synbol is already in the statement then it is already in the basic block as a whole.
     # Therefore nothing would change if we did the rest of the function and we can shortcut quit here.
     if in(sym, tls.def)
-        dprintln(3, "sym already in tls.def")
+        @dprintln(3, "sym already in tls.def")
         return nothing
     end
 
@@ -204,7 +204,7 @@ function add_access(bb, sym, read)
     # Handle access modifications at the statement level.
     if in(sym, tls.use)
         if write
-            dprintln(3, "sym already in tls.use so adding to def")
+            @dprintln(3, "sym already in tls.use so adding to def")
             # Handle write after read for a statement.
             push!(tls.def, sym)
         end
@@ -212,35 +212,35 @@ function add_access(bb, sym, read)
         if in(sym, tls.def)
             throw(string("Found a read after a write at the statement level in liveness analysis."))
         end
-        dprintln(3, "adding sym to tls.use ", sym)
+        @dprintln(3, "adding sym to tls.use ", sym)
         # Record the first use of this sym in this statement.
         push!(tls.use, sym)
     else # must be a write
-        dprintln(3, "adding sym to tls.def ", sym)
+        @dprintln(3, "adding sym to tls.def ", sym)
         # Record the first def of this sym in this statement.
         push!(tls.def, sym)
     end
 
-    dprintln(3, "tls after = ", tls)
+    @dprintln(3, "tls after = ", tls)
 
     # Handle access modifications at the basic block level.
     if in(sym, bb.use)
         if write
-            dprintln(3, "sym already in bb.use so adding to def")
+            @dprintln(3, "sym already in bb.use so adding to def")
             # Handle write after read for a  basic block.
             push!(bb.def, sym)
         end
     elseif read
         if !in(sym, bb.def)
-            dprintln(3, "adding sym to bb.use ", sym)
+            @dprintln(3, "adding sym to bb.use ", sym)
             push!(bb.use, sym)
         end
     else # must be a write
-        dprintln(3, "adding sym to bb.def ", sym)
+        @dprintln(3, "adding sym to bb.def ", sym)
         push!(bb.def, sym)
     end
 
-    dprintln(4, "bb after = ", bb)
+    @dprintln(4, "bb after = ", bb)
 
     nothing
 end
@@ -441,7 +441,7 @@ function find_bb_for_statement(top_number::Int, bl::BlockLiveness)
     end
   end
 
-  dprintln(3,"Didn't find statement top_number in basic_blocks.")
+  @dprintln(3,"Didn't find statement top_number in basic_blocks.")
   nothing
 end
 
@@ -484,7 +484,7 @@ function compute_live_ranges(state :: expr_state, dfn)
             accum = Set{SymGen}()
             if bb_index == -2
               # Special case for final block.
-              dprintln(3,"Final block live_out = ", accum)
+              @dprintln(3,"Final block live_out = ", accum)
               # Nothing is live out of the final block.
             else
               # The live_out of any non-final block is the union of the live_in of every successor block.
@@ -547,7 +547,7 @@ function dump_bb(bl :: BlockLiveness)
 
     for i = 1:length(body_order)
         bb = bl.basic_blocks[bl.cfg.basic_blocks[body_order[i]]]
-        dprint(2,bb)
+        @dprint(2,bb)
 
         if DEBUG_LVL >= 4
             for j in bb.cfgbb.succs
@@ -577,7 +577,7 @@ function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback 
   # :lambda expression
   state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
   state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
-  dprintln(3,"from_lambda: ref_params = ", state.ref_params)
+  @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
 """
@@ -589,8 +589,8 @@ function from_exprs(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, ca
   # ast = [ expr, ... ]
   local len = length(ast)
   for i = 1:len
-    dprintln(2,"Processing ast #",i," depth=",depth)
-    dprintln(3,"ast[", i, "] = ", ast[i])
+    @dprintln(2,"Processing ast #",i," depth=",depth)
+    @dprintln(3,"ast[", i, "] = ", ast[i])
     from_expr(ast[i], depth, state, callback, cbdata)
   end
   nothing
@@ -605,20 +605,20 @@ function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_stat
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
-  dprintln(3,"liveness from_assignment lhs = ", lhs, " rhs = ", rhs)
+  @dprintln(3,"liveness from_assignment lhs = ", lhs, " rhs = ", rhs)
   # Process the right-hand side of the assignment unless it is a lambda.
   if isa(rhs, Expr) && rhs.head == :lambda
     # skip handling rhs lambdas
   else
     from_expr(rhs, depth, state, callback, cbdata)
   end
-  dprintln(3,"liveness from_assignment handling lhs")
+  @dprintln(3,"liveness from_assignment handling lhs")
   # Handle the left-hand side of the assignment which is being written.
   read_save = state.read
   state.read = false
   from_expr(lhs, depth, state, callback, cbdata)
   state.read = read_save
-  dprintln(3,"liveness from_assignment done handling lhs")
+  @dprintln(3,"liveness from_assignment done handling lhs")
 end
 
 """
@@ -632,22 +632,22 @@ end
 Get the type of some AST node.
 """
 function typeOfOpr(x::Expr, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = Expr")
+  @dprintln(3,"starting typeOfOpr, type = Expr")
   return typeOfOpr_fixType(x.typ)
 end
 
 function typeOfOpr(x::SymGen, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = SymGen")
+  @dprintln(3,"starting typeOfOpr, type = SymGen")
   return typeOfOpr_fixType(getType(x, li))
 end
 
 function typeOfOpr(x::SymbolNode, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = SymbolNode")
+  @dprintln(3,"starting typeOfOpr, type = SymbolNode")
   typ1 = getType(x.name, li)
     if x.typ != typ1
-      dprintln(2, "typeOfOpr x.typ and lambda type different")
-      dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
-      dprintln(2, "li = ", li)
+      @dprintln(2, "typeOfOpr x.typ and lambda type different")
+      @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
+      @dprintln(2, "li = ", li)
     end
     assert(x.typ <: typ1)
     assert(isa(x.typ, Type))
@@ -655,18 +655,18 @@ function typeOfOpr(x::SymbolNode, li :: LambdaInfo)
 end
 
 function typeOfOpr(x::GlobalRef, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = GlobalRef")
+  @dprintln(3,"starting typeOfOpr, type = GlobalRef")
   return typeOfOpr_fixType(typeof(eval(x)))
 end
 
 function typeOfOpr(x::SimpleVector, li :: LambdaInfo)
-    dprintln(3,"starting typeOfOpr, type = SimpleVector")
+    @dprintln(3,"starting typeOfOpr, type = SimpleVector")
     svec_types = [ typeOfOpr(x[i], li) for i = 1:length(x) ]
     return Tuple{svec_types...}
 end
 
 function typeOfOpr(x::Any, li :: LambdaInfo)
-  dprintln(3,"starting typeOfOpr, type = ",typeof(x))
+  @dprintln(3,"starting typeOfOpr, type = ",typeof(x))
   return typeOfOpr_fixType(typeof(x))
 end
 
@@ -695,7 +695,7 @@ end
 function showNoModDict(dict)
   for i in dict
     try
-    dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
+    @dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
     catch
     targs = i[1][2]
     assert(isa(targs, Tuple))
@@ -750,10 +750,10 @@ If we have cached this information previously then return that, else cache the i
 well-known functions or default to presuming that all arguments could be modified.
 """
 function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1}, state :: expr_state)
-  dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
-  dprintln(3,"getUnmodifiedArgs args = ", args)
-  dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
-  dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
+  @dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
+  @dprintln(3,"getUnmodifiedArgs args = ", args)
+  @dprintln(3,"getUnmodifiedArgs arg_type_tuple = ", arg_type_tuple)
+  @dprintln(3,"getUnmodifiedArgs len(args) = ", length(arg_type_tuple))
   showNoModDict(state.params_not_modified)
 
   default_result = Int64[(isPassedByRef(x, state) ? 0 : 1) for x in arg_type_tuple]
@@ -763,10 +763,10 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
 
   if typeof(func) == GlobalRef
     func = Base.resolve(func, force=true)
-    dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
+    @dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   elseif typeof(func) == TopNode
     func = eval(func)
-    dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
+    @dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   elseif typeof(func) == Expr
     return default_result
   end
@@ -779,41 +779,41 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
   if haskey(state.params_not_modified, fs)
     res = state.params_not_modified[fs]
     assert(length(res) == length(args))
-    dprintln(3,"function already in params_not_modified so returning previously computed value")
+    @dprintln(3,"function already in params_not_modified so returning previously computed value")
     return res
   end 
 
   for i in state.params_not_modified
     (f1, t1) = i[1]
-    dprintln(3,"f1 = ", f1, " t1 = ", t1, " f1type = ", typeof(f1), " len(t1) = ", length(t1))
+    @dprintln(3,"f1 = ", f1, " t1 = ", t1, " f1type = ", typeof(f1), " len(t1) = ", length(t1))
     if func == f1 
-      dprintln(3,"function matches")
+      @dprintln(3,"function matches")
       if Tuple{arg_type_tuple...} <: Tuple{t1...}
         res = i[2]
         assert(length(res) == length(args))
         addUnmodifiedParams(func, arg_type_tuple, res, state)
-        dprintln(3,"exact match not found but sub-type match found")
+        @dprintln(3,"exact match not found but sub-type match found")
         return res
       end
     end
   end
 
   if in(func, wellknown_all_unmodified)
-    dprintln(3,"Well-known function known not to modify args.")
+    @dprintln(3,"Well-known function known not to modify args.")
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
   else
     if func == eval(TopNode(:tuple))
-      dprintln(3,"Detected tuple in getUnmodifiedArgs so returning that no arguments are modified.")
+      @dprintln(3,"Detected tuple in getUnmodifiedArgs so returning that no arguments are modified.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
       return state.params_not_modified[fs]
     end
 
-    dprintln(3,"is func generic => ", isgeneric(func))
+    @dprintln(3,"is func generic => ", isgeneric(func))
     if use_inplace_naming_convention && isgeneric(func) && !in('!', string(Base.function_name(func)))
-      dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
+      @dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
     else
-      dprintln(3,"fallback to args passed by ref as modified.")
+      @dprintln(3,"fallback to args passed by ref as modified.")
       addUnmodifiedParams(func, arg_type_tuple, default_result, state)
     end
   end
@@ -828,21 +828,21 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
-  dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
+  @dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
    
   # Form the signature of the call in an array.
   arg_type_array = DataType[]
   # For each argument to the call.
   for i = 1:length(args)
-    dprintln(3, "arg ", i, " = ", args[i], " typeof arg = ", typeof(args[i]))
+    @dprintln(3, "arg ", i, " = ", args[i], " typeof arg = ", typeof(args[i]))
     # Make sure the type of the argument resolves to a DataType.
     too = typeOfOpr(args[i], state.li)
     if !isa(too, DataType)
-      dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
+      @dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
     end
     push!(arg_type_array, typeOfOpr(args[i], state.li)) 
   end
-  dprintln(3, "arg_type_array = ", arg_type_array)
+  @dprintln(3, "arg_type_array = ", arg_type_array)
   #arg_type_tuple = Tuple{arg_type_array...}
   # See which arguments to the function can be modified by the function.
 
@@ -854,7 +854,7 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   # getUnmodifiedArgs returns an array to indicate which args to the call may be modified.
   unmodified_args = getUnmodifiedArgs(fun, args, arg_type_array, state)
   assert(length(unmodified_args) == length(args))
-  dprintln(3,"unmodified_args = ", unmodified_args)
+  @dprintln(3,"unmodified_args = ", unmodified_args)
   
   # symbols don't need to be translated
   if typeof(fun) != Symbol
@@ -864,7 +864,7 @@ function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, cal
   # For each argument.
   for i = 1:length(args)
     argtyp = typeOfOpr(args[i], state.li)
-    dprintln(2,"cur arg = ", args[i], " type = ", argtyp, " state.read = ", state.read)
+    @dprintln(2,"cur arg = ", args[i], " type = ", argtyp, " state.read = ", state.read)
     read_cache = state.read
 
     state.read = true
@@ -891,13 +891,13 @@ end
 Count the number of times that the symbol in "s" is defined in all the basic blocks.
 """
 function countSymbolDefs(s, lives)
-  dprintln(3,"countSymbolDefs: ", s)
+  @dprintln(3,"countSymbolDefs: ", s)
   count = 0
   for (j,bb) in lives.basic_blocks
-    dprintln(3,"Examining block ", j.label)
+    @dprintln(3,"Examining block ", j.label)
     for stmt in bb.statements
       if in(s, stmt.def) 
-          dprintln(3, "Found symbol defined in block ", j.label, " in statement: ", stmt)
+          @dprintln(3, "Found symbol defined in block ", j.label, " in statement: ", stmt)
           count += 1 
       end
     end
@@ -911,7 +911,7 @@ You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
 function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
-  #dprintln(3,"liveness from_expr no_mod = ", no_mod)
+  #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod)
@@ -925,7 +925,7 @@ end
 Extract liveness information from the CFG.
 """
 function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
-  dprintln(2,"fromCFG")
+  @dprintln(2,"fromCFG")
   CFGs.dump_bb(cfg)   # Dump debugging information if set_debug_level is high enough.
 
   # For each basic block.
@@ -938,7 +938,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
        cur_stmt = bb[2].statements[i]
        # Add this statement to our list of statements in the current LivenessAnalysis.BasicBlock.
        push!(live_res.cur_bb.statements, TopLevelStatement(cur_stmt)) 
-       dprintln(3,"fromCFG stmt = ", cur_stmt.expr)
+       @dprintln(3,"fromCFG stmt = ", cur_stmt.expr)
        # Process the statement looking for def and use.
        from_expr(cur_stmt.expr, 1, live_res, callback, cbdata)
     end
@@ -946,7 +946,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
 
   # Compute live_in and live_out for basic blocks and statements.
   compute_live_ranges(live_res, cfg.depth_first_numbering)
-  dprintln(2,"Dumping basic block info from_expr.")
+  @dprintln(2,"Dumping basic block info from_expr.")
   ret = BlockLiveness(live_res.map, cfg)
   dump_bb(ret)
   return ret
@@ -956,7 +956,7 @@ end
 Process a return Expr node which is just a recursive processing of all of its args.
 """
 function from_return(args, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-    dprintln(2,"Expr return: ")
+    @dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
     nothing
 end
@@ -992,16 +992,16 @@ function from_expr(ast::ANY,
                    state::expr_state,
                    callback::Function,
                    cbdata::ANY)
-    dprintln(2,"from_expr ast = ", ast, " depth = ",depth," ", " asttyp = ", typeof(ast), " state.read = ", state.read)
+    @dprintln(2,"from_expr ast = ", ast, " depth = ",depth," ", " asttyp = ", typeof(ast), " state.read = ", state.read)
 
     handled = callback(ast, cbdata)
-    dprintln(3,"callback handled ", handled)
+    @dprintln(3,"callback handled ", handled)
     if handled != nothing
         if length(handled) > 0
-            dprintln(3,"Processing expression from callback for ", ast)
-            dprintln(3,handled)
+            @dprintln(3,"Processing expression from callback for ", ast)
+            @dprintln(3,handled)
             from_exprs(handled, depth+1, state, callback, cbdata)
-            dprintln(3,"Done processing expression from callback.")
+            @dprintln(3,"Done processing expression from callback.")
         end
         return nothing
     end
@@ -1032,15 +1032,15 @@ function from_expr_helper(ast::Expr,
     read_save  = state.read
     state.read = true
 
-    dprint(2,"Expr ")
+    @dprint(2,"Expr ")
     local head = ast.head
     local args = ast.args
     local typ  = ast.typ
-    dprintln(2,head, " ", args)
+    @dprintln(2,head, " ", args)
     if head == :lambda
         from_lambda(ast, depth, state, callback, cbdata)
     elseif head == :body
-        dprintln(0,":body found in from_expr")
+        @dprintln(0,":body found in from_expr")
         throw(string(":body found in from_expr"))
     elseif head == :(=)
         from_assignment(args, depth, state, callback, cbdata)
@@ -1055,7 +1055,7 @@ function from_expr_helper(ast::Expr,
     elseif head == :line || head == :boundscheck || head == :meta || head == :type_goto
         # Intentionally do nothing.
     elseif head == :copyast
-        dprintln(2,"copyast type")
+        @dprintln(2,"copyast type")
         # Intentionally do nothing.
     elseif head == :alloc
         from_exprs(args[2], depth+1, state, callback, cbdata)
@@ -1096,7 +1096,7 @@ function from_expr_helper(ast::Union{Symbol,GenSym},
                           callback::Function,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
-    dprintln(2, typeof(ast), " type ", ast)
+    @dprintln(2, typeof(ast), " type ", ast)
     add_access(state.cur_bb, ast, state.read)
 end
 
@@ -1106,7 +1106,7 @@ function from_expr_helper(ast::SymbolNode,
                           callback::Function,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
-    dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
+    @dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read)
 end
 
@@ -1126,7 +1126,7 @@ function from_expr_helper(ast::QuoteNode,
     # addStatement(top_level, state, ast)
     local value = ast.value
     #TODO: fields: value
-    dprintln(3,"QuoteNode type ",typeof(value))
+    @dprintln(3,"QuoteNode type ",typeof(value))
 end
 
 function from_expr_helper(ast::AccessSummary,
@@ -1134,7 +1134,7 @@ function from_expr_helper(ast::AccessSummary,
                           state::expr_state,
                           callback::Function,
                           cbdata::ANY)
-    dprintln(3, "Incorporating AccessSummary")
+    @dprintln(3, "Incorporating AccessSummary")
     for i in ast.use
         add_access(state.cur_bb, i, true)
     end
@@ -1152,16 +1152,16 @@ function from_expr_helper(ast::ANY,
 
     if isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
         # addStatement(top_level, state, ast)
-        dprintln(3,"GetfieldNode type ",typeof(ast.value), " ", ast)
+        @dprintln(3,"GetfieldNode type ",typeof(ast.value), " ", ast)
     elseif isdefined(:GlobalRef) && asttyp == GlobalRef
         # addStatement(top_level, state, ast)
-        dprintln(3,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
+        @dprintln(3,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
     elseif isbits(asttyp)
         # addStatement(top_level, state, ast)
         # skip
     elseif asttyp.name == Array.name
         # addStatement(top_level, state, ast)
-        dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
+        @dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
         for i = 1:length(ast)
             from_expr(ast[i], depth, state, callback, cbdata)
         end

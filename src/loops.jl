@@ -85,40 +85,40 @@ function findLoopInvariants(l :: Loop,
                             bl :: CompilerTools.LivenessAnalysis.BlockLiveness)
     all_uses = Set{Symbol}()
 
-    dprintln(3,l.members)
-    dprintln(3,collect(keys(bl.basic_blocks)))
-    dprintln(3,bl)
+    @dprintln(3,l.members)
+    @dprintln(3,collect(keys(bl.basic_blocks)))
+    @dprintln(3,bl)
 
     # Accumulate a set of all variables used in the loop.
     for i in l.members
-        dprintln(3,"i = ", i)
+        @dprintln(3,"i = ", i)
         bb = bl.basic_blocks[i]  # get the basic block from its index
         all_uses = union(all_uses, bb.use)
     end
 
-    dprintln(3, "all_uses = ", all_uses)
+    @dprintln(3, "all_uses = ", all_uses)
 
     # Eliminate all variable usages in "all_uses" that have a definition in the loop.
     for i in l.members
-        dprintln(3,"i = ", i)
+        @dprintln(3,"i = ", i)
         bb = bl.basic_blocks[i]  # get the basic block from its index
         bb_ud = udinfo[bb]
-        dprintln(3, bb_ud)
+        @dprintln(3, bb_ud)
         # Get all the inputs to this block.
         for j in bb_ud.live_in
-            dprintln(3, "symbol in block live_in = ", j[1])
+            @dprintln(3, "symbol in block live_in = ", j[1])
             # If one of those inputs is used in this basic block of the loop.
             if in(j[1], all_uses)
-                dprintln(3, "symbol in all_uses")
+                @dprintln(3, "symbol in all_uses")
                 for k in j[2]
                     if k == nothing
                         continue
                     end
-                    dprintln(3, "this block = ", k.label)
+                    @dprintln(3, "this block = ", k.label)
                     if in(k.label, l.members)
                         temp_set = Set{Symbol}()
                         push!(temp_set, j[1])
-                        dprintln(3, "this block belongs to members all_uses = ", all_uses, " type = ", typeof(all_uses), " type j[1] = ", typeof(j[1]), " temp set = ", temp_set)
+                        @dprintln(3, "this block belongs to members all_uses = ", all_uses, " type = ", typeof(all_uses), " type j[1] = ", typeof(j[1]), " temp set = ", temp_set)
                         all_uses = setdiff(all_uses, temp_set)
                         break
                     end
@@ -133,7 +133,7 @@ function findLoopInvariants(l :: Loop,
     while(changed)
         # While we keep finding more loop invariant computations, keep iterating.
         changed = false
-        dprintln(0,"starting changed loop")
+        @dprintln(0,"starting changed loop")
         non_invariant = Set()
         invariant     = Set()
 
@@ -144,7 +144,7 @@ function findLoopInvariants(l :: Loop,
                 if !isempty(stmt.def)
                     # Compute symbols used in the statement that aren't invariant.
                     non_invariants = setdiff(stmt.use, all_uses)
-                    dprintln(0,"Def statement use = ", stmt.use, " all_uses = ", all_uses, " non_invariants = ", non_invariants, " stmt = ", stmt)
+                    @dprintln(0,"Def statement use = ", stmt.use, " all_uses = ", all_uses, " non_invariants = ", non_invariants, " stmt = ", stmt)
                     if isempty(non_invariants)
                         # def could be invariants if they aren't non_invariant elsewhere.
                         for def in stmt.def
@@ -161,7 +161,7 @@ function findLoopInvariants(l :: Loop,
                             push!(non_invariant, def)
                         end 
                     end
-                    dprintln(0,"non_invariant set = ", non_invariant, " invariant set = ", invariant)
+                    @dprintln(0,"non_invariant set = ", non_invariant, " invariant set = ", invariant)
                 end
             end
         end
@@ -169,7 +169,7 @@ function findLoopInvariants(l :: Loop,
         # If we found additional loop invariant calculations then add them to the set of invariant calculation in all_uses and indicate we found a change
         # so that the loop will continue searching for more.
         if !isempty(invariant)
-            dprintln(0,"Found some new invariants = ", invariant)
+            @dprintln(0,"Found some new invariants = ", invariant)
             changed = true
             all_uses = union(all_uses, invariant)
         end
@@ -232,9 +232,9 @@ function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)
             if in(succ_id, dom_dict[bb_index])
                 # Identify the members of the loop.
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
-                dprintln(3,"loop members = ", members, " type = ", typeof(members))
+                @dprintln(3,"loop members = ", members, " type = ", typeof(members))
                 new_loop = Loop(succ_id, bb_index, members)
-                dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
+                @dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 # Store the Loop information in the array of loops to be returned.
                 push!(loops, new_loop)
             end

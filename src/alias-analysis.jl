@@ -163,7 +163,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
-  dprintln(2, "AA ", lhs, " = ", rhs)
+  @dprintln(2, "AA ", lhs, " = ", rhs)
   lhs = toSymGen(lhs)
   assert(isa(lhs, Symbol) || isa(lhs, GenSym))
   if lookup(state, lhs) != NotArray
@@ -184,7 +184,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
         end
       end
     end
-    dprintln(2, "AA update ", lhs, " <- ", rhs)
+    @dprintln(2, "AA update ", lhs, " <- ", rhs)
     update(state, lhs, rhs)
   end
 end
@@ -198,9 +198,9 @@ function from_call(state, expr :: Expr, callback, cbdata)
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
-  dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
+  @dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
   #fun = from_expr(state, fun)
-  #dprintln(2, "AA from_call: new fun=", fun)
+  #@dprintln(2, "AA from_call: new fun=", fun)
   fun = isa(fun, TopNode) ? fun.name : fun
   fun = isa(fun, GlobalRef) ? fun.name : fun
   if is(fun, :reshape)
@@ -254,7 +254,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
     end
     return alias
   else
-    dprintln(2, "AA: unknown call ", fun)
+    @dprintln(2, "AA: unknown call ", fun)
     # For unknown calls, conservative assumption is that the result
     # might alias one of (or an element of) the non-leaf-type inputs.
     for exp in args
@@ -285,8 +285,8 @@ end
 
 
 function process_callback(handled::Array, state, ast, callback, cbdata)
-    dprintln(3,"Processing expression from callback for ", ast) 
-    dprintln(3,handled)
+    @dprintln(3,"Processing expression from callback for ", ast) 
+    @dprintln(3,handled)
     return from_exprs(state, handled, callback, cbdata)
 end
 
@@ -308,7 +308,7 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
     local head = ast.head
     local args = ast.args
     local typ  = ast.typ
-    dprintln(2, " --> ", head)
+    @dprintln(2, " --> ", head)
     if is(head, :lambda)
         return from_lambda(state, ast)
     elseif is(head, :body)
@@ -348,12 +348,12 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
 end
 
 function from_expr_inner(state, ast::SymNodeGen, callback, cbdata)
-    dprintln(2, " ", ast)
+    @dprintln(2, " ", ast)
     return lookup(state, toSymGen(ast))
 end
 
 function from_expr_inner(state, ast::ANY, callback, cbdata)
-  dprintln(2, " not handled ", ast)
+  @dprintln(2, " not handled ", ast)
   return Unknown
 end
 
@@ -380,7 +380,7 @@ end
 
 function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, callback, cbdata :: ANY)
   local state = init_state(lambdaInfo, liveness)
-  dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
+  @dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   for (v, vd) in lambdaInfo.var_defs
     if !isArrayType(vd.typ)
       update_notarray(state, v)
@@ -396,9 +396,9 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, c
       update_unknown(state, v)
     end
   end
-  dprintln(2, "AA locals=", state.locals)
+  @dprintln(2, "AA locals=", state.locals)
   from_expr(state, body, callback, cbdata)
-  dprintln(2, "AA locals=", state.locals)
+  @dprintln(2, "AA locals=", state.locals)
   local revmap = Dict{Int, SymGen}()
   local unique = Set{SymGen}()
   # keep only variables that have unique object IDs.
@@ -414,7 +414,7 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, c
       end
     end
   end
-  dprintln(2, "AA after alias analysis: ", unique)
+  @dprintln(2, "AA after alias analysis: ", unique)
   # return the set of variables that are confirmed to have no aliasing
   return unique
 end

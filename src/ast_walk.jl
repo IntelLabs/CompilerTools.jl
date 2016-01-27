@@ -59,22 +59,22 @@ function from_lambda(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_le
   meta  = ast[2]
   body  = ast[3]
 
-  dprintln(3,"from_lambda pre-convert param = ", param, " typeof(param) = ", typeof(param))
+  @dprintln(3,"from_lambda pre-convert param = ", param, " typeof(param) = ", typeof(param))
   # AstWalk over each incoming parameter to the lambda.
   for i = 1:length(param)
-    dprintln(3,"from_lambda param[i] = ", param[i], " typeof(param[i]) = ", typeof(param[i]))
+    @dprintln(3,"from_lambda param[i] = ", param[i], " typeof(param[i]) = ", typeof(param[i]))
     param[i] = from_expr(param[i], depth, callback, cbdata, top_level_number, false, read)
   end
-  dprintln(3,"from_lambda post-convert param = ", param, " typeof(param) = ", typeof(param))
+  @dprintln(3,"from_lambda post-convert param = ", param, " typeof(param) = ", typeof(param))
 
-  dprintln(3,"from_lambda pre-convert body = ", body, " typeof(body) = ", typeof(body))
+  @dprintln(3,"from_lambda pre-convert body = ", body, " typeof(body) = ", typeof(body))
   # AstWalk over the body of the function.
   body = from_expr(body, depth, callback, cbdata, top_level_number, false, read)
-  dprintln(3,"from_lambda post-convert body = ", body, " typeof(body) = ", typeof(body))
+  @dprintln(3,"from_lambda post-convert body = ", body, " typeof(body) = ", typeof(body))
   # Make sure that what comes back is still a body type.
   if typeof(body) != Expr || body.head != :body
-    dprintln(0,"AstWalk from_lambda got a non-body returned from procesing body")
-    dprintln(0,body)
+    @dprintln(0,"AstWalk from_lambda got a non-body returned from procesing body")
+    @dprintln(0,body)
     throw(string("big problem"))
   end
 
@@ -97,11 +97,11 @@ function from_body(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
 
   # AstWalk over each statement in a lambda body.
   for i = 1:len
-    dprintln(2,"Processing top-level ast #",i," depth=",depth)
+    @dprintln(2,"Processing top-level ast #",i," depth=",depth)
 
-    dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
+    @dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
     new_expr = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
-    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
+    @dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
     # If the return result doesn't indicate the statement should be removed then put the new version
     # of the statement (new_expr) into the new body.
     if new_expr != ASTWALK_REMOVE
@@ -125,10 +125,10 @@ function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_lev
   body = Any[]
 
   for i = 1:len
-    dprintln(2,"Processing ast #",i," depth=",depth)
-    dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
+    @dprintln(2,"Processing ast #",i," depth=",depth)
+    @dprintln(3,"AstWalk from_exprs, ast[", i, "] = ", ast[i])
     new_expr = from_expr(ast[i], depth, callback, cbdata, i, top_level, read)
-    dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
+    @dprintln(3,"AstWalk from_exprs done, ast[", i, "] = ", new_expr)
     if new_expr != ASTWALK_REMOVE
       push!(body, new_expr)
     end
@@ -143,9 +143,9 @@ Recursively process the left and right hand sides with AstWalk.
 """
 function from_assignment(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
   # Process an assignment statement by process first the left-hand side and then the right.
-  dprintln(3,"from_assignment, lhs = ", ast[1])
+  @dprintln(3,"from_assignment, lhs = ", ast[1])
   ast[1] = from_expr(ast[1], depth, callback, cbdata, top_level_number, false, false)
-  dprintln(3,"from_assignment, rhs = ", ast[2])
+  @dprintln(3,"from_assignment, rhs = ", ast[2])
   ast[2] = from_expr(ast[2], depth, callback, cbdata, top_level_number, false, read)
   return ast
 end
@@ -159,9 +159,9 @@ function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
   # A call is a function followed by its arguments.  Extract these parts below.
   fun  = ast[1]
   args = ast[2:end]
-  dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
+  @dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
   if length(args) > 0
-    dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
+    @dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
   # Symbols don't need to be translated.
   if typeof(fun) != Symbol
@@ -213,12 +213,12 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     if typeof(ast) == LambdaStaticData
         ast = uncompressed_ast(ast)
     end
-    dprintln(2,"from_expr depth=",depth," ", " ", ast)
+    @dprintln(2,"from_expr depth=",depth," ", " ", ast)
 
     # For each AST node, we first call the user-provided callback to see if they want to do something
     # with the node.
     ret = callback(ast, cbdata, top_level_number, is_top_level, read)
-    dprintln(2,"callback ret = ",ret)
+    @dprintln(2,"callback ret = ",ret)
     # If the return value of the callback isn't ASTWALK_RECURSE then the callback is replaced the current
     # AST node with "ret".
     if ret != ASTWALK_RECURSE
@@ -229,7 +229,7 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     # We have a different from_expr_helper that is accurately typed for each possible AST node type.
     ast = from_expr_helper(ast, depth, callback, cbdata, top_level_number, is_top_level, read)
 
-    dprintln(3,"Before return for ", ast)
+    @dprintln(3,"Before return for ", ast)
     return ast
 end
 
@@ -247,17 +247,17 @@ function from_expr_helper(ast::Expr,
     read_save = read
     read = true
 
-    dprint(2,"Expr ")
+    @dprint(2,"Expr ")
     head = ast.head
     args = ast.args
     typ  = ast.typ
-    dprintln(2,head, " ", args)
+    @dprintln(2,head, " ", args)
     if head == :lambda
         args = from_lambda(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :body
-        dprintln(2,"Processing :body Expr in AstWalker.from_expr")
+        @dprintln(2,"Processing :body Expr in AstWalker.from_expr")
         args = from_body(args, depth+1, callback, cbdata, top_level_number, read)
-        dprintln(2,"Done processing :body Expr in AstWalker.from_expr")
+        @dprintln(2,"Done processing :body Expr in AstWalker.from_expr")
     elseif head == :block
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
     elseif head == :(.)
@@ -266,8 +266,8 @@ function from_expr_helper(ast::Expr,
         args = from_assignment(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :(::)
         assert(length(args) == 2)
-        dprintln(3, ":: args[1] = ", args[1])
-        dprintln(3, ":: args[2] = ", args[2])
+        @dprintln(3, ":: args[1] = ", args[1])
+        @dprintln(3, ":: args[2] = ", args[2])
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :return
         args = from_exprs(args, depth, callback, cbdata, top_level_number, read)
@@ -284,7 +284,7 @@ function from_expr_helper(ast::Expr,
         head = :call
         args = vcat(:copy, args)
     elseif head == :copyast
-        dprintln(2,"copyast type")
+        @dprintln(2,"copyast type")
         # skip
     elseif head == :gotoifnot
         assert(length(args) == 2)
@@ -329,10 +329,10 @@ function from_expr_helper(ast::Expr,
             args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :function
-	dprintln(3,"in function head")
+	@dprintln(3,"in function head")
 	args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :vcat || head == :typed_vcat || head == :hcat || head == :typed_hcat
-	dprintln(3,"in vcat head")
+	@dprintln(3,"in vcat head")
 	#skip
     elseif head == :ref
 	for i = 1:length(args)
@@ -427,7 +427,7 @@ function from_expr_helper(ast::Union{Symbol,GenSym,SymbolNode,TopNode},
                           top_level_number,
                           is_top_level,
                           read)
-    dprintln(2, typeof(ast), " type")
+    @dprintln(2, typeof(ast), " type")
     # Intentionally do nothing.
     return ast
 end
@@ -472,7 +472,7 @@ function from_expr_helper(ast::QuoteNode,
                           read)
     value = ast.value
     #TODO: fields: value
-    dprintln(2,"QuoteNode type ",typeof(value))
+    @dprintln(2,"QuoteNode type ",typeof(value))
 
     return ast
 end
@@ -490,9 +490,9 @@ function from_expr_helper(ast::ANY,
     asttyp = typeof(ast)
 
     if isdefined(:GetfieldNode) && asttyp == GetfieldNode  # GetfieldNode = value + name
-        dprintln(2,"GetfieldNode type ",typeof(ast.value), " ", ast)
+        @dprintln(2,"GetfieldNode type ",typeof(ast.value), " ", ast)
     elseif isdefined(:GlobalRef) && asttyp == GlobalRef
-        dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
+        @dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
     elseif isbits(asttyp)
         #skip
     else

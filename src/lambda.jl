@@ -185,7 +185,7 @@ function eliminateUnusedLocals!(li :: LambdaInfo, body :: Expr, AstWalkFunc = no
   else
     AstWalkFunc(body, count_symbols, css)
   end
-  dprintln(3,"css = ", css)
+  @dprintln(3,"css = ", css)
   for i in li.var_defs
     if in(i[1], li.input_params)
       continue
@@ -205,11 +205,11 @@ function eliminateUnusedLocals!(li :: LambdaInfo, body :: Expr, AstWalkFunc = no
       next_id = next_id + 1
     end
   end
-  dprintln(3,"gensymdict = ", gensymdict)
-  dprintln(3,"newgensym = ", newgensym)
+  @dprintln(3,"gensymdict = ", gensymdict)
+  @dprintln(3,"newgensym = ", newgensym)
   li.gen_sym_typs = newgensym
   body = replaceExprWithDict!(body, gensymdict, AstWalkFunc)
-  dprintln(3,"updated body = ", body)
+  @dprintln(3,"updated body = ", body)
   return body
 end
 
@@ -239,7 +239,7 @@ function getType(x::Symbol, li::LambdaInfo)
     else 
         res = eval(x)
         res_typ = typeof(res)
-        dprintln(3, "getType Symbol x = ", x, " eval(x) = ", res, " typeof(res) = ", res_typ)
+        @dprintln(3, "getType Symbol x = ", x, " eval(x) = ", res, " typeof(res) = ", res_typ)
         if res_typ == DataType
             return res_typ
         else
@@ -346,14 +346,14 @@ function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   # If it is already a local variable then just update its type and desc.
   if haskey(li.var_defs, s)
     var_def      = li.var_defs[s]
-    dprintln(3,"addLocalVariable ", s, " already exists with type ", var_def.typ)
+    @dprintln(3,"addLocalVariable ", s, " already exists with type ", var_def.typ)
     var_def.typ  = typ
     var_def.desc = desc
     return true
   end
 
   li.var_defs[s] = VarDef(s, typ, desc)
-  dprintln(3,"addLocalVariable = ", s)
+  @dprintln(3,"addLocalVariable = ", s)
 
   return false
 end
@@ -367,14 +367,14 @@ function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaInfo)
   # If it is already a local variable then just update its type and desc.
   if haskey(li.escaping_defs, s)
     var_def      = li.var_defs[s]
-    dprintln(3,"addEscapingVariable ", s, " already exists with type ", var_def.typ)
+    @dprintln(3,"addEscapingVariable ", s, " already exists with type ", var_def.typ)
     var_def.typ  = typ
     var_def.desc = desc
     return true
   end
 
   li.escaping_defs[s] = VarDef(s, typ, desc)
-  dprintln(3,"addEscapingVariable = ", s)
+  @dprintln(3,"addEscapingVariable = ", s)
 
   return false
 end
@@ -438,17 +438,17 @@ The internal triples are extracted and asserted that name and desc are of the ap
 """
 function createVarDict(x :: Array{Any, 1})
   ret = Dict{Symbol,VarDef}()
-  dprintln(1,"createVarDict ", x)
+  @dprintln(1,"createVarDict ", x)
   for i = 1:length(x)
-    dprintln(1,"x[i] = ", x[i])
+    @dprintln(1,"x[i] = ", x[i])
     name = x[i][1]
     typ  = x[i][2]
     desc = x[i][3]
     if typeof(name) != Symbol
-      dprintln(0, "name is not of type symbol ", name, " type = ", typeof(name))
+      @dprintln(0, "name is not of type symbol ", name, " type = ", typeof(name))
     end
     if typeof(desc) != Int64
-      dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
+      @dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
     end
     ret[name] = VarDef(name, typ, desc)
   end
@@ -523,7 +523,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFun
     return nothing
   end
 
-  dprintln(3, "replaceExprWithDict!: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
+  @dprintln(3, "replaceExprWithDict!: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
   if isa(expr,Array)
     for i = 1:length(expr)
       if AstWalkFunc == nothing
@@ -551,12 +551,12 @@ old GenSym to new GenSym for "inner", which can be used to adjust the body Expr
 of "inner" lambda using "replaceExprWithDict" or "replaceExprWithDict!".
 """
 function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
-  dprintln(3,"outer = ", outer)
-  dprintln(3,"inner = ", inner)
+  @dprintln(3,"outer = ", outer)
+  @dprintln(3,"inner = ", inner)
   for (v, d) in inner.var_defs
     if isLocalVariable(v, outer) 
       if !isInputParameter(v, inner) # skip input parameters
-        dprintln(1, string("Conflicting variable ", v, " exists in both inner and outer lambda"))
+        @dprintln(1, string("Conflicting variable ", v, " exists in both inner and outer lambda"))
       end
     else
       addLocalVariable(d, outer)
@@ -565,7 +565,7 @@ function mergeLambdaInfo(outer :: LambdaInfo, inner :: LambdaInfo)
   outer.var_defs = merge(outer.var_defs, inner.var_defs)
   for (v, d) in inner.escaping_defs
     if !isLocalVariable(v, outer) && !isInputParameter(v, outer) && !isEscapingVariable(v, outer)
-      dprintln(1, string("Variable ", v, " from inner lambda is neither parameter nor local nor escaping in outer lambda"))
+      @dprintln(1, string("Variable ", v, " from inner lambda is neither parameter nor local nor escaping in outer lambda"))
     end
   end
   n = length(outer.gen_sym_typs)
@@ -597,13 +597,13 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
     elseif oityp == Expr && one_input.head == :(::)
       push!(ret.input_params, one_input.args[1])
     else
-      dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
+      @dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
     end
   end
 
   # We call the second part of the lambda metadata.
   meta = lambda.args[2]
-  dprintln(1,"meta = ", meta)
+  @dprintln(1,"meta = ", meta)
   # Create a searchable dictionary mapping symbols to their VarDef information.
   ret.var_defs = createVarDict(meta[1])
   ret.escaping_defs = createVarDict(meta[2])
@@ -720,11 +720,11 @@ function getRefParams(lambdaInfo :: LambdaInfo)
   input_vars = lambdaInfo.input_params
   var_types  = lambdaInfo.var_defs
 
-  dprintln(3,"input_vars = ", input_vars)
-  dprintln(3,"var_types = ", var_types)
+  @dprintln(3,"input_vars = ", input_vars)
+  @dprintln(3,"var_types = ", var_types)
 
   for iv in input_vars
-    dprintln(3,"iv = ", iv, " type = ", typeof(iv))
+    @dprintln(3,"iv = ", iv, " type = ", typeof(iv))
     if haskey(var_types, iv)
       var_def = var_types[iv] 
       if !isbits(var_def.typ)

@@ -85,7 +85,7 @@ function addOptPass(pass :: OptPass)
   if pass.level < level
       throw(string("Optimization passes cannot handle ", dumpLevel(pass.level), " pass after ", dumpLevel(level)))
   end
-  dprintln(2, "Add optimization pass at level ", dumpLevel(pass.level))
+  @dprintln(2, "Add optimization pass at level ", dumpLevel(pass.level))
   push!(optPasses, pass) 
 end
 
@@ -111,11 +111,11 @@ function getCodeAtLevel(func, sig::Tuple, level)
   else 
     error("Unknown AST level: ", level)
   end
-  dprintln(3, "getCodeAtLevel ", dumpLevel(level), " ast = ", ast)
+  @dprintln(3, "getCodeAtLevel ", dumpLevel(level), " ast = ", ast)
   @assert (length(ast) > 0) ("Failed to retrieve AST for function " * dump(func) * " with signature " * dump(sig))
   @assert (length(ast) == 1) ("Expect one AST but got many for function " * dump(func) * " with signature " * dump(sig) * ": " * dump(ast))
   @assert (isa(ast[1], Expr) && ast[1].head == :lambda) ("Expect Expr with :lambda head, but got " * dump(ast[1]))
-  dprintln(3, "getCodeAtLevel returns")
+  @dprintln(3, "getCodeAtLevel returns")
   return ast[1]
 end
 
@@ -123,7 +123,7 @@ end
 convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
 """
 function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
-  dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig))
+  @dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig))
   if isa(ast, Function)
     return getCodeAtLevel(ast, sig, new_level)
   end
@@ -139,12 +139,12 @@ function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
     @assert (isa(lambda, LambdaStaticData)) ("LambdaStaticData not found for " * func * " of signature " * sig)
     lambda.ast = ccall(:jl_compress_ast, Any, (Any,Any), lambda, ast)
     if new_level == PASS_UNOPTTYPED
-      dprintln(3,"Calling lambdaTypeinf with optimize=false")
+      @dprintln(3,"Calling lambdaTypeinf with optimize=false")
       (new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=false)
     else
       assert(new_level == PASS_TYPED)
-      dprintln(3,"Calling lambdaTypeinf with optimize=true")
-      dprintln(4,"lambda = ", lambda)
+      @dprintln(3,"Calling lambdaTypeinf with optimize=true")
+      @dprintln(4,"lambda = ", lambda)
       new_ast = ast
       #(new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=true)
     end
@@ -266,7 +266,7 @@ function cleanupASTLabels(ast)
   assert(typeof(body) == Expr && body.head == :body)
   state = lmstate()
   CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
-  #dprintln(3,"label mapping = ", state.label_map)
+  #@dprintln(3,"label mapping = ", state.label_map)
   state.last_was_label = false
   body = CompilerTools.AstWalker.AstWalk(body, update_labels, state)
   body.args = removeDupLabels(body.args)
@@ -281,15 +281,15 @@ function tfuncPresent(func, tt)
   m = methods(func, tt)[1]
   def = m.func.code
   if is(def.tfunc, nothing)
-    dprintln(2, "tfunc NOT present before code_typed")
+    @dprintln(2, "tfunc NOT present before code_typed")
     code_typed(func, tt)
     if is(def.tfunc, nothing) 
       error("tfunc still NOT present after code_typed")
     else
-      dprintln(2, "tfunc present after code_typed")
+      @dprintln(2, "tfunc present after code_typed")
     end
   else
-    dprintln(2, "tfunc present on call")
+    @dprintln(2, "tfunc present on call")
   end 
 end
 
@@ -301,7 +301,7 @@ returns a new optimized function without modifying the input.  Argument explanat
 3) per_site_opt_set - the set of optimization passes to apply to this function.
 """
 function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_set :: ANY)
-  dprintln(3,"processFuncCall starting = ", func, " call_sig_arg_tuple = ", call_sig_arg_tuple)
+  @dprintln(3,"processFuncCall starting = ", func, " call_sig_arg_tuple = ", call_sig_arg_tuple)
   @assert (isa(func, Function)) ("processFuncCall can only optimize functions, but got " * typeof(func))
   if per_site_opt_set == nothing 
     per_site_opt_set = optPasses 
@@ -309,23 +309,23 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   @assert (length(per_site_opt_set) > 0) "There are no registered optimization passes."
   func_module = Base.function_module(func, call_sig_arg_tuple)
   func_ref = GlobalRef(func_module, symbol(string(func)))
-  dprintln(3,"processFuncCall ", func_ref, " ", call_sig_arg_tuple, " opt_set = ", per_site_opt_set)
+  @dprintln(3,"processFuncCall ", func_ref, " ", call_sig_arg_tuple, " opt_set = ", per_site_opt_set)
 
   # Create a skeleton of the incoming function, which is used to facilitate AST conversion, and will eventually be the result function to be returned.
   new_func_name = gensym(string(func_ref))
   fake_args = Any[ gensym() for a in call_sig_arg_tuple ]
   new_func = Core.eval(func_module, :(function $(new_func_name)($(fake_args...)) end))
-  dprintln(2,"temp_func is ", new_func)
+  @dprintln(2,"temp_func is ", new_func)
 
   # Remember what level the AST was in.
   cur_level = per_site_opt_set[1].level
   cur_ast = func
 
-  dprintln(3,"Initial code to optimize = ", cur_ast)
+  @dprintln(3,"Initial code to optimize = ", cur_ast)
 
   # For each optimization pass in the optimization set.
   for i = 1:length(per_site_opt_set)
-      dprintln(3,"optimization pass ", i)
+      @dprintln(3,"optimization pass ", i)
       # See if the current optimization pass uses optimized AST form and the previous optimization pass used unoptimized AST form.
       cur_level = per_site_opt_set[i].level
       if cur_level > PASS_MACRO
@@ -333,25 +333,25 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
         assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
         # Call the current optimization on the current AST.
         cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
-        dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
+        @dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
       end
   end
 
-  dprintln(3,"After optimization passes")
+  @dprintln(3,"After optimization passes")
 
   if isa(cur_ast, Expr)
     ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
-    dprintln(3,"Last opt pass after converting to typed AST.\n", cur_ast.args[3])
+    @dprintln(3,"Last opt pass after converting to typed AST.\n", cur_ast.args[3])
 
     # Write the modifed code back to the function.
-    dprintln(2,"Before methods at end of processFuncCall.")
+    @dprintln(2,"Before methods at end of processFuncCall.")
     tfuncPresent(new_func, call_sig_arg_tuple)
     method = methods(new_func, call_sig_arg_tuple)
     assert(length(method) == 1)
     method = method[1]
     method.func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method.func.code, cur_ast)
 
-    dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
+    @dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
   elseif isa(cur_ast, Function)
     return cur_ast
@@ -373,26 +373,26 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   mod = current_module()
   new_func = GlobalRef(mod, new_fname)
   real_func = GlobalRef(mod, real_fname)
-  dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
+  @dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
 
   #bt = backtrace() ;
   #s = sprint(io->Base.show_backtrace(io, bt))
-  #dprintln(3, "makeWrapperFunc backtrace ")
-  #dprintln(3, s)
+  #@dprintln(3, "makeWrapperFunc backtrace ")
+  #@dprintln(3, s)
 
-  dprintln(3, "call_sig_args = ", call_sig_args)
+  @dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
   new_call_sig_args = Symbol[ symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
-  dprintln(3, "new_call_sig_args = ", new_call_sig_args)
-  dprintln(3, "call_sig_arg_typs = ", temp_tuple)
+  @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
+  @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   static_typeof_ret = Expr(:static_typeof, :ret)
   gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
   wrapper_ast = :(function $new_fname($(new_call_sig_args...))
-         #CompilerTools.OptFramework.dprintln(3,"new_func running ", $(new_call_sig_args...))
+         #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
          opt_set = $per_site_opt_set
@@ -421,7 +421,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          end
          $idtc($static_typeof_ret, func_to_call($(new_call_sig_args...)))
         end)
-  dprintln(4,"wrapper_ast = ", wrapper_ast)
+  @dprintln(4,"wrapper_ast = ", wrapper_ast)
   gOptFrameworkDict[new_func] = real_func
   return wrapper_ast
 end
@@ -438,7 +438,7 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
       # We found a call expression within the larger expression.
       call_expr = x.args[1]          # Get the target of the call.
       call_sig_args = x.args[2:end]  # Get the arguments to the call.
-      dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
+      @dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
 
       # The name of the new trampoline function.
       real_func = symbol(string(call_expr))
@@ -455,7 +455,7 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
       # call it if nothing can be optimized.
       x.args = [ trampoline_func; x.args[2:end] ]
 
-      dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
+      @dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
 
       return x
     end    
@@ -471,9 +471,9 @@ function convert_expr(per_site_opt_set, ast)
     # skip translation since opt_set is empty
     return ast
   else
-    dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
+    @dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
     res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
-    dprintln(2,"converted expression = ", res)
+    @dprintln(2,"converted expression = ", res)
     return res
   end
 end
@@ -494,12 +494,12 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
     macro_func = GlobalRef(mod, macro_fname)
     ast.args[1].args[1] = real_fname 
     macro_ast.args[1].args[1] = macro_fname 
-    dprintln(3, "Initial code = ", ast)
+    @dprintln(3, "Initial code = ", ast)
     for i in 1:length(opt_set)
       x = opt_set[i]
       if x.level == PASS_MACRO
         macro_ast = x.func(macro_func, macro_ast, nothing) # macro level transformation only takes input ast as its argument
-        dprintln(3, "After pass[", i, "], AST = ", macro_ast)
+        @dprintln(3, "After pass[", i, "], AST = ", macro_ast)
       end
     end
     if length(macros) > 0

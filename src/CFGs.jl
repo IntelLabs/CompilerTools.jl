@@ -94,9 +94,9 @@ Second argument is a object collecting information about the CFG as we go along.
 Third argument is some sub-tree of the AST.
 """
 function addStatement(top_level, state, ast :: ANY)
-    dprintln(3, "addStatement ", ast, " ", top_level, " ", state.cur_bb == nothing)
+    @dprintln(3, "addStatement ", ast, " ", top_level, " ", state.cur_bb == nothing)
     if top_level && state.cur_bb != nothing
-        dprintln(3,"liveness adding statement number ", state.top_level_number)
+        @dprintln(3,"liveness adding statement number ", state.top_level_number)
         for i in state.cur_bb.statements
           if i.index == state.top_level_number
             throw(string("statement number already there"))
@@ -207,7 +207,7 @@ end
 Returns the maximum basic block label for the given CFG.
 """
 function getMaxBB(bl::CFG)
-    dprintln(3,"getMaxBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
+    @dprintln(3,"getMaxBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
     maximum(collect(keys(bl.basic_blocks)))
 end
 
@@ -215,7 +215,7 @@ end
 Returns the minimum basic block label for the given CFG.
 """
 function getMinBB(bl::CFG)
-    dprintln(3,"getMinBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
+    @dprintln(3,"getMinBB = ", length(bl.basic_blocks), " ", collect(keys(bl.basic_blocks)))
     minimum(collect(keys(bl.basic_blocks)))
 end
 
@@ -251,7 +251,7 @@ function update_label(x::Expr,
     if head == :gotoifnot
         # A :gotoifnot Expr node with the else_label in args[2]
         else_label = args[2]
-        dprintln(3,"else_label = ", else_label, " old = ", state.old_label, " new = ", state.new_label)
+        @dprintln(3,"else_label = ", else_label, " old = ", state.old_label, " new = ", state.new_label)
         # Assert that this :gotoifnot Expr node's label is the old_label that we have been instructed to replace.
         assert(else_label == state.old_label)
         # Update the current :gotoifnot Expr node in place.
@@ -298,7 +298,7 @@ AstWalk on the last statement of the BasicBlock is used with the update_label ca
 """
 function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     state = UpdateLabelState(after.label, new_bb.label)
-    dprintln(2, "changeEndingLabel ", bb.statements[end].expr)
+    @dprintln(2, "changeEndingLabel ", bb.statements[end].expr)
     new_last_stmt = AstWalker.AstWalk(bb.statements[end].expr, update_label, state)
     assert(state.changed)
     bb.statements[end].expr = new_last_stmt
@@ -315,7 +315,7 @@ the new basic block by setting excludeBackEdge to true and setting back_edge to 
 the back edge.
 """
 function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, back_edge = nothing)
-    dprintln(2,"insertBefore ", after, " excludeBackEdge = ", excludeBackEdge, " back_edge = ", back_edge)
+    @dprintln(2,"insertBefore ", after, " excludeBackEdge = ", excludeBackEdge, " back_edge = ", back_edge)
     assert(haskey(bl.basic_blocks, after))   # Make sure the basic block we want to insert before exists in the CFG.
     dump_bb(bl)                              # Print the CFG in debugging mode.
 
@@ -332,7 +332,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
       new_bb_id = getMaxBB(bl) + 1
     end
 
-    dprintln(2,"new_bb_id = ", new_bb_id)
+    @dprintln(2,"new_bb_id = ", new_bb_id)
 
     # Create the new basic block.
     new_bb = BasicBlock(new_bb_id)
@@ -370,7 +370,7 @@ function insertBefore(bl::CFG, after :: Int, excludeBackEdge :: Bool = false, ba
     # For all the predecessors of the new basic block, go through and make those blocks successors
     # no longer point to "after" but point to the new basic block instead.
     for pred in new_bb.preds
-      dprintln(2,"pred = ", pred.label)
+      @dprintln(2,"pred = ", pred.label)
       replaceSucc(pred, bb_after, new_bb)
     end
 
@@ -418,7 +418,7 @@ To be eligible for wrapping, first and merge must be in the same scope of source
 This restriction is validated by confirming that "first" dominates "merge" and that "merge" inverse dominates "first".
 """
 function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merge :: Int, back_edge :: Union{Void, BasicBlock} = nothing)
-    dprintln(2,"wrapInConditional condition = ", cond_gotoifnot, " first = ", first, " merge = ", merge)
+    @dprintln(2,"wrapInConditional condition = ", cond_gotoifnot, " first = ", first, " merge = ", merge)
     assert(haskey(bl.basic_blocks, first))   # Make sure the "before" basic block exists in the CFG.
     assert(haskey(bl.basic_blocks, merge))   # Make sure the "after"  basic block exists in the CFG.
     dump_bb(bl)                              # Print the CFG in debugging mode.
@@ -447,7 +447,7 @@ function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merg
       cond_fallthrough = getMinBB(bl) - 1
     end
 
-    dprintln(2,"new_bb_id = ", new_bb_id, " cond_fallthrough = ", cond_fallthrough)
+    @dprintln(2,"new_bb_id = ", new_bb_id, " cond_fallthrough = ", cond_fallthrough)
 
     # Create the new basic blocks.
     new_bb  = BasicBlock(new_bb_id)
@@ -485,7 +485,7 @@ function wrapInConditional(bl :: CFG, cond_gotoifnot :: Expr, first :: Int, merg
     # For all the predecessors of the new basic block, go through and make those blocks successors
     # no longer point to "after" but point to the new basic block instead.
     for pred in new_bb.preds
-      dprintln(2,"pred = ", pred.label)
+      @dprintln(2,"pred = ", pred.label)
       replaceSucc(pred, bb_first, new_bb)
     end
 
@@ -502,7 +502,7 @@ basic block so that it will jump to the "after" basic block.  The user of this f
 at the end of the new basic block once they are done inserting their other code.
 """
 function insertBetween(bl :: CFG, before :: Int, after :: Int)
-    dprintln(2,"insertBetween before = ", before, " after = ", after)
+    @dprintln(2,"insertBetween before = ", before, " after = ", after)
     assert(haskey(bl.basic_blocks, before))   # Make sure the "before" basic block exists in the CFG.
     assert(haskey(bl.basic_blocks, after))    # Make sure the "after"  basic block exists in the CFG.
     dump_bb(bl)                               # Print the CFG in debugging mode.
@@ -525,7 +525,7 @@ function insertBetween(bl :: CFG, before :: Int, after :: Int)
 
     # Determine if after is reached from before via a fallthrough or not.
     after_is_fallthrough = (bb_before.fallthrough_succ.label == after)
-    dprintln(2,"new_bb_id = ", new_bb_id, " after is fallthrough = ", after_is_fallthrough)
+    @dprintln(2,"new_bb_id = ", new_bb_id, " after is fallthrough = ", after_is_fallthrough)
 
     # Create the new basic block.
     new_bb = BasicBlock(new_bb_id)
@@ -660,7 +660,7 @@ function createFunctionBody(bl :: CFG)
     res = Any[]
 
     body_order = getBbBodyOrder(bl)
-    dprintln(2,"createFunctionBody, body_order = ", body_order)
+    @dprintln(2,"createFunctionBody, body_order = ", body_order)
 
     # Go through the blocks in body order.
     for bo = 1:length(body_order)
@@ -668,7 +668,7 @@ function createFunctionBody(bl :: CFG)
       cur_block = body_order[bo]
       # Get the BasicBlock corresponding to the label.
       bb = bl.basic_blocks[cur_block]
-      dprintln(2,"dumping basic block ", cur_block, " fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label)
+      @dprintln(2,"dumping basic block ", cur_block, " fallthrough = ", bb.fallthrough_succ == nothing ? "nothing" : bb.fallthrough_succ.label)
 
       # Labels greater than or equal to 0 are real and are output to the beginning of the block.
       if cur_block >= 0
@@ -718,7 +718,7 @@ function find_bb_for_statement(top_number::Int, bl::CFG)
     end
   end
 
-  dprintln(3,"Didn't find statement top_number in basic_blocks.")
+  @dprintln(3,"Didn't find statement top_number in basic_blocks.")
   nothing
 end
 
@@ -755,7 +755,7 @@ function compute_dfn(basic_blocks)
     compute_dfn_internal(basic_blocks, CFG_ENTRY_BLOCK, num_bb, visited, bbs_df_order)  # Do the recursive process to compute the numbering starting from the first basic block -1.
     # Make sure that all basic blocks were visited during the recursively numbering process by making sure all impossible_bb values were over-written.
     if in(impossible_bb, bbs_df_order)
-        dprintln(0,"bbs_df_order = ", bbs_df_order)
+        @dprintln(0,"bbs_df_order = ", bbs_df_order)
         throw(string("Problem with depth first basic block ordering.  Some dfn entry was not set."))
     end
     bbs_df_order
@@ -785,7 +785,7 @@ function dump_bb(bl :: CFG)
 
     for i = 1:length(body_order)
         bb = bl.basic_blocks[body_order[i]]
-        dprint(2,bb)
+        @dprint(2,bb)
 
         if DEBUG_LVL >= 4
             for j in bb.succs
@@ -834,11 +834,11 @@ function from_exprs(ast::Array{Any,1}, depth, state, callback, cbdata)
   for i = 1:len
     if top_level
         state.top_level_number = i
-        dprintln(2,"Processing top-level ast #",i," depth=",depth)
+        @dprintln(2,"Processing top-level ast #",i," depth=",depth)
     else
-        dprintln(2,"Processing ast #",i," depth=",depth)
+        @dprintln(2,"Processing ast #",i," depth=",depth)
     end
-    dprintln(3,"ast[", i, "] = ", ast[i])
+    @dprintln(3,"ast[", i, "] = ", ast[i])
     from_expr(ast[i], depth, state, top_level, callback, cbdata)
   end
   nothing
@@ -900,7 +900,7 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
         delete!(j.preds, bb)
       end
 
-      dprintln(3,"Removing dead block. ", bb)
+      @dprintln(3,"Removing dead block. ", bb)
       delete!(bbs, label)
     end
   end
@@ -923,8 +923,8 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
       if length(bb.succs) == 1 && bb.fallthrough_succ == nothing 
           succ = first(bb.succs)
           if succ.label != CFG_EXIT_BLOCK && length(succ.preds) == 1
-              dprintln(3, "Eliminating basic block ", succ.label, " via the \"goto N; N:\" pattern.")
-              dprintln(3, "Last BB statements = ", bb.statements[end])
+              @dprintln(3, "Eliminating basic block ", succ.label, " via the \"goto N; N:\" pattern.")
+              @dprintln(3, "Last BB statements = ", bb.statements[end])
               assert(typeof(bb.statements[end].expr) == GotoNode)
               bb.succs = succ.succs
               bb.fallthrough_succ = succ.fallthrough_succ
@@ -959,7 +959,7 @@ if false
 #            push!(succ.preds, j)
 #          end
 #
-#          dprintln(3,"Removing block with no statements and one successor. ", bb)
+#          @dprintln(3,"Removing block with no statements and one successor. ", bb)
 #          delete!(bbs, i[1])
 #          found_change = true
 #        end
@@ -971,7 +971,7 @@ if false
 #            delete!(succ.preds, bb)
 #            push!(succ.preds, pred)
 #            append!(pred.statements, bb.statements)
-#            dprintln(3,"Removing block with only one predecessor and successor. ", bb)
+#            @dprintln(3,"Removing block with only one predecessor and successor. ", bb)
 #            delete!(bbs, i[1])
 #            found_change = true
 #        end
@@ -1002,22 +1002,22 @@ Another entry point to construct a control-flow graph but one that allows you to
 so that non-standard node types can be processed.
 """
 function from_expr(ast::Any, callback, cbdata)
-  dprintln(2,"from_expr Any")
-  dprintln(3,ast)
+  @dprintln(2,"from_expr Any")
+  @dprintln(3,ast)
   live_res = expr_state()
   # Recursively process the AST.
   from_expr(ast, 1, live_res, false, callback, cbdata)
   # Connect the active basic block at the end of the recursive processing with the final implicit basic block (-2).
   connect_finish(live_res)
 # I simplifed removeUselessBlocks to just get rid of dead blocks (i.e., no predecessor)
-  dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+  @dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
   removeUselessBlocks(live_res.basic_blocks)
-  dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
+  @dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
 
   dfn = compute_dfn(live_res.basic_blocks)   # Compute the block depth first numbering.
-  dprintln(3,"dfn = ", dfn)
+  @dprintln(3,"dfn = ", dfn)
   ret = CFG(live_res.basic_blocks, dfn)      # Create the CFG object to be returned as the dictionary of label to basic blocks and the depth first numbering.
-  dprintln(2,"Dumping basic block info from_expr.")
+  @dprintln(2,"Dumping basic block info from_expr.")
   dump_bb(ret)
   return ret
 end
@@ -1026,7 +1026,7 @@ end
 Process LabelNode for CFG construction.
 """
 function from_label(label, state, callback, cbdata)
-    dprintln(2,"LabelNode: ", label)
+    @dprintln(2,"LabelNode: ", label)
     # If a basic block object has not already been created for the basic block started by this LabelNode AST node then create one.
     if !haskey(state.basic_blocks,label)
         state.basic_blocks[label] = BasicBlock(label)
@@ -1042,7 +1042,7 @@ end
 Process a GotoNode for CFG construction.
 """
 function from_goto(label, state, callback, cbdata)
-    dprintln(2,"GotoNode: ", label)
+    @dprintln(2,"GotoNode: ", label)
     # If a basic block object has not already been created for the basic block target of the goto then create one.
     if !haskey(state.basic_blocks,label)
         state.basic_blocks[label] = BasicBlock(label)
@@ -1059,7 +1059,7 @@ end
 Process a :return Expr for CFG construction.
 """
 function from_return(args, depth, state, callback, cbdata)
-    dprintln(2,"Expr return: ")
+    @dprintln(2,"Expr return: ")
     from_exprs(args, depth, state, callback, cbdata)
     # Connect this basic block to the finish pseudo-basic block.
     connect(state.cur_bb, state.basic_blocks[CFG_EXIT_BLOCK], false)
@@ -1117,16 +1117,16 @@ function from_expr(ast::LambdaStaticData, depth, state, top_level, callback, cbd
 end
 
 function from_expr(ast::Any, depth, state, top_level, callback, cbdata)
-    dprintln(2,"from_expr depth=",depth," ", " asttyp = ", typeof(ast))
+    @dprintln(2,"from_expr depth=",depth," ", " asttyp = ", typeof(ast))
 
     handled = callback(ast, cbdata)
     if handled != nothing
         addStatement(top_level, state, ast)
         if length(handled) > 0
-            dprintln(3,"Processing expression from callback for ", ast)
-            dprintln(3,handled)
+            @dprintln(3,"Processing expression from callback for ", ast)
+            @dprintln(3,handled)
             from_exprs(handled, depth+1, state, callback, cbdata)
-            dprintln(3,"Done processing expression from callback.")
+            @dprintln(3,"Done processing expression from callback.")
         end
         return nothing
     end
@@ -1139,11 +1139,11 @@ end
 function from_expr_helper(ast::Expr, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
 
-    dprint(2,"Expr ")
+    @dprint(2,"Expr ")
     local head = ast.head
     local args = ast.args
     local typ  = ast.typ
-    dprintln(2,head, " ", args)
+    @dprintln(2,head, " ", args)
     if head == :lambda
         from_lambda(args, depth, state, callback, cbdata)
     elseif head == :body
@@ -1199,7 +1199,7 @@ function compute_dominators(bl :: CFG)
   count = 0;
   change_found = true
   while(change_found)
-      dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+      @dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
 
       count = count + 1
       if count > 1000
@@ -1263,7 +1263,7 @@ function compute_inverse_dominators(bl :: CFG)
   count = 0;
   change_found = true
   while(change_found)
-      dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+      @dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
 
       count = count + 1
       if count > 1000

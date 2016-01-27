@@ -167,9 +167,9 @@ function from_exprs(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, cal
   # sequence of expressions
   # ast = [ expr, ... ]
   local len  = length(ast)
-  dprintln(3, "RWS starting with ", ast)
+  @dprintln(3, "RWS starting with ", ast)
   for i = 1:len
-    dprintln(2,"RWS Processing ast #",i," depth=", depth, " ", ast[i])
+    @dprintln(2,"RWS Processing ast #",i," depth=", depth, " ", ast[i])
     from_expr(ast[i], depth, rws, callback, cbdata)
   end
   rws
@@ -211,7 +211,7 @@ Takes an array in "array_name" being accessed with expression "index_expr".
 Makes sure there is an entry in the dictionary for this array and adds the index expression to this array.
 """
 function addIndexExpr!(this_dict, array_name, index_expr)
-  dprintln(2,"addIndexExpr! ", typeof(array_name), " index_expr = ", index_expr, " typeof(index_expr) = ", typeof(index_expr))
+  @dprintln(2,"addIndexExpr! ", typeof(array_name), " index_expr = ", index_expr, " typeof(index_expr) = ", typeof(index_expr))
   key = toSymGen(array_name)
   if(!haskey(this_dict, key))
     this_dict[key] = Array{Any,1}[]
@@ -226,36 +226,36 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
   assert(length(ast) >= 1)
   local fun  = ast[1]
   local args = ast[2:end]
-  dprintln(2,fun)
+  @dprintln(2,fun)
   for(i = 1:length(args))
-    dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
+    @dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
   end
   if(fun == TopNode(:arrayref) || fun == TopNode(:unsafe_arrayref))
-    dprintln(2,"Handling arrayref in from_call")
+    @dprintln(2,"Handling arrayref in from_call")
     # args[1]  = array
     # args[2+] = index expressions
     assert(length(args) >= 2)
     indices = args[2:end]
-    dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
+    @dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
     addIndexExpr!(rws.readSet.arrays, args[1], indices)
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
     end
   elseif (fun == TopNode(:arrayset) || fun == TopNode(:unsafe_arrayset))
-    dprintln(2,"Handling arrayset in from_call, length(args) = ",length(args))
+    @dprintln(2,"Handling arrayset in from_call, length(args) = ",length(args))
     # args[1]  = array
     # args[2]  = value
     # args[3+] = index expression
     assert(length(args) >= 3)
     indices = args[3:end]
-    dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
+    @dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
     addIndexExpr!(rws.writeSet.arrays, args[1], indices)
     from_expr(args[2], depth, rws, callback, cbdata)
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
     end
   else
-    dprintln(2,"Unhandled function ", fun, " in from_call")
+    @dprintln(2,"Unhandled function ", fun, " in from_call")
     from_exprs(args, depth+1, rws, callback, cbdata)
   end
 end
@@ -290,13 +290,13 @@ function from_expr(ast :: LambdaStaticData, depth :: Integer, rws :: ReadWriteSe
 end
 
 function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-    dprintln(2,"RWS from_expr depth=", depth," ")
+    @dprintln(2,"RWS from_expr depth=", depth," ")
 
-    dprint(2,"RWS Expr ")
+    @dprint(2,"RWS Expr ")
     local head = ast.head
     local args = ast.args
     local typ  = ast.typ
-    dprintln(2,head, " ", args)
+    @dprintln(2,head, " ", args)
     if head == :lambda
         from_lambda(ast, depth, rws, callback, cbdata)
     elseif head == :body
@@ -316,22 +316,22 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     elseif head == :line
         # skip
     elseif head == :copyast
-        dprintln(3,"RWS copyast type")
+        @dprintln(3,"RWS copyast type")
         # skip
     elseif head == :arraysize
-        dprintln(3,"RWS arraysize")
+        @dprintln(3,"RWS arraysize")
         # skip
     elseif head == :assertEqShape
-        dprintln(3,"RWS assertEqShape")
+        @dprintln(3,"RWS assertEqShape")
         # skip
     elseif head == :alloc
         from_expr(args[2], depth, rws, callback, cbdata)
     elseif head == :tuple
-        dprintln(2,"RWS tuple")
+        @dprintln(2,"RWS tuple")
         from_tuple(args, depth, rws, callback, cbdata)
         # skip
     elseif head == :(::)
-        dprintln(2,"RWS ::")
+        @dprintln(2,"RWS ::")
         from_coloncolon(args, depth, rws, callback, cbdata)
     elseif head == :new
         from_exprs(args, depth+1, rws, callback, cbdata)
@@ -363,7 +363,7 @@ function from_expr(ast::Union{Symbol,GenSym},
                    callback :: CallbackType,
                    cbdata::ANY)
     push!(rws.readSet.scalars, ast)
-    dprintln(3,"RWS ", typeof(ast), " type")
+    @dprintln(3,"RWS ", typeof(ast), " type")
 
     return rws
 end
@@ -374,7 +374,7 @@ function from_expr(ast::SymbolNode,
                    callback :: CallbackType,
                    cbdata::ANY)
     push!(rws.readSet.scalars, ast.name)
-    dprintln(3,"RWS SymbolNode type")
+    @dprintln(3,"RWS SymbolNode type")
 
     return rws
 end
@@ -385,7 +385,7 @@ function from_expr(ast::Union{TopNode,ASCIIString,UTF8String},
                    callback :: CallbackType,
                    cbdata::ANY)
     # skip
-    dprintln(3,"RWS ", typeof(ast), " type")
+    @dprintln(3,"RWS ", typeof(ast), " type")
 
     return rws
 end
@@ -397,7 +397,7 @@ function from_expr(ast::GlobalRef,
                    cbdata::ANY)
     local mod  = ast.mod
     local name = ast.name
-    dprintln(3,"RWS GlobalRef type ",typeof(mod))
+    @dprintln(3,"RWS GlobalRef type ",typeof(mod))
     # warn(string("from_expr: GetfieldNode typeof(mod)=", typeof(mod)))
 
     return rws
@@ -410,7 +410,7 @@ function from_expr(ast::QuoteNode,
                    cbdata::ANY)
     local value = ast.value
     # TODO: fields: value
-    dprintln(3,"RWS QuoteNode type ",typeof(value))
+    @dprintln(3,"RWS QuoteNode type ",typeof(value))
     # warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
 
     return rws
@@ -429,7 +429,7 @@ function from_expr(ast::Any,
         if tryCallback(ast, callback, cbdata, depth, rws)
             throw(string("from_expr: unknown ast :", asttyp))
         end
-        #dprintln(2,"RWS from_expr: unknown AST (", typeof(ast), ",", ast, ")")
+        #@dprintln(2,"RWS from_expr: unknown AST (", typeof(ast), ",", ast, ")")
         #warn(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
     end
     return rws
