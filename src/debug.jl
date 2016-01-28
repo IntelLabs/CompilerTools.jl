@@ -44,13 +44,15 @@ function init()
     Base.eval(m, :(function set_debug_level(l) global DEBUG_LVL = l end))
     Base.eval(m, :(function dprint(l, msg...) if l <= DEBUG_LVL print(msg...) end end))
     Base.eval(m, :(function dprintln(l, msg...) if l <= DEBUG_LVL println(msg...) end end))
+    Base.eval(m, :(macro dprint(l, msg...) esc(Expr(:call, :dprint, l, msg...)) end))
+    Base.eval(m, :(macro dprintln(l, msg...) esc(Expr(:call, :dprintln, l, msg...)) end))
   else
     Base.eval(m, :(function set_debug_level(l) end))
     Base.eval(m, :(function dprint(l, msg...) end))
     Base.eval(m, :(function dprintln(l, msg...) end))
-  end   
-  Base.eval(m, :(macro dprint(l, msg...) if l <= DEBUG_LVL esc(Expr(:call, :print, msg...)) else Expr(:null) end end))
-  Base.eval(m, :(macro dprintln(l, msg...) if l <= DEBUG_LVL esc(Expr(:call, :println, msg...)) else Expr(:null) end end))
+    Base.eval(m, :(macro dprint(l, msg...) end))
+    Base.eval(m, :(macro dprintln(l, msg...) end))
+end   
 end
 
 end
