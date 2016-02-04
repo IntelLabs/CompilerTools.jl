@@ -363,7 +363,13 @@ end
 """
 A hack to get around Julia's type inference. This is essentially an identity conversion,
 but forces inferred return type to be the given type.
+Characters coming from C should have Cchar type (which is single byte); Julia can convert them to Char (multi byte).
 """
+function identical(t::Type{Char}, x::Cchar)
+    y::Char = x
+    return y
+end
+
 identical{T}(t::Type{T}, x::T)=x
 
 """
