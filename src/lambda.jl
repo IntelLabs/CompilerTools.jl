@@ -612,7 +612,7 @@ function lambdaExprToLambdaInfo(lambda :: Expr)
   else
     ret.gen_sym_typs = meta[3]
   end
-  ret.static_parameter_names = meta[4]
+  ret.static_parameter_names = length(meta) > 3 ? meta[4] : Any[]
 
   assert(typeof(lambda.args[3]) == Expr)
   assert(lambda.args[3].head == :body)
@@ -634,11 +634,21 @@ Return both the inferred AST that is to a "code_typed(Function, (type,...))" cal
 and the inferred return type of the input method.
 """
 function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
-  t::Any = to_tuple_type(Tuple{typs...})
-  (tree, ty) = Core.Inference.typeinf_uncached(lambda, t, Core.svec(), optimize = optimize)
+  types::Any = to_tuple_type(Tuple{typs...})
+  (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
   lambda.ast = tree
   ast::Expr = Base.uncompressed_ast(lambda)
   return ast, ty
+end
+
+function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
+    types::Any = to_tuple_type(Tuple{ftyp, typs...})
+    env = Core.Inference.svec()
+    lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
+    (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
+    lambda.ast = tree
+    ast::Expr = Base.uncompressed_ast(lambda)
+    return ast, ty
 end
 
 """
