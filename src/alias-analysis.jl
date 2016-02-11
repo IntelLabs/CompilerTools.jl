@@ -51,7 +51,7 @@ const Unknown  = -1
 const NotArray = 0
 
 type State
-  linfo  :: LambdaInfo
+  linfo  :: LambdaVarInfo
   baseID :: Int
   locals :: Dict{SymGen, Int}
   revmap :: Dict{Int, Set{SymGen}}
@@ -129,7 +129,7 @@ function from_lambda(state, expr :: Expr)
   local ast  = expr.args
   local typ  = expr.typ
   assert(length(ast) == 3)
-  local linfo = lambdaExprToLambdaInfo(expr)
+  local linfo = lambdaExprToLambdaVarInfo(expr)
   # very conservative handling by setting free variables to Unknown.
   # TODO: may want to simulate function call at call site to get
   #       more accurate information.
@@ -378,16 +378,16 @@ function iselementarytype(typ::Any)
   return false
 end
 
-function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, callback, cbdata :: ANY)
-  local state = init_state(lambdaInfo, liveness)
+function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liveness, callback, cbdata :: ANY)
+  local state = init_state(LambdaVarInfo, liveness)
   @dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
-  for (v, vd) in lambdaInfo.var_defs
+  for (v, vd) in LambdaVarInfo.var_defs
     if !isArrayType(vd.typ)
       update_notarray(state, v)
     end
   end
-  for v in lambdaInfo.input_params
-    vtyp = getType(v, lambdaInfo)
+  for v in LambdaVarInfo.input_params
+    vtyp = getType(v, LambdaVarInfo)
     # Note we assume all input parameters do not aliasing each other,
     # which is a very strong assumption. This may require reconsideration.
     # Update: changed to assum nothing by default.
@@ -420,8 +420,8 @@ function analyze_lambda_body(body :: Expr, lambdaInfo :: LambdaInfo, liveness, c
 end
 
 function analyze_lambda(expr :: Expr, liveness, callback, cbdata :: ANY)
-  lambdaInfo = lambdaExprToLambdaInfo(expr)
-  analyze_lambda_body(getBody(expr), lambdaInfo, liveness, callback, cbdata)
+  LambdaVarInfo = lambdaExprToLambdaVarInfo(expr)
+  analyze_lambda_body(getBody(expr), LambdaVarInfo, liveness, callback, cbdata)
 end
 
 end

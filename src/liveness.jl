@@ -260,7 +260,7 @@ type expr_state
     read
     ref_params :: Array{Symbol, 1}
     params_not_modified :: Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
-    li :: Union{Void, LambdaInfo}
+    li :: Union{Void, LambdaVarInfo}
 
     function expr_state(cfg, no_mod)
         new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, nothing)
@@ -575,7 +575,7 @@ We don't recurse into the body here because from_expr handles that with fromCFG.
 """
 function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   # :lambda expression
-  state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaInfo(ast)
+  state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaVarInfo(ast)
   state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
   @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
@@ -631,17 +631,17 @@ end
 """
 Get the type of some AST node.
 """
-function typeOfOpr(x::Expr, li :: LambdaInfo)
+function typeOfOpr(x::Expr, li :: LambdaVarInfo)
   @dprintln(3,"starting typeOfOpr, type = Expr")
   return typeOfOpr_fixType(x.typ)
 end
 
-function typeOfOpr(x::SymGen, li :: LambdaInfo)
+function typeOfOpr(x::SymGen, li :: LambdaVarInfo)
   @dprintln(3,"starting typeOfOpr, type = SymGen")
   return typeOfOpr_fixType(getType(x, li))
 end
 
-function typeOfOpr(x::SymbolNode, li :: LambdaInfo)
+function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
   @dprintln(3,"starting typeOfOpr, type = SymbolNode")
   typ1 = getType(x.name, li)
     if x.typ != typ1
@@ -654,18 +654,18 @@ function typeOfOpr(x::SymbolNode, li :: LambdaInfo)
   return typeOfOpr_fixType(x.typ)
 end
 
-function typeOfOpr(x::GlobalRef, li :: LambdaInfo)
+function typeOfOpr(x::GlobalRef, li :: LambdaVarInfo)
   @dprintln(3,"starting typeOfOpr, type = GlobalRef")
   return typeOfOpr_fixType(typeof(eval(x)))
 end
 
-function typeOfOpr(x::SimpleVector, li :: LambdaInfo)
+function typeOfOpr(x::SimpleVector, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, type = SimpleVector")
     svec_types = [ typeOfOpr(x[i], li) for i = 1:length(x) ]
     return Tuple{svec_types...}
 end
 
-function typeOfOpr(x::Any, li :: LambdaInfo)
+function typeOfOpr(x::Any, li :: LambdaVarInfo)
   @dprintln(3,"starting typeOfOpr, type = ",typeof(x))
   return typeOfOpr_fixType(typeof(x))
 end
