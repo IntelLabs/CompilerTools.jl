@@ -30,7 +30,7 @@ module Helper
 
 using ..LambdaHandling
 
-export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, isbitstuple, isPtrType, isIntType
+export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbitstuple, isPtrType, isIntType
 
 
 """
@@ -91,6 +91,14 @@ function toSymGen(x :: SymbolNode)
 end
 
 function toSymGen(x :: GenSym)
+    return x
+end
+
+function toSymGenOrNum(x :: SymAllGen)
+    return toSymGen(x)
+end
+
+function toSymGenOrNum(x :: Number)
     return x
 end
 
