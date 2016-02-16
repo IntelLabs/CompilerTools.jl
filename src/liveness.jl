@@ -715,6 +715,7 @@ function set_use_inplace_naming_convention()
 end
 
 wellknown_all_unmodified = Set{Any}()
+wellknown_only_first_modified = Set{Any}()
 
 function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:(./)), force = true))
@@ -742,6 +743,9 @@ function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:box), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:arraylen), force = true))
 #  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
+
+    push!(wellknown_only_first_modified, Base.resolve(GlobalRef(Base.LinAlg,:gemm_wrapper!), force = true))
+    push!(wellknown_only_first_modified, Base.resolve(GlobalRef(Base,:transpose!), force = true))
 end
 
 """
@@ -801,6 +805,11 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
   if in(func, wellknown_all_unmodified)
     @dprintln(3,"Well-known function known not to modify args.")
     addUnmodifiedParams(func, arg_type_tuple, ones(Int64, length(args)), state) 
+  elseif in(func, wellknown_only_first_modified)
+    # only first argument is def
+    local params_res = ones(Int64, length(args))
+    params_res[1] = 0
+    addUnmodifiedParams(func, arg_type_tuple, params_res, state)
   else
     if func == eval(TopNode(:tuple))
       @dprintln(3,"Detected tuple in getUnmodifiedArgs so returning that no arguments are modified.")
