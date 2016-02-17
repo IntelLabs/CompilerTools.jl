@@ -36,10 +36,10 @@ import Base.show
 
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaVarInfo
-export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
+export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getParamsNoSelf
 export addLocalVariable, addEscapingVariable, addGenSym
 export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnType
-export getRefParams, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
+export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
 # Possible values of VarDef descriptor that can be OR'ed together.
@@ -231,6 +231,19 @@ function addInputParameters(collection, li :: LambdaVarInfo)
 end
 
 """
+Get the input parmeters as an array. Note that for Julia 0.5 we filter out
+the #self# parameter if it is present.
+"""
+function getParamsNoSelf(li::LambdaVarInfo)
+  params = li.input_params
+  if length(params) > 0 && params[1] == symbol("#self")
+    return params[2:end]
+  else
+    return params
+  end
+end
+
+"""
 Returns the type of a Symbol or GenSym in "x" from LambdaVarInfo in "li".
 """
 function getType(x::Symbol, li::LambdaVarInfo)
@@ -258,6 +271,26 @@ end
 
 function getType(x::Any, li::LambdaVarInfo)
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
+end
+
+function updateType(li::LambdaVarInfo, x::Symbol, typ)
+    @assert (haskey(li.var_defs, x)) ("cannot update the type of " * string(x) * " because it is not a local variable")
+    li.var_defs[x].typ = typ
+    return nothing
+end
+
+function updateType(li::LambdaVarInfo, x::GenSym, typ)
+    @assert (x.id >= 0 && x.id < length(li.gen_sym_typs)) ("cannot update the type of " * string(x) * " because it is not a local GenSym")
+    li.gen_sym_typs[x.id + 1] = typ
+    return nothing
+end
+
+function updateType(li::LambdaVarInfo, x::SymbolNode, typ)
+    updateType(li, x.name, typ)
+end
+ 
+function updateType(li::LambdaVarInfo, x, typ)
+    throw(string("updateType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
 end
 
 """
