@@ -37,7 +37,7 @@ import Base.show
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaVarInfo
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getParamsNoSelf
-export addLocalVariable, addEscapingVariable, addGenSym
+export addLocalVariable, addEscapingVariable, addGenSym, parameterToSymbol, getLocalVariables
 export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnType
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
@@ -187,7 +187,7 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body :: Expr, AstWalkFunc =
   end
   @dprintln(3,"css = ", css)
   for i in li.var_defs
-    if in(i[1], li.input_params)
+    if isInputParameter(i[1], li)
       continue
     end
     if !in(i[1], css.used_symbols)
@@ -300,6 +300,10 @@ function getDesc(x :: Symbol, li :: LambdaVarInfo)
   return li.var_defs[x].desc
 end
 
+function getDesc(x :: GenSym, li :: LambdaVarInfo)
+  return ISASSIGNED | ISASSIGNEDONCE
+end
+
 """
 Returns the VarDef for a Symbol in LambdaVarInfo in "li"
 """
@@ -311,7 +315,14 @@ end
 Returns true if the Symbol in "s" is an input parameter in LambdaVarInfo in "li".
 """
 function isInputParameter(s :: Symbol, li :: LambdaVarInfo)
-  return in(s, li.input_params)
+    for p in li.input_params
+        if (isa(p, Symbol) && p == s) || 
+           (isa(p, Expr) && p.args[1] == s) || 
+           (isa(p, SymbolNode) && p.name == s)
+            return true
+        end
+    end
+    return false
 end
 
 """
@@ -322,10 +333,19 @@ function isLocalVariable(s :: Symbol, li :: LambdaVarInfo)
 end
 
 """
-Returns an array of Symbols for local variables.
+Returns an array of Symbols/GenSyms for local variables and GenSyms.
 """
 function getLocalVariables(li :: LambdaVarInfo)
-  return setdiff(collect(keys(li.var_defs)), li.input_params)
+  locals = Any[]
+  for k in keys(li.var_defs)
+    if !isInputParameter(k, li)
+        push!(locals, k)
+    end
+  end
+  for i in 1:length(li.gen_sym_typs)
+      push!(locals, GenSym(i-1))
+  end
+  return locals
 end
 
 """
@@ -621,17 +641,18 @@ function lambdaExprToLambdaVarInfo(lambda :: Expr)
   assert(length(lambda.args) == 3)
 
   ret = LambdaVarInfo()
-  # Convert array of input parameters in lambda.args[1] into an array of Symbol.
   for i = 1:length(lambda.args[1])
     one_input = lambda.args[1][i]
-    oityp = typeof(one_input)
-    if oityp == Symbol
-      push!(ret.input_params, one_input)
-    elseif oityp == Expr && one_input.head == :(::)
-      push!(ret.input_params, one_input.args[1])
-    else
-      @dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
-    end
+    push!(ret.input_params, one_input)
+    # the following is commented out because we need to handle varargs
+    #oityp = typeof(one_input)
+    #if oityp == Symbol
+    #  push!(ret.input_params, one_input)
+    #elseif oityp == Expr && one_input.head == :(::)
+    #  push!(ret.input_params, one_input.args[1])
+    #else
+    #  @dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
+    #end
   end
 
   # We call the second part of the lambda metadata.
@@ -780,5 +801,12 @@ function getRefParams(LambdaVarInfo :: LambdaVarInfo)
 
   return ret
 end
+
+"""
+Convert a parameter to Symbol.
+"""
+parameterToSymbol(x::Symbol) = x
+parameterToSymbol(x::SymbolNode) = x.name
+parameterToSymbol(x::Expr) = begin assert(x.head == :(::)); return x.args[1] end
 
 end
