@@ -648,10 +648,15 @@ function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
       @dprintln(2, "typeOfOpr x.typ and lambda type different")
       @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
       @dprintln(2, "li = ", li)
+      if (x.typ <: typ1) || is(typ1, Box)
+          typ1 = x.typ
+      elseif (typ1 <: x.typ) || is(x.typ, Box)
+      else
+          throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
+      end
     end
-    assert(x.typ <: typ1)
-    assert(isa(x.typ, Type))
-  return typeOfOpr_fixType(x.typ)
+    assert(isa(typ1, Type))
+  return typeOfOpr_fixType(typ1)
 end
 
 function typeOfOpr(x::GlobalRef, li :: LambdaVarInfo)
