@@ -236,7 +236,7 @@ the #self# parameter if it is present.
 """
 function getParamsNoSelf(li::LambdaVarInfo)
   params = li.input_params
-  if length(params) > 0 && params[1] == symbol("#self")
+  if length(params) > 0 && params[1] == symbol("#self#")
     return params[2:end]
   else
     return params
