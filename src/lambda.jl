@@ -297,7 +297,11 @@ end
 Returns the descriptor for a local variable or input parameter "x" from LambdaVarInfo in "li".
 """
 function getDesc(x :: Symbol, li :: LambdaVarInfo)
-  return li.var_defs[x].desc
+    if haskey(li.var_defs, x) li.var_defs[x].desc
+    elseif haskey(li.escaping_defs, x) li.escaping_defs[x].desc
+    else 
+      throw(string("getDesc called with unfound variable ", x))
+    end
 end
 
 function getDesc(x :: GenSym, li :: LambdaVarInfo)
