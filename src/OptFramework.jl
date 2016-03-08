@@ -332,7 +332,15 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
         cur_ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, cur_level, new_func)
         assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
         # Call the current optimization on the current AST.
-        cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
+        try
+          cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
+        catch texp
+          if CompilerTools.DebugMsg.PROSPECT_DEV_MODE
+            rethrow(texp)
+          end
+          println("OptFramework failed to optimize function ", func, " in optimization pass ", per_site_opt_set[i].func, " with error ", texp)
+          return nothing
+        end
         @dprintln(3,"AST after optimization pass ", i, " = ", cur_ast)
       end
   end
@@ -432,13 +440,22 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   return wrapper_ast
 end
 
+type opt_calls_insert_trampoline_state
+  per_site_opt_set
+  found_callsite
+
+  function opt_calls_insert_trampoline_state(opt_set)
+    new(opt_set, false)
+  end
+end
+
 """
 An AstWalk callback function.
 Finds call sites in the AST and replaces them with calls to newly generated trampoline functions.
 These trampolines functions allow us to capture runtime types which in turn enables optimization passes to run on fully typed AST.
 If a function/signature combination has not previously been optimized then call processFuncCall to optimize it.
 """
-function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_top_level, read)
+function opt_calls_insert_trampoline(x, state:: opt_calls_insert_trampoline_state, top_level_number, is_top_level, read)
   if typeof(x) == Expr
     if x.head == :call
       # We found a call expression within the larger expression.
@@ -451,17 +468,19 @@ function opt_calls_insert_trampoline(x, per_site_opt_set, top_level_number, is_t
 
       # Recursively process the arguments to this function possibly finding other calls to replace.
       for i = 2:length(x.args)
-        x.args[i] = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, per_site_opt_set)
+        x.args[i] = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
       end
 
       trampoline_func = symbol(string("opt_calls_trampoline_", real_func))
-      wrapper_ast = makeWrapperFunc(trampoline_func, real_func, call_sig_args, per_site_opt_set) 
+      wrapper_ast = makeWrapperFunc(trampoline_func, real_func, call_sig_args, state.per_site_opt_set) 
       Core.eval(current_module(), wrapper_ast)
       # Update the call expression to call our trampoline and pass the original function so that we can
       # call it if nothing can be optimized.
       x.args = [ trampoline_func; x.args[2:end] ]
 
       @dprintln(2, "Replaced call_expr = ", call_expr, " type = ", typeof(call_expr), " new = ", x.args[1])
+
+      state.found_callsite = true
 
       return x
     end    
@@ -478,8 +497,14 @@ function convert_expr(per_site_opt_set, ast)
     return ast
   else
     @dprintln(2, "convert_expr ", ast, " ", typeof(ast), " per_site_opt_set = ", per_site_opt_set)
-    res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, per_site_opt_set)
+    state = opt_calls_insert_trampoline_state(per_site_opt_set)
+    res = CompilerTools.AstWalker.AstWalk(ast, opt_calls_insert_trampoline, state)
     @dprintln(2,"converted expression = ", res)
+
+    if state.found_callsite == false
+        println("WARNING: @acc macro used on an expression not containing a call-site.")
+    end
+
     return res
   end
 end
