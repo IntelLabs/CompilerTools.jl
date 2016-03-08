@@ -448,7 +448,7 @@ end
 """
 Clear the live_in and live_out data corresponding to all basic blocks and statements and then recompute liveness information.
 """
-function recompute_live_ranges(state, dfn)
+function recompute_live_ranges(state, dfn; array_params_live_out=true)
     for bb in state.basic_blocks
         empty!(bb.live_in)
         empty!(bb.live_out)
@@ -458,7 +458,7 @@ function recompute_live_ranges(state, dfn)
         end
     end
 
-    compute_live_ranges(state, dfn)
+    compute_live_ranges(state, dfn, array_params_live_out)
 
     nothing
 end
@@ -466,7 +466,7 @@ end
 """
 Compute the live_in and live_out information for each basic block and statement.
 """
-function compute_live_ranges(state :: expr_state, dfn)
+function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
     found_change = true
     bbs = state.cfg.basic_blocks
 
@@ -486,6 +486,9 @@ function compute_live_ranges(state :: expr_state, dfn)
               # Special case for final block.
               @dprintln(3,"Final block live_out = ", accum)
               # Nothing is live out of the final block.
+              if array_params_live_out
+                  accum = Set{SymGen}(state.ref_params)
+              end
             else
               # The live_out of any non-final block is the union of the live_in of every successor block.
               for j in bb.cfgbb.succs
@@ -938,7 +941,7 @@ end
 """
 Extract liveness information from the CFG.
 """
-function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
+function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY; array_params_live_out=true)
   @dprintln(2,"fromCFG")
   CFGs.dump_bb(cfg)   # Dump debugging information if set_debug_level is high enough.
 
@@ -959,7 +962,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY)
   end
 
   # Compute live_in and live_out for basic blocks and statements.
-  compute_live_ranges(live_res, cfg.depth_first_numbering)
+  compute_live_ranges(live_res, cfg.depth_first_numbering, array_params_live_out)
   @dprintln(2,"Dumping basic block info from_expr.")
   ret = BlockLiveness(live_res.map, cfg)
   dump_bb(ret)
