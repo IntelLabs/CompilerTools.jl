@@ -37,7 +37,7 @@ import Base.show
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaVarInfo
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getParamsNoSelf
-export addLocalVariable, addEscapingVariable, addGenSym, parameterToSymbol, getLocalVariables
+export addLocalVariable, addEscapingVariable, addGenSym, parameterToSymbol, getLocalVariables, getEscapingVariables
 export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnType
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
@@ -274,8 +274,13 @@ function getType(x::Any, li::LambdaVarInfo)
 end
 
 function updateType(li::LambdaVarInfo, x::Symbol, typ)
-    @assert (haskey(li.var_defs, x)) ("cannot update the type of " * string(x) * " because it is not a local variable")
-    li.var_defs[x].typ = typ
+    if haskey(li.var_defs, x)
+        li.var_defs[x].typ = typ
+    elseif haskey(li.escaping_defs, x)
+        @dprintln(3, "updateType: cannot update type of escaping variable", x)
+    else
+        throw(string("updateType: cannot update the type of ", x, " because it is not a local variable"))
+    end
     return nothing
 end
 
@@ -350,6 +355,13 @@ function getLocalVariables(li :: LambdaVarInfo)
       push!(locals, GenSym(i-1))
   end
   return locals
+end
+
+"""
+Returns an array of Symbols for escaping variables. 
+"""
+function getEscapingVariables(li :: LambdaVarInfo)
+  return keys(li.escaping_defs)
 end
 
 """
