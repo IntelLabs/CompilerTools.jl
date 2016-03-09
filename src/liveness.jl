@@ -481,7 +481,9 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             bb_index = dfn[i]
             bb = state.map[bbs[bb_index]]   # get the basic block
 
-            accum = Set{SymGen}()
+            # add escaping variables to accum
+            accum = state.li == nothing ? Set{SymGen}() : Set{SymGen}(getEscapingVariables(state.li))
+
             if bb_index == -2
               # Special case for final block.
               @dprintln(3,"Final block live_out = ", accum)
