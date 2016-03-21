@@ -509,6 +509,18 @@ function convert_expr(per_site_opt_set, ast)
   end
 end
 
+type WorkItem
+  per_site_opt_set
+  opt_set
+  macros
+  ast
+end
+
+type MoreWork
+  returned_macro_ast
+  more_work :: Array{WorkItem,1}
+end
+
 """
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
@@ -517,32 +529,60 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
     assert(isa(fname, Symbol))
     mod = current_module()
     call_sig_args = ast.args[1].args[2:end]
-    macro_ast = deepcopy(ast)
-    macro_only = all(Bool[p.level <= PASS_MACRO for p in opt_set]) || (length(macros) > 0 && macros[1] == symbol("@inline"))
-    real_fname = gensym(string(fname))
-    real_func = GlobalRef(mod, real_fname)
-    macro_fname = macro_only ? fname : gensym(string(fname))
-    macro_func = GlobalRef(mod, macro_fname)
+    macro_ast     = deepcopy(ast)
+    macro_only    = all(Bool[p.level <= PASS_MACRO for p in opt_set]) || (length(macros) > 0 && macros[1] == symbol("@inline"))
+    real_fname    = gensym(string(fname))
+    real_func     = GlobalRef(mod, real_fname)
+    macro_fname   = macro_only ? fname : gensym(string(fname))
+    macro_func    = GlobalRef(mod, macro_fname)
     ast.args[1].args[1] = real_fname 
     macro_ast.args[1].args[1] = macro_fname 
-    @dprintln(3, "Initial code = ", ast)
+    work_array = WorkItem[]
+    orig_macro_ast_type = typeof(macro_ast)
+    @dprintln(3, "@acc convert_function fname = ", fname, " real_fname = ", real_fname, " macro_fname = ", macro_fname)
+
+    @dprintln(3, "@acc converting function = ", macro_ast)
     for i in 1:length(opt_set)
       x = opt_set[i]
       if x.level == PASS_MACRO
         macro_ast = x.func(macro_func, macro_ast, nothing) # macro level transformation only takes input ast as its argument
+        if typeof(macro_ast) != orig_macro_ast_type
+            @dprintln(3, "Macro pass returned more work = ", macro_ast.more_work)
+            assert(typeof(macro_ast) == MoreWork)
+            append!(work_array, macro_ast.more_work)
+            macro_ast = macro_ast.returned_macro_ast 
+        end
         @dprintln(3, "After pass[", i, "], AST = ", macro_ast)
       end
     end
     if length(macros) > 0
+       @dprintln(3, "Adding macrocall macros = ", macros)
        ast = Expr(:macrocall, macros..., ast)
        macro_ast = Expr(:macrocall, macros..., macro_ast)
     end
     if !macro_only
+      @dprintln(3, "Calling makeWrapperFunc")
       ast = Expr(:block, ast, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
     else
+      @dprintln(3, "macro_only conversion")
       ast = Expr(:block, ast, macro_ast)
     end
+    @dprintln(3, "macro_func = ", macro_func, " real_func = ", real_func)
     gOptFrameworkDict[macro_func] = real_func
+
+    if !isempty(work_array)
+        @dprintln(3, "@acc converting function recursively processing work queue")
+    end
+
+    for item in work_array
+        @dprintln(3, "@acc work item = ", item)
+
+        item_res = convert_function(item.per_site_opt_set, item.opt_set, item.macros, item.ast)
+        assert(is_block(item_res))
+        append!(ast.args, item_res.args)
+    end
+
+    @dprintln(3, "@acc converting function done = ", ast)
     ast
 end
 
@@ -560,21 +600,30 @@ end
 
 function convert_block(per_site_opt_set, opt_set, macros, ast)
   for i = 1 : length(ast.args)
+    @dprintln(3, "@acc processing block element ", i)
     expr = ast.args[i]
     if is_function(expr)
+      @dprintln(3, "@acc processing function within block = ", expr)
       ast.args[i] = convert_function(per_site_opt_set, opt_set, macros, expr)
+      @dprintln(3, "@acc done processing function within block = ", ast.args[i])
     elseif is_block(expr)
+      @dprintln(3, "@acc processing block within block = ", expr)
       ast.args[i] = convert_block(per_site_opt_set, opt_set, macros, expr)
+      @dprintln(3, "@acc done processing block within block = ", ast.args[i])
     elseif is_macro(expr)
+      @dprintln(3, "@acc processing macro within block = ", expr)
       ast.args[i] = convert_macro(per_site_opt_set, opt_set, macros, expr)
+      @dprintln(3, "@acc done processing macro within block = ", ast.args[i])
     end
   end
+  @dprintln(3, "@acc processing block done = ", ast)
   return ast
 end
 
 function convert_macro(per_site_opt_set, opt_set, macros, ast)
   if is_function(ast.args[end])
     macros = vcat(macros, ast.args[1:end-1])
+    @dprintln(3, "@acc converting macro function = ", ast, " macros = ", macros)
     convert_function(per_site_opt_set, opt_set, macros, ast.args[end])
   else
     return ast
@@ -615,16 +664,21 @@ macro acc(ast1, ast2...)
   if !isa(opt_set, Array) || length(opt_set) == 0
     # skip translation since opt_set is empty
   elseif is_function(ast)
+    @dprintln(3, "@acc at function level = ", ast)
     # used at function definition
     ast = convert_function(per_site_opt_set, opt_set, Any[], ast)
   elseif is_block(ast)
+    @dprintln(3, "@acc at block level = ", ast)
     ast = convert_block(per_site_opt_set, opt_set, Any[], ast)
   elseif is_macro(ast)
+    @dprintln(3, "@acc at macro level = ", ast)
     ast = convert_macro(per_site_opt_set, opt_set, Any[], ast)
   else
     # used at call site
+    @dprintln(3, "@acc at call-site = ", ast)
     ast = convert_expr(per_site_opt_set, ast)
   end
+  @dprintln(4, "@acc done = ", ast)
   esc(ast)
 end
 
