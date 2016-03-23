@@ -260,10 +260,11 @@ type expr_state
     read
     ref_params :: Array{Symbol, 1}
     params_not_modified :: Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
+    params_not_modified_cb # a callback function to ask if some unknown function has unmodified args
     li :: Union{Void, LambdaVarInfo}
 
-    function expr_state(cfg, no_mod)
-        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, nothing)
+    function expr_state(cfg, no_mod, no_mod_cb)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, no_mod_cb, nothing)
     end
 end
 
@@ -279,6 +280,11 @@ type BlockLiveness
     function BlockLiveness(bb, cfg)
       new(bb, cfg)
     end
+end
+
+function getBasicBlockFromBlockNumber(block_num, bl :: BlockLiveness)
+    cfg_bb = bl.cfg.basic_blocks[block_num]
+    return bl.basic_blocks[cfg_bb]
 end
 
 """
@@ -752,6 +758,7 @@ function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:Ac_mul_Bc), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:box), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:arraylen), force = true))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:arraysize), force = true))
 #  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
 
     push!(wellknown_only_first_modified, Base.resolve(GlobalRef(Base.LinAlg,:gemm_wrapper!), force = true))
@@ -832,8 +839,19 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
       @dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
     else
-      @dprintln(3,"fallback to args passed by ref as modified.")
-      addUnmodifiedParams(func, arg_type_tuple, default_result, state)
+      if state.params_not_modified_cb != nothing && typeof(func) == GlobalRef
+        res = state.params_not_modified_cb(func, arg_type_tuple)
+        if res == nothing
+          @dprintln(3,"fallback to args passed by ref as modified.")
+          addUnmodifiedParams(func, arg_type_tuple, default_result, state)
+        else
+          @dprintln(3,"callback returned unmodified information.")
+          addUnmodifiedParams(func, arg_type_tuple, res, state)
+        end
+      else
+        @dprintln(3,"fallback to args passed by ref as modified.")
+        addUnmodifiedParams(func, arg_type_tuple, default_result, state)
+      end
     end
   end
 
@@ -929,11 +947,11 @@ ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}())
+function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing)
   #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
-  live_res = expr_state(cfg, no_mod)
+  live_res = expr_state(cfg, no_mod, no_mod_cb)
   # Just to process the lambda and extract what the ref_params are.
   from_expr(ast, 1, live_res, callback, cbdata)
   # Process the body of the function via the CFG.
