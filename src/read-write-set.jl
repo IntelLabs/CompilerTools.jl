@@ -227,7 +227,7 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
   local fun  = ast[1]
   local args = ast[2:end]
   @dprintln(2,fun)
-  for(i = 1:length(args))
+  for i = 1:length(args)
     @dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
   end
   if(fun == TopNode(:arrayref) || fun == TopNode(:unsafe_arrayref))
@@ -337,7 +337,7 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         from_exprs(args, depth+1, rws, callback, cbdata)
     elseif head == :gotoifnot
         from_expr(args[1], depth, rws, callback, cbdata)
-    elseif head == :meta
+    elseif head == :meta || head == :inbounds
         # skip
     else
         #println("from_expr: unknown Expr head :", head)

@@ -328,7 +328,7 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
         # skip
     elseif is(head, :new)
         # skip
-    elseif is(head, :boundscheck)
+    elseif is(head, :boundscheck) || is(head, :inbounds)
         # skip?
     elseif is(head, :type_goto)
         # skip?
