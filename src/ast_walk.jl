@@ -300,7 +300,7 @@ function from_expr_helper(ast::Expr,
     elseif head == :alloc
         assert(length(args) == 2)
         args[2] = from_exprs(args[2], depth, callback, cbdata, top_level_number, read)
-    elseif head == :boundscheck
+    elseif head == :boundscheck || head == :inbounds
         # skip
     elseif head == :type_goto
         assert(length(args) == 2)

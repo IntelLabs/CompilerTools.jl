@@ -32,6 +32,7 @@ using CompilerTools
 using CompilerTools.Helper
 using CompilerTools.CFGs
 using CompilerTools.LambdaHandling
+using Core: Box, IntrinsicFunction
 
 import Base.show
 
@@ -659,9 +660,9 @@ function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
       @dprintln(2, "typeOfOpr x.typ and lambda type different")
       @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
       @dprintln(2, "li = ", li)
-      if (x.typ <: typ1) || is(typ1, Box)
+      if (x.typ <: typ1) || is(typ1, Box) 
           typ1 = x.typ
-      elseif (typ1 <: x.typ) || is(x.typ, Box)
+      elseif (typ1 <: x.typ) || is(x.typ, Box) 
       else
           throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
       end
@@ -1089,7 +1090,7 @@ function from_expr_helper(ast::Expr,
         # TODO?: tuple
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
-    elseif head == :line || head == :boundscheck || head == :meta || head == :type_goto
+    elseif head == :line || head == :inbounds || head == :boundscheck || head == :meta || head == :type_goto
         # Intentionally do nothing.
     elseif head == :copyast
         @dprintln(2,"copyast type")
