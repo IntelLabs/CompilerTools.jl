@@ -59,6 +59,29 @@ type DomLoops
     loops    :: Array{Loop,1}
 end
 
+function getPreLoopBlock(l :: Loop, bl :: CompilerTools.CFGs.CFG)
+    head_bb = bl.basic_blocks[l.head]
+    return setdiff(map(x -> x.label, head_bb.preds), l.members)
+end
+
+function getPostLoopBlock(l :: Loop, bl :: CompilerTools.CFGs.CFG)
+    back_edge_bb = bl.basic_blocks[l.back_edge]
+    return setdiff(map(x -> x.label, back_edge_bb.succs), l.members)
+end
+
+function insertNewBlockBeforeLoop(l :: Loop, bl :: CompilerTools.CFGs.CFG, stmts :: Array{Any,1})
+    @dprintln(3, "insertNewBlockBeforeLoop l = ", l, " bl = ", bl, " stmts = ", stmts)
+    new_bb, new_goto_stmt = CompilerTools.CFGs.insertBefore(bl, l.head, true, l.back_edge)
+    @dprintln(3, "new_bb = ", new_bb, " new_goto_stmt = ", new_goto_stmt.expr)
+    for stmt in stmts
+        CompilerTools.CFGs.addStatementToEndOfBlock(bl, new_bb, stmt)
+    end
+    if new_goto_stmt != nothing
+        push!(new_bb.statements, new_goto_stmt)
+    end
+    return new_bb
+end
+
 """
 Takes a DomLoops object containing loop information about the function.
 Returns true if the given basic block label "bb" is in some loop in the function.
