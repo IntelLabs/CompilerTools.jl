@@ -406,6 +406,15 @@ function getDistinctStatementNum(bl :: CFG)
     return res + 1
 end
 
+function insertConditional(bl :: CFG, block_to_split :: Int, statement_in_block_to_split_at :: Int, cond_gotoifnot :: Expr, if_stmts :: Array{Any,1})
+    @dprintln(2,"insertConditionalw condition = ", cond_gotoifnot, " block_to_split = ", block_to_split, " statement_to_split = ", statement_in_block_to_split_at)
+    assert(haskey(bl.basic_blocks, block_to_split))
+    assert(cond_gotoifnot.head == :gotoifnot)
+    dump_bb(bl)                              # Print the CFG in debugging mode.
+    bb = bl.basic_blocks[block_to_split]
+    # NOT FINISHED YET!!!!!
+end
+
 """
 Modifies the CFG to create a conditional (i.e., if statement) that wraps a certain region of the CFG whose entry block is
 "first" and whose last block is "last".
@@ -578,6 +587,24 @@ before statement index "stmt_idx".
 """
 function insertStatementBefore(bl :: CFG, block, stmt_idx, new_stmt)
     insertStatementInternal(bl, block, stmt_idx, new_stmt, false)
+end
+
+function insertStatementBeginningOfBlock(bl :: CFG, block, new_stmt)
+    temp_bb = BasicBlock(-9999999999)
+    live_res = expr_state()
+    live_res.basic_blocks = bl.basic_blocks
+    live_res.cur_bb = temp_bb
+    live_res.top_level_number = getDistinctStatementNum(bl)
+    from_expr(new_stmt, 1, live_res, true, not_handled, nothing)
+
+    assert(length(temp_bb.statements) == 1)
+    stmt = temp_bb.statements[1]
+
+    if length(block.statements) > 0
+        insertat!(block.statements, stmt, 1)
+    else
+        push!(block.statements, stmt)
+    end
 end
 
 function insertStatementInternal(bl :: CFG, block, stmt_idx, new_stmt, after :: Bool)
