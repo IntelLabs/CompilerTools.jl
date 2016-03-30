@@ -625,7 +625,7 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
   for (v, d) in inner.var_defs
     if isLocalVariable(v, outer) 
       if !isInputParameter(v, inner) # skip input parameters
-        @dprintln(1, string("Conflicting variable ", v, " exists in both inner and outer lambda"))
+        error("Conflicting variable ", v, " exists in both inner and outer lambda")
       end
     else
       addLocalVariable(d, outer)
