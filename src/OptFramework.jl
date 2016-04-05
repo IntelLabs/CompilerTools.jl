@@ -301,14 +301,14 @@ returns a new optimized function without modifying the input.  Argument explanat
 3) per_site_opt_set - the set of optimization passes to apply to this function.
 """
 function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_set :: ANY)
-  @dprintln(3,"processFuncCall starting = ", func, " call_sig_arg_tuple = ", call_sig_arg_tuple)
+  @dprintln(3,"processFuncCall starting = ", func, " func type = ", typeof(func), " call_sig_arg_tuple = ", call_sig_arg_tuple)
   @assert (isa(func, Function)) ("processFuncCall can only optimize functions, but got " * typeof(func))
   if per_site_opt_set == nothing 
     per_site_opt_set = optPasses 
   end
   @assert (length(per_site_opt_set) > 0) "There are no registered optimization passes."
   func_module = Base.function_module(func, call_sig_arg_tuple)
-  func_ref = GlobalRef(func_module, symbol(string(func)))
+  func_ref = GlobalRef(func_module, Base.function_name(func))
   @dprintln(3,"processFuncCall ", func_ref, " ", call_sig_arg_tuple, " opt_set = ", per_site_opt_set)
 
   # Create a skeleton of the incoming function, which is used to facilitate AST conversion, and will eventually be the result function to be returned.
@@ -489,7 +489,8 @@ function opt_calls_insert_trampoline(x, state:: opt_calls_insert_trampoline_stat
 end
 
 """
-When @acc is used at a function's callsite, we use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.  That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
+When @acc is used at a function's callsite, we use AstWalk to search for callsites via the opt_calls_insert_trampoline callback and to then insert trampolines.  
+That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
 """
 function convert_expr(per_site_opt_set, ast)
   if is(per_site_opt_set, nothing) && length(optPasses) == 0
