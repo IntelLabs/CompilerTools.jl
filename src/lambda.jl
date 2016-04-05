@@ -36,8 +36,9 @@ import Base.show
 
 export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaVarInfo
-export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getParamsNoSelf
-export addLocalVariable, addEscapingVariable, addGenSym, parameterToSymbol, getLocalVariables, getEscapingVariables
+export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
+export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
+export parameterToSymbol, getLocalVariables, getEscapingVariables
 export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnType
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
@@ -90,6 +91,10 @@ type LambdaVarInfo
 
   function LambdaVarInfo()
     new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
+  end
+
+  function LambdaVarInfo(li::LambdaVarInfo)
+    new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type))
   end
 end
 
@@ -214,7 +219,15 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body :: Expr, AstWalkFunc =
 end
 
 """
-Add Symbol "s" as input parameter to LambdaVarInfo "li".
+Add Symbol "v" as input parameter to LambdaVarInfo "li".
+"""
+function addInputParameter(v::Symbol, ty, desc::Int64, li :: LambdaVarInfo)
+  push!(li.input_params, v)
+  addLocalVariable(v, ty, desc, li)
+end
+
+"""
+Add VarDef "vd" as input parameter to LambdaVarInfo "li".
 """
 function addInputParameter(vd :: VarDef, li :: LambdaVarInfo)
   push!(li.input_params, vd.name)
@@ -240,6 +253,20 @@ function getParamsNoSelf(li::LambdaVarInfo)
     return params[2:end]
   else
     return params
+  end
+end
+
+"""
+Set the input parmeters to the given array without changing local
+variable table. Note that for Julia 0.5 we will insert a #self# 
+parameter to the actual parameter list. 
+"""
+function setParamsNoSelf(new_params::Array{Any,1}, li::LambdaVarInfo)
+  params = li.input_params
+  if length(params) > 0 && params[1] == symbol("#self#")
+    li.input_params = vcat(Any[params[1]], new_params)
+  else
+    li.input_params = copy(new_params)
   end
 end
 
