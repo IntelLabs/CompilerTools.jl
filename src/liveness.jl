@@ -948,7 +948,7 @@ ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing)
+function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
   #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
   assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
@@ -956,7 +956,7 @@ function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, n
   # Just to process the lambda and extract what the ref_params are.
   from_expr(ast, 1, live_res, callback, cbdata)
   # Process the body of the function via the CFG.
-  fromCFG(live_res, cfg, callback, cbdata)
+  fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
 end
 
 """
