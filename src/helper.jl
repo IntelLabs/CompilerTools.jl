@@ -31,7 +31,7 @@ module Helper
 using ..LambdaHandling
 
 export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbitstuple, isPtrType, isIntType
-
+export isBitArrayType, isTupleType, isStringType
 
 """
 This should always be used instead of Expr(...) to form an expression as it forces the typ to be provided.
@@ -46,11 +46,19 @@ end
 Returns true if the incoming type in "typ" is an array type.
 """
 function isArrayType(typ::DataType)
-    return (typ<:Array) || (typ<:BitArray)
+    (typ<:Array) || (typ<:BitArray)
 end
 
 function isArrayType(x::ANY)
-    return false
+    false
+end
+
+function isBitArrayType(typ::DataType)
+    typ<:BitArray
+end
+
+function isBitArrayType(x::ANY)
+    false
 end
 
 function isPtrType(typ::DataType)
@@ -125,6 +133,22 @@ function isIntType(typ::DataType)
 end
 
 function isIntType(typ::ANY)
+    return false
+end
+
+function isTupleType(typ::DataType)
+    typ <: Tuple
+end
+
+function isTupleType(typ::ANY)
+    return false
+end
+
+function isStringType(typ::DataType)
+    typ <: AbstractString
+end
+
+function isStringType(typ::ANY)
     return false
 end
 
