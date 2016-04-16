@@ -29,9 +29,9 @@ module CompilerTools
 
 # package code goes here
 include("debug.jl")
+include("helper.jl")
 include("ast_walk.jl")
 include("lambda.jl")
-include("helper.jl")
 include("read-write-set.jl")
 include("CFGs.jl")
 include("liveness.jl")
@@ -39,7 +39,11 @@ include("OptFramework.jl")
 include("udchains.jl")
 include("loops.jl")
 include("alias-analysis.jl")
+if VERSION > v"0.5.0-dev+3260"
+include("traversal3260.jl")
+else
 include("traversal.jl")
+end
 
 importall .OptFramework
 export @acc, @noacc

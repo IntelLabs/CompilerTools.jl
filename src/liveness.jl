@@ -578,7 +578,7 @@ end
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
-  isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
+    isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
 
 """
 Walk through a lambda expression.
@@ -586,10 +586,10 @@ We just need to extract the ref_params because liveness needs to keep those ref_
 We don't recurse into the body here because from_expr handles that with fromCFG.
 """
 function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-  # :lambda expression
-  state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaVarInfo(ast)
-  state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
-  @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
+    # :lambda expression
+    state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaVarInfo(ast)
+    state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
+    @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
 end
 
 """
@@ -597,83 +597,103 @@ Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
 function from_exprs(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-  # sequence of expressions
-  # ast = [ expr, ... ]
-  local len = length(ast)
-  for i = 1:len
-    @dprintln(2,"Processing ast #",i," depth=",depth)
-    @dprintln(3,"ast[", i, "] = ", ast[i])
-    from_expr(ast[i], depth, state, callback, cbdata)
-  end
-  nothing
+    # sequence of expressions
+    # ast = [ expr, ... ]
+    local len = length(ast)
+    for i = 1:len
+      @dprintln(2,"Processing ast #",i," depth=",depth)
+      @dprintln(3,"ast[", i, "] = ", ast[i])
+      from_expr(ast[i], depth, state, callback, cbdata)
+    end
+    nothing
 end
 
 """
 Walk through an assignment expression.
 """
 function from_assignment(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-  # :(=) assignment
-  # ast = [ ... ]
-  assert(length(ast) == 2)
-  local lhs = ast[1]
-  local rhs = ast[2]
-  @dprintln(3,"liveness from_assignment lhs = ", lhs, " rhs = ", rhs)
-  # Process the right-hand side of the assignment unless it is a lambda.
-  if isa(rhs, Expr) && rhs.head == :lambda
-    # skip handling rhs lambdas
-  else
-    from_expr(rhs, depth, state, callback, cbdata)
-  end
-  @dprintln(3,"liveness from_assignment handling lhs")
-  # Handle the left-hand side of the assignment which is being written.
-  read_save = state.read
-  state.read = false
-  from_expr(lhs, depth, state, callback, cbdata)
-  state.read = read_save
-  @dprintln(3,"liveness from_assignment done handling lhs")
+    # :(=) assignment
+    # ast = [ ... ]
+    assert(length(ast) == 2)
+    local lhs = ast[1]
+    local rhs = ast[2]
+    @dprintln(3,"liveness from_assignment lhs = ", lhs, " rhs = ", rhs)
+    # Process the right-hand side of the assignment unless it is a lambda.
+    if isa(rhs, Expr) && rhs.head == :lambda
+      # skip handling rhs lambdas
+    else
+      from_expr(rhs, depth, state, callback, cbdata)
+    end
+    @dprintln(3,"liveness from_assignment handling lhs")
+    # Handle the left-hand side of the assignment which is being written.
+    read_save = state.read
+    state.read = false
+    from_expr(lhs, depth, state, callback, cbdata)
+    state.read = read_save
+    @dprintln(3,"liveness from_assignment done handling lhs")
 end
 
 """
 Add an entry the dictionary of which arguments can be modified by which functions.
 """
 function addUnmodifiedParams(func, signature :: Array{DataType,1}, unmodifieds, state :: expr_state)
-  state.params_not_modified[(func, signature)] = unmodifieds
+    state.params_not_modified[(func, signature)] = unmodifieds
 end
 
 """
 Get the type of some AST node.
 """
 function typeOfOpr(x::Expr, li :: LambdaVarInfo)
-  @dprintln(3,"starting typeOfOpr, type = Expr")
-  return typeOfOpr_fixType(x.typ)
+    @dprintln(3,"starting typeOfOpr, type = Expr")
+    return typeOfOpr_fixType(x.typ)
 end
 
 function typeOfOpr(x::SymGen, li :: LambdaVarInfo)
-  @dprintln(3,"starting typeOfOpr, type = SymGen")
-  return typeOfOpr_fixType(getType(x, li))
+    @dprintln(3,"starting typeOfOpr, type = SymGen")
+    return typeOfOpr_fixType(getType(x, li))
 end
 
-function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
-  @dprintln(3,"starting typeOfOpr, type = SymbolNode")
-  typ1 = getType(x.name, li)
+if VERSION > v"0.5.0-dev+3260"
+function typeOfOpr(x::Slot, li :: LambdaVarInfo)
+    @dprintln(3,"starting typeOfOpr, type = Slot")
+    typ1 = getType(x.id, li)
     if x.typ != typ1
-      @dprintln(2, "typeOfOpr x.typ and lambda type different")
-      @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
-      @dprintln(2, "li = ", li)
-      if (x.typ <: typ1) || is(typ1, Box) 
-          typ1 = x.typ
-      elseif (typ1 <: x.typ) || is(x.typ, Box) 
-      else
-          throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
-      end
+        @dprintln(2, "typeOfOpr x.typ and lambda type different")
+        @dprintln(2, "x.id = ", x.id, " x.typ = ", x.typ, " typ1 = ", typ1)
+        @dprintln(2, "li = ", li)
+        if (x.typ <: typ1) || is(typ1, Box) 
+            typ1 = x.typ
+        elseif (typ1 <: x.typ) || is(x.typ, Box) 
+        else
+            throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
+        end
     end
     assert(isa(typ1, Type))
-  return typeOfOpr_fixType(typ1)
+    return typeOfOpr_fixType(typ1)
+end
+else
+function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
+    @dprintln(3,"starting typeOfOpr, type = SymbolNode")
+    typ1 = getType(x.name, li)
+    if x.typ != typ1
+        @dprintln(2, "typeOfOpr x.typ and lambda type different")
+        @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
+        @dprintln(2, "li = ", li)
+        if (x.typ <: typ1) || is(typ1, Box) 
+            typ1 = x.typ
+        elseif (typ1 <: x.typ) || is(x.typ, Box) 
+        else
+            throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
+        end
+    end
+    assert(isa(typ1, Type))
+    return typeOfOpr_fixType(typ1)
+end
 end
 
 function typeOfOpr(x::GlobalRef, li :: LambdaVarInfo)
-  @dprintln(3,"starting typeOfOpr, type = GlobalRef")
-  return typeOfOpr_fixType(typeof(eval(x)))
+    @dprintln(3,"starting typeOfOpr, type = GlobalRef")
+    return typeOfOpr_fixType(typeof(eval(x)))
 end
 
 function typeOfOpr(x::SimpleVector, li :: LambdaVarInfo)
@@ -683,8 +703,8 @@ function typeOfOpr(x::SimpleVector, li :: LambdaVarInfo)
 end
 
 function typeOfOpr(x::Any, li :: LambdaVarInfo)
-  @dprintln(3,"starting typeOfOpr, type = ",typeof(x))
-  return typeOfOpr_fixType(typeof(x))
+    @dprintln(3,"starting typeOfOpr, type = ",typeof(x))
+    return typeOfOpr_fixType(typeof(x))
 end
 
 function typeOfOpr_fixType(ret::DataType)
@@ -700,35 +720,35 @@ Returns true if a parameter is passed by reference.
 isbits types are not passed by ref but everything else is (is this always true..any exceptions?)
 """
 function isPassedByRef(x, state :: expr_state)
-  if isa(x, Tuple)
-    return true
-  elseif isbits(x)
-    return false
-  else
-    return true
-  end 
+    if isa(x, Tuple)
+        return true
+    elseif isbits(x)
+        return false
+    else
+        return true
+    end 
 end
 
 function showNoModDict(dict)
-  for i in dict
-    try
-    @dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
-    catch
-    targs = i[1][2]
-    assert(isa(targs, Tuple))
-    println("EXCEPTION: type = ", typeof(targs))
-    for j = 1:length(targs)
-       println(j, " = ", typeof(targs[j]))
-       println(targs[j])
+    for i in dict
+      try
+        @dprintln(4, "(", i[1][1], ",", i[1][2], ") => ", i[2])
+      catch
+        targs = i[1][2]
+        assert(isa(targs, Tuple))
+        println("EXCEPTION: type = ", typeof(targs))
+        for j = 1:length(targs)
+           println(j, " = ", typeof(targs[j]))
+           println(targs[j])
+        end
+      end
     end
-    end
-  end
 end
 
 # If true, will assume that functions without "!" don't update their arguments.
 use_inplace_naming_convention = false
 function set_use_inplace_naming_convention()
-  global use_inplace_naming_convention = true
+    global use_inplace_naming_convention = true
 end
 
 wellknown_all_unmodified = Set{Any}()
@@ -1138,6 +1158,17 @@ function from_expr_helper(ast::Union{Symbol,GenSym},
     add_access(state.cur_bb, ast, state.read)
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr_helper(ast::Slot,
+                          depth::Int64,
+                          state::expr_state,
+                          callback::Function,
+                          cbdata::ANY)
+    # addStatement(top_level, state, ast)
+    @dprintln(2,"SymbolNode type ", ast.id, " ", ast.typ)
+    add_access(state.cur_bb, ast.id, state.read)
+end
+else
 function from_expr_helper(ast::SymbolNode,
                           depth::Int64,
                           state::expr_state,
@@ -1146,6 +1177,7 @@ function from_expr_helper(ast::SymbolNode,
     # addStatement(top_level, state, ast)
     @dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
     add_access(state.cur_bb, ast.name, state.read)
+end
 end
 
 function from_expr_helper(ast::Union{DataType,ASCIIString,UTF8String,NewvarNode,Void},

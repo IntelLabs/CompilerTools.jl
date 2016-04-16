@@ -368,6 +368,18 @@ function from_expr(ast::Union{Symbol,GenSym},
     return rws
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast::Slot,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY)
+    push!(rws.readSet.scalars, ast.id)
+    @dprintln(3,"RWS SymbolNode type")
+
+    return rws
+end
+else
 function from_expr(ast::SymbolNode,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
@@ -377,6 +389,7 @@ function from_expr(ast::SymbolNode,
     @dprintln(3,"RWS SymbolNode type")
 
     return rws
+end
 end
 
 function from_expr(ast::Union{TopNode,ASCIIString,UTF8String},

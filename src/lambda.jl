@@ -29,12 +29,12 @@ import ..DebugMsg
 DebugMsg.init()
 
 using CompilerTools
+using ..Helper
 using CompilerTools.AstWalker
 using Core.Inference: to_tuple_type
 
 import Base.show
 
-export SymGen, SymNodeGen, SymAllGen, SymAll
 export VarDef, LambdaVarInfo
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
@@ -49,14 +49,6 @@ const ISASSIGNED = 2
 const ISASSIGNEDBYINNERFUNCTION = 4
 const ISCONST = 8
 const ISASSIGNEDONCE = 16
-
-"""
-Type aliases for different unions of Symbol, SymbolNode, and GenSym.
-"""
-typealias SymGen     Union{Symbol, GenSym}
-typealias SymNodeGen Union{SymbolNode, GenSym}
-typealias SymAllGen  Union{Symbol, SymbolNode, GenSym}
-typealias SymAll     Union{Symbol, SymbolNode}
 
 """
 Represents the triple stored in a lambda's args[2][1].
@@ -153,6 +145,16 @@ function count_symbols(x::Symbol,
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function count_symbols(x::Slot,
+                       state::CountSymbolState,
+                       top_level_number,
+                       is_top_level,
+                       read)
+    push!(state.used_symbols, x.id)
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+else
 function count_symbols(x::SymbolNode,
                        state::CountSymbolState,
                        top_level_number,
@@ -160,6 +162,7 @@ function count_symbols(x::SymbolNode,
                        read)
     push!(state.used_symbols, x.name)
     return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
 end
 
 function count_symbols(x::GenSym,
@@ -292,12 +295,30 @@ function getType(x::GenSym, li::LambdaVarInfo)
     return li.gen_sym_typs[x.id + 1]
 end
 
-function getType(x::Union{SymbolNode,Expr}, li::LambdaVarInfo)
+if VERSION > v"0.5.0-dev+3260"
+function getType(x::Slot, li::LambdaVarInfo)
+    return x.typ
+end
+else
+function getType(x::SymbolNode, li::LambdaVarInfo)
+    return x.typ
+end
+end
+
+function getType(x::Expr, li::LambdaVarInfo)
     return x.typ
 end
 
 function getType(x::Any, li::LambdaVarInfo)
-    throw(string("getType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
+    throw(string("getType called with neither Symbol or GenSym input.  Instead the input was ", x, " of type ", typeof(x)))
+end
+
+function getType(x::Union{GlobalRef,QuoteNode}, li::LambdaVarInfo)
+    return typeof(eval(x))
+end
+
+function getType(x::Union{Number,DataType,LambdaStaticData}, li::LambdaVarInfo)
+    return typeof(x)
 end
 
 function updateType(li::LambdaVarInfo, x::Symbol, typ)
@@ -317,8 +338,14 @@ function updateType(li::LambdaVarInfo, x::GenSym, typ)
     return nothing
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function updateType(li::LambdaVarInfo, x::Slot, typ)
+    updateType(li, x.id, typ)
+end
+else
 function updateType(li::LambdaVarInfo, x::SymbolNode, typ)
     updateType(li, x.name, typ)
+end
 end
  
 function updateType(li::LambdaVarInfo, x, typ)
@@ -546,7 +573,11 @@ function createVarDict(x :: Array{Any, 1})
     if typeof(desc) != Int64
       @dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
     end
-    ret[name] = VarDef(name, typ, desc)
+    if typeof(typ) == DataType
+        ret[name] = VarDef(name, typ, desc)
+    else
+      @dprintln(1, "typ is not a DataType ", typ, " type = ", typeof(typ))
+    end
   end
   return ret
 end
@@ -849,7 +880,11 @@ end
 Convert a parameter to Symbol.
 """
 parameterToSymbol(x::Symbol) = x
+if VERSION > v"0.5.0-dev+3260"
+parameterToSymbol(x::Slot) = x.id
+else
 parameterToSymbol(x::SymbolNode) = x.name
+end
 parameterToSymbol(x::Expr) = begin assert(x.head == :(::)); return x.args[1] end
 
 end

@@ -245,9 +245,16 @@ function from_call(state, expr :: Expr, callback, cbdata)
     if alias == Unknown
       # if we don't know the result, it could alias any input
       for exp in args
+if VERSION > v"0.5.0-dev+3260"
+        if isa(exp, Slot)
+          update_unknown(state, exp.id)
+        end
+else
         if isa(exp, SymbolNode)
           update_unknown(state, exp.name)
-        elseif isa(exp, Symbol)
+        end
+end
+        if isa(exp, Symbol)
           update_unknown(state, exp)
         end
       end
@@ -258,9 +265,16 @@ function from_call(state, expr :: Expr, callback, cbdata)
     # For unknown calls, conservative assumption is that the result
     # might alias one of (or an element of) the non-leaf-type inputs.
     for exp in args
+if VERSION > v"0.5.0-dev+3260"
+      if isa(exp, Slot)
+        update_unknown(state, exp.id)
+      end
+else
       if isa(exp, SymbolNode)
         update_unknown(state, exp.name)
-      elseif isa(exp, Symbol)
+      end
+end
+      if isa(exp, Symbol)
         update_unknown(state, exp)
       end
     end

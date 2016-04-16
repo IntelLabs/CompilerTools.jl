@@ -30,6 +30,9 @@ module AstWalker
 import ..DebugMsg
 DebugMsg.init()
 
+using CompilerTools
+using ..Helper
+
 # Return this value to indicate to AstWalk that you didn't process the current node
 # and that AstWalk should recursively process the given node.
 immutable ASTWALK_RECURSE
@@ -420,7 +423,7 @@ end
 
 # The following are for non-Expr AST nodes are generally leaf nodes of the AST where no 
 # recursive processing is possible.
-function from_expr_helper(ast::Union{Symbol,GenSym,SymbolNode,TopNode},
+function from_expr_helper(ast::Union{SymAllGen,TopNode},
                           depth,
                           callback,
                           cbdata::ANY,

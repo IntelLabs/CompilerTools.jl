@@ -28,10 +28,21 @@ A collection of helper functions for processing AST nodes
 """
 module Helper
 
-using ..LambdaHandling
-
+export SymGen, SymNodeGen, SymAllGen, SymAll
 export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType
+
+if VERSION > v"0.5.0-dev+3260"
+typealias SymGen     Union{Symbol, Slot}
+typealias SymNodeGen SymGen
+typealias SymAllGen  SymGen
+typealias SymAll     SymGen
+else
+typealias SymGen     Union{Symbol, GenSym}
+typealias SymNodeGen Union{SymbolNode, GenSym}
+typealias SymAllGen  Union{Symbol, SymbolNode, GenSym}
+typealias SymAll     Union{Symbol, SymbolNode}
+end
 
 """
 This should always be used instead of Expr(...) to form an expression as it forces the typ to be provided.
@@ -94,8 +105,14 @@ function toSymGen(x :: Symbol)
     return x
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function toSymGen(x :: Slot)
+    return x
+end
+else
 function toSymGen(x :: SymbolNode)
     return x.name
+end
 end
 
 function toSymGen(x :: GenSym)

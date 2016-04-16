@@ -802,6 +802,7 @@ Additionally, at debug level 4 and graphviz bbs.dot file is generated that can b
 function dump_bb(bl :: CFG)
     if DEBUG_LVL >= 4
       f = open("bbs.dot","w")
+      println(f, "/* dot -Tjpg bbs.dot -o bbs.jpg */")
       println(f, "digraph bbs {")
     end
 
@@ -816,7 +817,11 @@ function dump_bb(bl :: CFG)
 
         if DEBUG_LVL >= 4
             for j in bb.succs
-                println(f, bb.label, " -> ", j.label, ";")
+                print(f, bb.label, " -> ", j.label)
+                if bb.fallthrough_succ == j
+                  print(f, " [color=\"red\"]")
+                end
+                println(f, ";")
             end
         end
     end
@@ -827,11 +832,15 @@ function dump_bb(bl :: CFG)
     end
 end
 
+if VERSION > v"0.5.0-dev+3260"
+using Base.uncompressed_ast
+else
 """
 Convert a compressed LambdaStaticData format into the uncompressed AST format.
 """
 uncompressed_ast(l::LambdaStaticData) =
   isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
+end
 
 """
 To help construct the CFG given a lambda, we recursively process the body of the lambda.
@@ -951,7 +960,9 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
           succ = first(bb.succs)
           if succ.label != CFG_EXIT_BLOCK && length(succ.preds) == 1
               @dprintln(3, "Eliminating basic block ", succ.label, " via the \"goto N; N:\" pattern.")
-              @dprintln(3, "Last BB statements = ", bb.statements[end])
+              if !isempty(bb.statements)
+                  @dprintln(3, "Last BB statements = ", bb.statements[end])
+              end
               assert(typeof(bb.statements[end].expr) == GotoNode)
               bb.succs = succ.succs
               bb.fallthrough_succ = succ.fallthrough_succ
@@ -1022,6 +1033,18 @@ Typically you would pass in a :lambda Expr here.
 function from_ast(ast::Any)
   # ENTRY
   from_expr(ast, not_handled, nothing)
+end
+
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast::Array{Any,1}, depth, state, top_level, callback, cbdata) 
+  from_exprs(ast, depth, state, callback, cbdata)
+end
+
+function from_ast(ast::LambdaInfo)
+  @dprintln(3,"from_ast for LambdaInfo")
+  body = uncompressed_ast(ast)
+  from_expr(body, not_handled, nothing)
+end
 end
 
 """
