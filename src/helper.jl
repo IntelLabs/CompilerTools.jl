@@ -33,7 +33,7 @@ export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbit
 export isBitArrayType, isTupleType, isStringType
 
 if VERSION > v"0.5.0-dev+3260"
-typealias SymGen     Union{Symbol, Slot}
+typealias SymGen     Union{Symbol, Slot, GenSym}
 typealias SymNodeGen SymGen
 typealias SymAllGen  SymGen
 typealias SymAll     SymGen
