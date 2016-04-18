@@ -247,7 +247,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
       for exp in args
 if VERSION > v"0.5.0-dev+3260"
         if isa(exp, Slot)
-          update_unknown(state, exp.id)
+          update_unknown(state, slotToSym(exp, state.linfo))
         end
 else
         if isa(exp, SymbolNode)
@@ -267,7 +267,7 @@ end
     for exp in args
 if VERSION > v"0.5.0-dev+3260"
       if isa(exp, Slot)
-        update_unknown(state, exp.id)
+        update_unknown(state, slotToSym(exp, state.linfo))
       end
 else
       if isa(exp, SymbolNode)
@@ -377,13 +377,14 @@ function from_expr_inner(state, ast::ANY, callback, cbdata)
   return Unknown
 end
 
+function not_handled(a,b,c)
+  nothing
+end
 
 function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = nothing)
-
   # "nothing" output means couldn't be handled
   handled = callback(ast, state, cbdata)
-   return process_callback(handled, state, ast, callback, cbdata);
-
+  return process_callback(handled, state, ast, callback, cbdata);
 end
 
 function isFromBase(x::GlobalRef)
@@ -398,7 +399,7 @@ function iselementarytype(typ::Any)
   return false
 end
 
-function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liveness, callback, cbdata :: ANY)
+function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
   local state = init_state(LambdaVarInfo, liveness)
   @dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   for (v, vd) in LambdaVarInfo.var_defs
@@ -439,9 +440,16 @@ function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liven
   return unique
 end
 
-function analyze_lambda(expr :: Expr, liveness, callback, cbdata :: ANY)
+if VERSION > v"0.5.0-dev+3260"
+function analyze_lambda(lambda :: LambdaInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
+  LambdaVarInfo = lambdaInfoToLambdaVarInfo(lambda)
+  analyze_lambda_body(getBody(lambda), LambdaVarInfo, liveness, callback, cbdata)
+end
+else
+function analyze_lambda(expr :: Expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
   LambdaVarInfo = lambdaExprToLambdaVarInfo(expr)
   analyze_lambda_body(getBody(expr), LambdaVarInfo, liveness, callback, cbdata)
+end
 end
 
 end
