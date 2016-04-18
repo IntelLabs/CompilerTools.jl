@@ -61,16 +61,8 @@ ast = code_typed(test_loops, (Int,Int,Int,Int))[1]
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.AliasAnalysis.set_debug_level(3)
-function cb_func(a,b)
-  nothing
-end
-lives = CompilerTools.LivenessAnalysis.from_expr(ast, cb_func, nothing )
-
-function cb_func1(a,b,c)
-  nothing
-end
-
-handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives, cb_func1, nothing)
+lives = CompilerTools.LivenessAnalysis.from_expr(ast)
+handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
 #println(handled)
 @test (in(:C, handled))
 @test (in(:E, handled) == false)
