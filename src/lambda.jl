@@ -821,15 +821,16 @@ function lambdaInfoToLambdaVarInfo(lambda :: LambdaInfo)
   ret.var_defs = createVarDict(lambda)
 # FIX FIX FIX
 #  ret.escaping_defs = createVarDict(meta[2])
-#  if !isa(meta[3], Array) 
-#    ret.gen_sym_typs = Any[]
-#  else
-#    ret.gen_sym_typs = meta[3]
-#  end
+  if !isa(lambda.gensymtypes, Array) 
+    ret.gen_sym_typs = Any[]
+  else
+    ret.gen_sym_typs = lambda.gensymtypes
+  end
 #  ret.static_parameter_names = length(meta) > 3 ? meta[4] : Any[]
 
   ret.return_type = lambda.rettype
 
+  @dprintln(3,"Result of lambdaInfoToLambdaVarInfo = ", ret)
   return ret
 end
 
@@ -981,12 +982,18 @@ function updateAssignedDesc(LambdaVarInfo :: LambdaVarInfo, symbol_assigns :: Di
   end
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function getBody(lambda :: LambdaInfo)
+  return Base.uncompressed_ast(lambda)
+end
+else
 """
 Returns the body expression part of a lambda expression.
 """
 function getBody(lambda :: Expr)
   assert(lambda.head == :lambda)
   return lambda.args[3]
+end
 end
 
 """
