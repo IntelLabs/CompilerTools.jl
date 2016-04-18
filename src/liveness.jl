@@ -663,7 +663,7 @@ function typeOfOpr(x::Expr, li :: LambdaVarInfo)
 end
 
 function typeOfOpr(x::SymGen, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = SymGen")
+    @dprintln(3,"starting typeOfOpr, type = SymGen, x = ", x)
     return typeOfOpr_fixType(getType(x, li))
 end
 
