@@ -104,11 +104,7 @@ function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
     end
 end
 
-"""
-Convert a compressed LambdaStaticData format into the uncompressed AST format.
-"""
-uncompressed_ast(l::LambdaStaticData) =
-  isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
+using Base.uncompressed_ast
 
 typealias CallbackType Union{Function, Void}
 
@@ -278,6 +274,13 @@ function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth 
   return true
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast :: LambdaInfo, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+    ast = uncompressed_ast(ast)
+    from_expr(ast, depth, rws, callback, cbdata)
+    return rws
+end
+else
 """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
@@ -287,6 +290,7 @@ function from_expr(ast :: LambdaStaticData, depth :: Integer, rws :: ReadWriteSe
     ast = uncompressed_ast(ast)
     from_expr(ast, depth, rws, callback, cbdata)
     return rws
+end
 end
 
 function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)

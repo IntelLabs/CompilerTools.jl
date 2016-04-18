@@ -832,15 +832,7 @@ function dump_bb(bl :: CFG)
     end
 end
 
-if VERSION > v"0.5.0-dev+3260"
 using Base.uncompressed_ast
-else
-"""
-Convert a compressed LambdaStaticData format into the uncompressed AST format.
-"""
-uncompressed_ast(l::LambdaStaticData) =
-  isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
-end
 
 """
 To help construct the CFG given a lambda, we recursively process the body of the lambda.
@@ -1155,6 +1147,11 @@ function from_if(args, depth, state, callback, cbdata)
     nothing
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast::LambdaInfo, depth, state, top_level, callback, cbdata)
+    return nothing
+end
+else
 """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
@@ -1164,6 +1161,7 @@ function from_expr(ast::LambdaStaticData, depth, state, top_level, callback, cbd
     # ast = uncompressed_ast(ast)
     # skip processing LambdaStaticData
     return nothing
+end
 end
 
 function from_expr(ast::Any, depth, state, top_level, callback, cbdata)

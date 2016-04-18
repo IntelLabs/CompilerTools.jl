@@ -293,10 +293,16 @@ function from_return(state, expr :: Expr, callback, cbdata :: ANY)
   end
 end
 
+if VERSION > v"0.5.0-dev+3260"
+using Base.uncompressed_ast
+function from_expr(state, ast::LambdaInfo, callback=not_handled, cbdata :: ANY = nothing)
+    return from_expr(state, uncompressed_ast(ast), callback, cbdata)
+end
+else
 function from_expr(state, ast::LambdaStaticData, callback=not_handled, cbdata :: ANY = nothing)
     return from_expr(state, uncompressed_ast(ast), callback, cbdata)
 end
-
+end
 
 function process_callback(handled::Array, state, ast, callback, cbdata)
     @dprintln(3,"Processing expression from callback for ", ast) 

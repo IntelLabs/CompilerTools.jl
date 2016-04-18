@@ -43,12 +43,55 @@ export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnT
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
+if VERSION > v"0.5.0-dev+3260"
+export slotToSym
+end
+
 # Possible values of VarDef descriptor that can be OR'ed together.
 const ISCAPTURED = 1
 const ISASSIGNED = 2
 const ISASSIGNEDBYINNERFUNCTION = 4
 const ISCONST = 8
 const ISASSIGNEDONCE = 16
+
+if VERSION > v"0.5.0-dev+3260"
+
+"""
+Represents the triple stored in a lambda's args[2][1].
+The triple is 1) the Symbol of an input parameter or local variable, 2) the type of that Symbol, and 3) a descriptor for that symbol.
+The descriptor can be 0 if the variable is an input parameter, 1 if it is captured, 2 if it is assigned within the function, 4 if
+it is assigned by an inner function, 8 if it is const, and 16 if it is assigned to statically only once by the function.
+"""
+type VarDef
+  name :: Symbol
+  typ  :: DataType
+  desc :: UInt8
+
+  function VarDef(n, t, d)
+    new(n, t, d)
+  end
+end
+
+
+type LambdaVarInfo
+  input_params  :: Array{Any,1}
+  var_defs      :: Dict{Symbol,VarDef}
+  gen_sym_typs  :: Array{Any,1}
+  escaping_defs :: Dict{Symbol,VarDef}
+  static_parameter_names :: Array{Any,1}
+  return_type   :: Any
+  orig_info     :: LambdaInfo
+
+  function LambdaVarInfo(li)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing, li)
+  end
+
+  function LambdaVarInfo(li::LambdaVarInfo)
+    new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type), copy(li.orig_info))
+  end
+end
+
+else
 
 """
 Represents the triple stored in a lambda's args[2][1].
@@ -65,6 +108,7 @@ type VarDef
     new(n, t, d)
   end
 end
+
 
 """
 An internal format for storing a lambda expression's args[1] and args[2].
@@ -88,6 +132,8 @@ type LambdaVarInfo
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type))
   end
+end
+
 end
 
 """
@@ -296,7 +342,12 @@ function getType(x::GenSym, li::LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
+function slotToSym(x::Slot, li::LambdaVarInfo)
+    return li.orig_info.slotnames[x.id]
+end
+
 function getType(x::Slot, li::LambdaVarInfo)
+    @dprintln(3,"getType for Slot, x = ", x)
     return x.typ
 end
 else
@@ -317,8 +368,18 @@ function getType(x::Union{GlobalRef,QuoteNode}, li::LambdaVarInfo)
     return typeof(eval(x))
 end
 
-function getType(x::Union{Number,DataType,LambdaStaticData}, li::LambdaVarInfo)
+function getType(x::Union{Number,DataType}, li::LambdaVarInfo)
     return typeof(x)
+end
+
+if VERSION > v"0.5.0-dev+3260"
+function getType(x::LambdaInfo, li::LambdaVarInfo)
+    return typeof(x)
+end
+else
+function getType(x::LambdaStaticData, li::LambdaVarInfo)
+    return typeof(x)
+end
 end
 
 function updateType(li::LambdaVarInfo, x::Symbol, typ)
@@ -555,6 +616,37 @@ function removeLocalVar(name :: Symbol, li :: LambdaVarInfo)
   end
 end
 
+if VERSION > v"0.5.0-dev+3260"
+"""
+Convert the lambda expression's args[2][1] from Array{Array{Any,1},1} to a Dict{Symbol,VarDef}.
+The internal triples are extracted and asserted that name and desc are of the appropriate type.
+"""
+function createVarDict(x :: LambdaInfo)
+  ret = Dict{Symbol,VarDef}()
+  @dprintln(1,"createVarDict ", x)
+  numslots = length(x.slotnames)
+  assert(numslots == length(x.slottypes))
+  assert(numslots == length(x.slotflags))
+  for i = 2:numslots
+    name = x.slotnames[i]
+    typ  = x.slottypes[i]
+    desc = x.slotflags[i]
+    @dprintln(2,"name = ", name, " typ = ", typ, " flags = ", desc)
+    if typeof(name) != Symbol
+      @dprintln(0, "name is not of type symbol ", name, " type = ", typeof(name))
+    end
+    if typeof(desc) != UInt8
+      @dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
+    end
+    if typeof(typ) == DataType
+        ret[name] = VarDef(name, typ, desc)
+    else
+      @dprintln(1, "typ is not a DataType ", typ, " type = ", typeof(typ))
+    end
+  end
+  return ret
+end
+else
 """
 Convert the lambda expression's args[2][1] from Array{Array{Any,1},1} to a Dict{Symbol,VarDef}.
 The internal triples are extracted and asserted that name and desc are of the appropriate type.
@@ -580,6 +672,7 @@ function createVarDict(x :: Array{Any, 1})
     end
   end
   return ret
+end
 end
 
 """
@@ -706,6 +799,41 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
   return dict
 end
 
+if VERSION > v"0.5.0-dev+3260"
+
+function lambdaInfoToLambdaVarInfo(lambda :: LambdaInfo)
+  ret = LambdaVarInfo(lambda)
+  for i = 2:lambda.nargs
+    one_input = lambda.slotnames[i]
+    push!(ret.input_params, one_input)
+    # the following is commented out because we need to handle varargs
+    #oityp = typeof(one_input)
+    #if oityp == Symbol
+    #  push!(ret.input_params, one_input)
+    #elseif oityp == Expr && one_input.head == :(::)
+    #  push!(ret.input_params, one_input.args[1])
+    #else
+    #  @dprintln(0, "Converting lambda expresison to lambda info found unhandled input parameter type.  input = ", one_input, " type = ", oityp)
+    #end
+  end
+
+  # Create a searchable dictionary mapping symbols to their VarDef information.
+  ret.var_defs = createVarDict(lambda)
+# FIX FIX FIX
+#  ret.escaping_defs = createVarDict(meta[2])
+#  if !isa(meta[3], Array) 
+#    ret.gen_sym_typs = Any[]
+#  else
+#    ret.gen_sym_typs = meta[3]
+#  end
+#  ret.static_parameter_names = length(meta) > 3 ? meta[4] : Any[]
+
+  ret.return_type = lambda.rettype
+
+  return ret
+end
+
+else
 """
 Convert a lambda expression into our internal storage format, LambdaVarInfo.
 The input is asserted to be an expression whose head is :lambda.
@@ -748,6 +876,7 @@ function lambdaExprToLambdaVarInfo(lambda :: Expr)
 
   return ret
 end
+end
 
 """
 Returns the type of the lambda as stored in LambdaVarInfo "li" and as extracted during lambdaExprToLambdaVarInfo.
@@ -756,6 +885,17 @@ function getReturnType(li :: LambdaVarInfo)
   return li.return_type
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
+  ast::Expr = Base.uncompressed_ast(lambda)
+  if lambda.inferred
+    ty = lambda.rettype
+  else
+    throw(string("Return type from uninferred LambdaInfo not supported yet in lambdaTypeinf"))
+  end
+  return ast, ty
+end
+else
 """
 Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call, 
@@ -767,6 +907,7 @@ function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
   lambda.ast = tree
   ast::Expr = Base.uncompressed_ast(lambda)
   return ast, ty
+end
 end
 
 function lambdaTypeinf(ftyp :: Type, typs; optimize = true)

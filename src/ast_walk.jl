@@ -45,11 +45,7 @@ end
 
 export AstWalk, ASTWALK_RECURSE, ASTWALK_REMOVE
 
-"""
-Convert a compressed LambdaStaticData format into the uncompressed AST format.
-"""
-uncompressed_ast(l::LambdaStaticData) =
-  isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
+using Base.uncompressed_ast
 
 """
 AstWalk through a lambda expression.
@@ -206,6 +202,16 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
+    from_expr(uncompressed_ast(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
+end
+else
+function from_expr(ast :: LambdaStaticData, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
+    from_expr(uncompressed_ast(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
+end
+end
+
 """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
@@ -213,9 +219,6 @@ The leaf nodes of the AST all have different types.
 There are some node types we don't currently recurse into.  Maybe this needs to be extended.
 """
 function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    if typeof(ast) == LambdaStaticData
-        ast = uncompressed_ast(ast)
-    end
     @dprintln(2,"from_expr depth=",depth," ", " ", ast)
 
     # For each AST node, we first call the user-provided callback to see if they want to do something

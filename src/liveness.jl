@@ -574,11 +574,23 @@ function dump_bb(bl :: BlockLiveness)
     end
 end
 
+using Base.uncompressed_ast
+
+if VERSION > v"0.5.0-dev+3260"
+
 """
-Convert a compressed LambdaStaticData format into the uncompressed AST format.
+Walk through a lambda expression.
+We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
+We don't recurse into the body here because from_expr handles that with fromCFG.
 """
-uncompressed_ast(l::LambdaStaticData) =
-    isa(l.ast,Expr) ? l.ast : ccall(:jl_uncompress_ast, Any, (Any,Any), l, l.ast)
+function from_lambda(ast :: LambdaInfo, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
+    # :lambda expression
+    state.li = CompilerTools.LambdaHandling.lambdaInfoToLambdaVarInfo(ast)
+    state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
+    @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
+end
+
+else
 
 """
 Walk through a lambda expression.
@@ -590,6 +602,8 @@ function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback 
     state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaVarInfo(ast)
     state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
     @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
+end
+
 end
 
 """
@@ -656,7 +670,7 @@ end
 if VERSION > v"0.5.0-dev+3260"
 function typeOfOpr(x::Slot, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, type = Slot")
-    typ1 = getType(x.id, li)
+    typ1 = getType(x, li)
     if x.typ != typ1
         @dprintln(2, "typeOfOpr x.typ and lambda type different")
         @dprintln(2, "x.id = ", x.id, " x.typ = ", x.typ, " typ1 = ", typ1)
@@ -963,6 +977,16 @@ function countSymbolDefs(s, lives)
   return count
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast :: LambdaInfo, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
+  #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
+  cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
+  live_res = expr_state(cfg, no_mod, no_mod_cb)
+  from_lambda(ast, 1, live_res, callback, cbdata)
+  # Process the body of the function via the CFG.
+  fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
+end
+else
 """
 ENTRY point to liveness analysis.
 You must pass a :lambda Expr as "ast".
@@ -977,6 +1001,7 @@ function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, n
   from_expr(ast, 1, live_res, callback, cbdata)
   # Process the body of the function via the CFG.
   fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
+end
 end
 
 """
@@ -1033,6 +1058,16 @@ function from_if(args, depth :: Int64, state :: expr_state, callback :: Function
     nothing
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function from_expr(ast::LambdaInfo,
+                   depth::Int64,
+                   state::expr_state,
+                   callback::Function,
+                   cbdata::ANY)
+    # skip processing LambdaInfo
+    return nothing
+end
+else
 """
 Generic routine for how to walk most AST node types.
 """
@@ -1043,6 +1078,7 @@ function from_expr(ast::LambdaStaticData,
                    cbdata::ANY)
     # skip processing LambdaStaticData
     return nothing
+end
 end
 
 function from_expr(ast::ANY,
@@ -1166,7 +1202,7 @@ function from_expr_helper(ast::Slot,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
     @dprintln(2,"SymbolNode type ", ast.id, " ", ast.typ)
-    add_access(state.cur_bb, ast.id, state.read)
+    add_access(state.cur_bb, slotToSym(ast, state.li), state.read)
 end
 else
 function from_expr_helper(ast::SymbolNode,
