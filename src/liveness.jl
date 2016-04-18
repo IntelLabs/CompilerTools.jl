@@ -869,8 +869,8 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
       return state.params_not_modified[fs]
     end
 
-    @dprintln(3,"is func generic => ", isgeneric(func))
-    if use_inplace_naming_convention && isgeneric(func) && !in('!', string(Base.function_name(func)))
+    @dprintln(3,"is func generic => ", isa(func,Function))
+    if use_inplace_naming_convention && isa(func,Function) && !in('!', string(Base.function_name(func)))
       @dprintln(3,"using naming convention that function has no ! so it doesn't modify anything in place.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
     else
