@@ -41,5 +41,11 @@ end
 
 tests = ["test_loops_1", "test_loops_2", "test_liveness_1", "test_liveness_2", "test_alias_1", "test_alias_2", "test_alias_3"]
 
-Base.Test.reduce(prop_err, pmap(run_single_test, tests))
+res = Base.Test.reduce(prop_err, pmap(run_single_test, tests))
+if res == true
 println("All tests PASSED!" )
+return 0
+else
+println("Some test FAILED!" )
+return 1
+end
