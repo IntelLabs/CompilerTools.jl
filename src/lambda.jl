@@ -39,13 +39,17 @@ export VarDef, LambdaVarInfo
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
 export parameterToSymbol, getLocalVariables, getEscapingVariables
-export lambdaExprToLambdaVarInfo, LambdaVarInfoToLambdaExpr, getBody, getReturnType
+export getBody, getReturnType
+if VERSION > v"0.5.0-dev+3260"
+export lambdaInfoToLambdaVarInfo
+#export LambdaVarInfoToLambdaInfo
+export slotToSym
+else
+export lambdaExprToLambdaVarInfo
+export LambdaVarInfoToLambdaExpr
+end
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
-
-if VERSION > v"0.5.0-dev+3260"
-export slotToSym
-end
 
 # Possible values of VarDef descriptor that can be OR'ed together.
 const ISCAPTURED = 1
@@ -946,6 +950,8 @@ function createMeta(LambdaVarInfo :: LambdaVarInfo)
   return ret
 end
 
+if VERSION > v"0.5.0-dev+3260"
+else
 """
 Convert our internal storage format, LambdaVarInfo, back into a lambda expression.
 This takes a LambdaVarInfo and a body as input parameters.
@@ -955,6 +961,7 @@ function LambdaVarInfoToLambdaExpr(LambdaVarInfo :: LambdaVarInfo, body)
   assert(typeof(body) == Expr)
   assert(body.head == :body)
   return Expr(:lambda, LambdaVarInfo.input_params, createMeta(LambdaVarInfo), body)
+end
 end
 
 """

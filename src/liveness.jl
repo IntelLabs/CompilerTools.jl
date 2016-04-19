@@ -1202,7 +1202,8 @@ function from_expr_helper(ast::Slot,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
     @dprintln(2,"SymbolNode type ", ast.id, " ", ast.typ)
-    add_access(state.cur_bb, slotToSym(ast, state.li), state.read)
+    #add_access(state.cur_bb, slotToSym(ast, state.li), state.read)
+    add_access(state.cur_bb, ast, state.read)
 end
 else
 function from_expr_helper(ast::SymbolNode,

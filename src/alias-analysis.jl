@@ -165,13 +165,19 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   local rhs = ast[2]
   @dprintln(2, "AA ", lhs, " = ", rhs)
   lhs = toSymGen(lhs)
-  assert(isa(lhs, Symbol) || isa(lhs, GenSym))
+  assert(isa(lhs, SymGen))
   if lookup(state, lhs) != NotArray
     rhs = from_expr(state, rhs, callback, cbdata)
     # if all vars that have rhs are not alive afterwards
     # then we can safely give v a fresh ID.
     if state.nest_level == 0
       tls = CompilerTools.LivenessAnalysis.find_top_number(state.top_level_idx, state.liveness)
+      if tls == nothing
+        @dprintln(0, "state.liveness = ", state.liveness)
+        @dprintln(0, "state.top_level_idx = ", state.top_level_idx)
+      else
+        @dprintln(3, "tls = ", tls)
+      end
       assert(tls != nothing)
       assert(CompilerTools.LivenessAnalysis.isDef(lhs, tls))
       if (haskey(state.revmap, rhs))
@@ -247,7 +253,8 @@ function from_call(state, expr :: Expr, callback, cbdata)
       for exp in args
 if VERSION > v"0.5.0-dev+3260"
         if isa(exp, Slot)
-          update_unknown(state, slotToSym(exp, state.linfo))
+          #update_unknown(state, slotToSym(exp, state.linfo))
+          update_unknown(state, exp)
         end
 else
         if isa(exp, SymbolNode)
@@ -267,7 +274,8 @@ end
     for exp in args
 if VERSION > v"0.5.0-dev+3260"
       if isa(exp, Slot)
-        update_unknown(state, slotToSym(exp, state.linfo))
+        #update_unknown(state, slotToSym(exp, state.linfo))
+        update_unknown(state, exp)
       end
 else
       if isa(exp, SymbolNode)
@@ -399,6 +407,58 @@ function iselementarytype(typ::Any)
   return false
 end
 
+if VERSION > v"0.5.0-dev+3260"
+
+function analyze_lambda_body(body :: Array{Any,1}, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
+  local state = init_state(LambdaVarInfo, liveness)
+  for (v, vd) in LambdaVarInfo.var_defs
+    if !isArrayType(vd.typ)
+      update_notarray(state, v)
+    end
+  end
+  for v in LambdaVarInfo.input_params
+    vtyp = getType(v, LambdaVarInfo)
+    # Note we assume all input parameters do not aliasing each other,
+    # which is a very strong assumption. This may require reconsideration.
+    # Update: changed to assum nothing by default.
+    if isArrayType(vtyp)
+      #update_node(state, v, next_node(state))
+      update_unknown(state, v)
+    end
+  end
+  @dprintln(2, "AA locals=", state.locals)
+  for bi = 1:length(body)
+    state.top_level_idx = bi
+    from_expr(state, body[bi], callback, cbdata)
+  end
+  @dprintln(2, "AA locals=", state.locals)
+  local revmap = Dict{Int, SymGen}()
+  local unique = Set{SymGen}()
+  # keep only variables that have unique object IDs.
+  # TODO: should consider liveness either here or during analysis,
+  #       since its ok to alias dead vars.
+  for (v, w) in state.locals
+    if w > 0
+      if haskey(revmap, w)
+        delete!(unique, revmap[w])
+      else
+        push!(unique, v)
+        revmap[w] = v
+      end
+    end
+  end
+  @dprintln(2, "AA after alias analysis: ", unique)
+  # return the set of variables that are confirmed to have no aliasing
+  return unique
+end
+
+function analyze_lambda(lambda :: LambdaInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
+  LambdaVarInfo = lambdaInfoToLambdaVarInfo(lambda)
+  analyze_lambda_body(getBody(lambda), LambdaVarInfo, liveness, callback, cbdata)
+end
+
+else
+
 function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
   local state = init_state(LambdaVarInfo, liveness)
   @dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
@@ -440,16 +500,11 @@ function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liven
   return unique
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function analyze_lambda(lambda :: LambdaInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  LambdaVarInfo = lambdaInfoToLambdaVarInfo(lambda)
-  analyze_lambda_body(getBody(lambda), LambdaVarInfo, liveness, callback, cbdata)
-end
-else
 function analyze_lambda(expr :: Expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
   LambdaVarInfo = lambdaExprToLambdaVarInfo(expr)
   analyze_lambda_body(getBody(expr), LambdaVarInfo, liveness, callback, cbdata)
 end
+
 end
 
 end
