@@ -170,6 +170,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
     rhs = from_expr(state, rhs, callback, cbdata)
     # if all vars that have rhs are not alive afterwards
     # then we can safely give v a fresh ID.
+    @dprintln(3, "from_assignment rhs after from_expr = ", rhs)
     if state.nest_level == 0
       tls = CompilerTools.LivenessAnalysis.find_top_number(state.top_level_idx, state.liveness)
       if tls == nothing
@@ -181,13 +182,18 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
       assert(tls != nothing)
       assert(CompilerTools.LivenessAnalysis.isDef(lhs, tls))
       if (haskey(state.revmap, rhs))
+        @dprintln(3, "rhs in state.revmap")
         dead = true
         for v in state.revmap[rhs]
+          @dprintln(4, "dead = ", dead, " v = ", v, " live_out = ", tls.live_out)
           dead = dead && !in(v, tls.live_out)
         end
         if dead
+          @dprintln(3, "dead is true so calling next_node")
           rhs = next_node(state)
         end
+      else
+        @dprintln(3, "rhs not in state.revmap = ", state.revmap)
       end
     end
     @dprintln(2, "AA update ", lhs, " <- ", rhs)
