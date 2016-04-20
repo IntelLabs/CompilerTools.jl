@@ -170,8 +170,8 @@ function show(io::IO, bb::BasicBlock)
                 print(io, " ", k)
             end
             print(io," )")
+            println(io)
         end
-        println(io)
     end
 end
 
@@ -1016,6 +1016,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY;
     live_res.map[bb[2]] = BasicBlock(bb[2])
     live_res.cur_bb = live_res.map[bb[2]]
 
+    @dprintln(4,"fromCFG cur_bb = ", live_res.cur_bb)
     # For each statement in each block.
     for i = 1:length(bb[2].statements)
        cur_stmt = bb[2].statements[i]
@@ -1027,6 +1028,7 @@ function fromCFG(live_res, cfg :: CFGs.CFG, callback :: Function, cbdata :: ANY;
     end
   end
 
+  @dprintln(4,"fromCFG live_res before live ranges = ", live_res)
   # Compute live_in and live_out for basic blocks and statements.
   compute_live_ranges(live_res, cfg.depth_first_numbering, array_params_live_out)
   @dprintln(2,"Dumping basic block info from_expr.")
