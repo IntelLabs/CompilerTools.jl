@@ -482,11 +482,14 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
         # Iterate until quiescence.
         found_change = false
 
+        @dprintln(4, "Starting iteration of while loop in compute_live_ranges.")
+
         # For each basic block in reverse depth-first order.
         # This order optimizes the convergence time but isn't necessary for correctness.
         for i = length(dfn):-1:1
             bb_index = dfn[i]
             bb = state.map[bbs[bb_index]]   # get the basic block
+            @dprintln(4, "Working on block ", bb_index)
 
             # add escaping variables to accum
             accum = state.li == nothing ? Set{SymGen}() : Set{SymGen}(getEscapingVariables(state.li))
@@ -501,11 +504,13 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             else
               # The live_out of any non-final block is the union of the live_in of every successor block.
               for j in bb.cfgbb.succs
-                accum = union(accum, state.map[j].live_in)
+                  @dprintln(4, bb_index, " adding from ", j.label, " live_in = ", state.map[j].live_in)
+                  accum = union(accum, state.map[j].live_in)
               end
             end
 
             bb.live_out = accum
+            @dprintln(4, bb_index, " bb.live_out = ", bb.live_out, " bb.use = ", bb.use, " bb.def = ", bb.def)
 
             old_size = length(bb.live_in)
 
@@ -514,6 +519,7 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             # Note that for basic blocks, we do not create a "use" if the first "use"
             # is after a "def".
             bb.live_in = union(bb.use, setdiff(bb.live_out, bb.def))
+            @dprintln(4, bb_index, " bb.live_in = ", bb.live_in)
 
             new_size = length(bb.live_in)
             if new_size != old_size
@@ -671,17 +677,17 @@ if VERSION > v"0.5.0-dev+3260"
 function typeOfOpr(x::Slot, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, type = Slot")
     typ1 = getType(x, li)
-    if x.typ != typ1
-        @dprintln(2, "typeOfOpr x.typ and lambda type different")
-        @dprintln(2, "x.id = ", x.id, " x.typ = ", x.typ, " typ1 = ", typ1)
-        @dprintln(2, "li = ", li)
-        if (x.typ <: typ1) || is(typ1, Box) 
-            typ1 = x.typ
-        elseif (typ1 <: x.typ) || is(x.typ, Box) 
-        else
-            throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
-        end
-    end
+#    if x.typ != typ1
+#        @dprintln(2, "typeOfOpr x.typ and lambda type different")
+#        @dprintln(2, "x.id = ", x.id, " x.typ = ", x.typ, " typ1 = ", typ1)
+#        @dprintln(2, "li = ", li)
+#        if (x.typ <: typ1) || is(typ1, Box) 
+#            typ1 = x.typ
+#        elseif (typ1 <: x.typ) || is(x.typ, Box) 
+#        else
+#            throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
+#        end
+#    end
     assert(isa(typ1, Type))
     return typeOfOpr_fixType(typ1)
 end
@@ -1205,7 +1211,7 @@ function from_expr_helper(ast::Slot,
     # addStatement(top_level, state, ast)
     @dprintln(2,"SymbolNode type ", ast.id, " ", ast.typ)
     #add_access(state.cur_bb, slotToSym(ast, state.li), state.read)
-    add_access(state.cur_bb, ast, state.read)
+    add_access(state.cur_bb, ast.id , state.read)
 end
 else
 function from_expr_helper(ast::SymbolNode,

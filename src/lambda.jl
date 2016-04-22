@@ -70,9 +70,10 @@ type VarDef
   name :: Symbol
   typ  :: DataType
   desc :: UInt8
+  id   :: Int
 
-  function VarDef(n, t, d)
-    new(n, t, d)
+  function VarDef(n, t, d, i)
+    new(n, t, d, i)
   end
 end
 
@@ -352,7 +353,11 @@ end
 
 function getType(x::Slot, li::LambdaVarInfo)
     @dprintln(3,"getType for Slot, x = ", x)
-    return x.typ
+    if x.typ == Any
+        return li.orig_info.slottypes[x.id]
+    else
+        return x.typ
+    end
 end
 else
 function getType(x::SymbolNode, li::LambdaVarInfo)
@@ -540,7 +545,11 @@ function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
     return true
   end
 
+if VERSION > v"0.5.0-dev+3260"
+  li.var_defs[s] = VarDef(s, typ, desc, length(li.var_defs) + 1)
+else
   li.var_defs[s] = VarDef(s, typ, desc)
+end
   @dprintln(3,"addLocalVariable = ", s)
 
   return false
@@ -561,7 +570,12 @@ function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInf
     return true
   end
 
+if VERSION > v"0.5.0-dev+3260"
+  # FIX FIX FIX the -1 here.
+  li.escaping_defs[s] = VarDef(s, typ, desc, -1)
+else
   li.escaping_defs[s] = VarDef(s, typ, desc)
+end
   @dprintln(3,"addEscapingVariable = ", s)
 
   return false
@@ -596,15 +610,7 @@ Add a local variable to the function corresponding to LambdaVarInfo in "li" with
 Returns true if variable already existed and was updated, false otherwise.
 """
 function addLocalVar(name :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
-  if haskey(li.var_defs, name)
-    var_def = li.var_defs[name]
-    var_def.typ  = typ
-    var_def.desc = desc
-    return true
-  end
-
-  li.var_defs[name] = VarDef(name, typ, desc)
-  return false
+  addLocalVariable(name, typ, desc, li)
 end
 
 """
@@ -631,7 +637,7 @@ function createVarDict(x :: LambdaInfo)
   numslots = length(x.slotnames)
   assert(numslots == length(x.slottypes))
   assert(numslots == length(x.slotflags))
-  for i = 2:numslots
+  for i = 1:numslots
     name = x.slotnames[i]
     typ  = x.slottypes[i]
     desc = x.slotflags[i]
@@ -643,7 +649,7 @@ function createVarDict(x :: LambdaInfo)
       @dprintln(0, "desc is not of type Int64 ", desc, " type = ", typeof(desc))
     end
     if typeof(typ) == DataType
-        ret[name] = VarDef(name, typ, desc)
+        ret[name] = VarDef(name, typ, desc, i)
     else
       @dprintln(1, "typ is not a DataType ", typ, " type = ", typeof(typ))
     end

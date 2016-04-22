@@ -260,7 +260,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
 if VERSION > v"0.5.0-dev+3260"
         if isa(exp, Slot)
           #update_unknown(state, slotToSym(exp, state.linfo))
-          update_unknown(state, exp)
+          update_unknown(state, exp.id)
         end
 else
         if isa(exp, SymbolNode)
@@ -281,7 +281,7 @@ end
 if VERSION > v"0.5.0-dev+3260"
       if isa(exp, Slot)
         #update_unknown(state, slotToSym(exp, state.linfo))
-        update_unknown(state, exp)
+        update_unknown(state, exp.id)
       end
 else
       if isa(exp, SymbolNode)
@@ -419,7 +419,7 @@ function analyze_lambda_body(body :: Array{Any,1}, LambdaVarInfo :: LambdaVarInf
   local state = init_state(LambdaVarInfo, liveness)
   for (v, vd) in LambdaVarInfo.var_defs
     if !isArrayType(vd.typ)
-      update_notarray(state, v)
+      update_notarray(state, vd.id)
     end
   end
   for v in LambdaVarInfo.input_params
@@ -453,9 +453,22 @@ function analyze_lambda_body(body :: Array{Any,1}, LambdaVarInfo :: LambdaVarInf
       end
     end
   end
-  @dprintln(2, "AA after alias analysis: ", unique)
+  @dprintln(3, "AA after alias analysis: ", unique)
+  unique_symbol = Set()
+  for u in unique
+    if isa(u, Int)
+      @dprintln(3, "Adding to unique_symbol Int ", u, " ", LambdaVarInfo.orig_info.slotnames[u])
+      push!(unique_symbol, LambdaVarInfo.orig_info.slotnames[u])
+    elseif isa(u, GenSym)
+      @dprintln(3, "Adding to unique_symbol GenSym ", u)
+      push!(unique_symbol, u)
+    else
+      throw(string("No slot or GenSym in unique set of alias analysis."))
+    end
+  end
+  @dprintln(2, "AA after alias analysis: ", unique_symbol)
   # return the set of variables that are confirmed to have no aliasing
-  return unique
+  return unique_symbol
 end
 
 function analyze_lambda(lambda :: LambdaInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)

@@ -33,7 +33,7 @@ export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbit
 export isBitArrayType, isTupleType, isStringType
 
 if VERSION > v"0.5.0-dev+3260"
-typealias SymGen     Union{Symbol, Slot, GenSym}
+typealias SymGen     Union{Int, GenSym}
 typealias SymNodeGen SymGen
 typealias SymAllGen  SymGen
 typealias SymAll     SymGen
@@ -107,6 +107,9 @@ end
 
 if VERSION > v"0.5.0-dev+3260"
 function toSymGen(x :: Slot)
+    return x.id
+end
+function toSymGen(x :: Int)
     return x
 end
 else
