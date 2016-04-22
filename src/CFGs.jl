@@ -31,7 +31,7 @@ DebugMsg.init()
 
 using CompilerTools
 using CompilerTools.AstWalker
-using CompilerTools.Helper
+#using CompilerTools.Helper
 
 import Base.show
 
@@ -801,7 +801,9 @@ Additionally, at debug level 4 and graphviz bbs.dot file is generated that can b
 """
 function dump_bb(bl :: CFG)
     if DEBUG_LVL >= 4
-      f = open("bbs.dot","w")
+      filename = string(tempname(),".dot")
+      println("Creating dot file ", filename)
+      f = open(filename,"w")
       println(f, "/* dot -Tjpg bbs.dot -o bbs.jpg */")
       println(f, "digraph bbs {")
     end
@@ -816,9 +818,12 @@ function dump_bb(bl :: CFG)
         @dprint(2,bb)
 
         if DEBUG_LVL >= 4
+            println("Dumping succs for ", body_order[i])
             for j in bb.succs
+                println("j = ", j)
                 print(f, bb.label, " -> ", j.label)
                 if bb.fallthrough_succ == j
+                  println("isfallthrough")
                   print(f, " [color=\"red\"]")
                 end
                 println(f, ";")
