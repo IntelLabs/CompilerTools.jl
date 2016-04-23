@@ -24,11 +24,12 @@ THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 using CompilerTools
+using CompilerTools.LambdaHandling: getVariableName
 using Base.Test
 
 ## Tests for CompilerTools.AliasAnalysis
 
-function test_loops(x::Int, y::Int, z::Int, s::Int)
+function test_alias_2(x::Int, y::Int, z::Int, s::Int)
          A = rand(x, y)
          D_arr = rand(x, y)
 	 C = rand(x,y)
@@ -51,12 +52,13 @@ function test_loops(x::Int, y::Int, z::Int, s::Int)
 
 end
 
-ast = code_typed(test_loops, (Int,Int,Int,Int))[1]
+ast = code_typed(test_alias_2, (Int,Int,Int,Int))[1]
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.AliasAnalysis.set_debug_level(3)
 lives = CompilerTools.LivenessAnalysis.from_expr(ast)
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
+handled = map(x -> getVariableName(x, ast), handled)
 #println(handled)
 @test (in(:C, handled))
 @test (in(:E, handled) == false)

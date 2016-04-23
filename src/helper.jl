@@ -28,20 +28,22 @@ A collection of helper functions for processing AST nodes
 """
 module Helper
 
-export SymGen, SymNodeGen, SymAllGen, SymAll
-export TypedExpr, isArrayType, isCall, isTopNode, toSymGen, toSymGenOrNum, isbitstuple, isPtrType, isIntType
+export LHSVar, RHSVar, TypedVar
+export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType
 
+
+
 if VERSION > v"0.5.0-dev+3260"
-typealias SymGen     Union{Int, GenSym}
-typealias SymNodeGen SymGen
-typealias SymAllGen  SymGen
-typealias SymAll     SymGen
+typealias LHSVar     Union{Int, GenSym}
+typealias RHSVar     Union{Slot, GenSym}
+typealias TypedVar   Slot
 else
-typealias SymGen     Union{Symbol, GenSym}
-typealias SymNodeGen Union{SymbolNode, GenSym}
-typealias SymAllGen  Union{Symbol, SymbolNode, GenSym}
-typealias SymAll     Union{Symbol, SymbolNode}
+typealias LHSVar     Union{Symbol, GenSym}
+typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
+typealias TypedVar   SymbolNode
+typealias LambdaInfo LambdaStaticData
+export LambdaInfo
 end
 
 """
@@ -98,35 +100,34 @@ function isTopNode(node::Any)
 end
 
 """
-In various places we need a SymGen type which is the union of Symbol and GenSym.
+In various places we need a LHSVar type which is the union of Symbol and GenSym.
 This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
 """
-function toSymGen(x :: Symbol)
+function toLHSVar(x :: GenSym)
     return x
 end
 
 if VERSION > v"0.5.0-dev+3260"
-function toSymGen(x :: Slot)
+function toLHSVar(x :: Slot)
     return x.id
 end
-function toSymGen(x :: Int)
+function toLHSVar(x :: Int)
     return x
 end
 else
-function toSymGen(x :: SymbolNode)
+function toLHSVar(x :: SymbolNode)
     return x.name
 end
-end
-
-function toSymGen(x :: GenSym)
+function toLHSVar(x :: Symbol)
     return x
 end
-
-function toSymGenOrNum(x :: SymAllGen)
-    return toSymGen(x)
 end
 
-function toSymGenOrNum(x :: Number)
+function toLHSVarOrNum(x :: RHSVar)
+    return toLHSVar(x)
+end
+
+function toLHSVarOrNum(x :: Number)
     return x
 end
 

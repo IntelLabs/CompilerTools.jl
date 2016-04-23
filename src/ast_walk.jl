@@ -45,7 +45,6 @@ end
 
 export AstWalk, ASTWALK_RECURSE, ASTWALK_REMOVE
 
-using Base.uncompressed_ast
 
 """
 AstWalk through a lambda expression.
@@ -202,14 +201,8 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
 end
 
-if VERSION > v"0.5.0-dev+3260"
 function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    from_expr(uncompressed_ast(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
-end
-else
-function from_expr(ast :: LambdaStaticData, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    from_expr(uncompressed_ast(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
-end
+    from_expr(CompilerTools.Lambda.getBody(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
 end
 
 """
@@ -426,7 +419,7 @@ end
 
 # The following are for non-Expr AST nodes are generally leaf nodes of the AST where no 
 # recursive processing is possible.
-function from_expr_helper(ast::Union{SymAllGen,TopNode},
+function from_expr_helper(ast::Union{RHSVar,TopNode},
                           depth,
                           callback,
                           cbdata::ANY,
@@ -469,8 +462,7 @@ function from_expr_helper(ast::Tuple,
     return ast
 end
 
-function from_expr_helper(ast::QuoteNode,
-                          depth,
+function from_expr_helper(ast::QuoteNode, depth,
                           callback,
                           cbdata::ANY,
                           top_level_number,

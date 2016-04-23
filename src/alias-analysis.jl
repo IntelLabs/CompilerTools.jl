@@ -41,7 +41,6 @@ module AliasAnalysis
 import ..DebugMsg
 DebugMsg.init()
 
-using Base.uncompressed_ast
 using CompilerTools.LambdaHandling
 using CompilerTools
 using CompilerTools.Helper
@@ -53,14 +52,14 @@ const NotArray = 0
 type State
   linfo  :: LambdaVarInfo
   baseID :: Int
-  locals :: Dict{SymGen, Int}
-  revmap :: Dict{Int, Set{SymGen}}
+  locals :: Dict{LHSVar, Int}
+  revmap :: Dict{Int, Set{LHSVar}}
   nest_level :: Int
   top_level_idx :: Int
   liveness :: CompilerTools.LivenessAnalysis.BlockLiveness
 end
 
-init_state(linfo, liveness) = State(linfo, 0, Dict{SymGen,Int}(), Dict{Int, Set{SymGen}}(), 0, 0, liveness)
+init_state(linfo, liveness) = State(linfo, 0, Dict{LHSVar,Int}(), Dict{Int, Set{LHSVar}}(), 0, 0, liveness)
 
 function increaseNestLevel(state)
 state.nest_level = state.nest_level + 1
@@ -83,7 +82,7 @@ function update_node(state, v, w)
     if haskey(state.revmap, w)
       push!(state.revmap[w], v)
     else
-      state.revmap[w] = push!(Set{SymGen}(), v)
+      state.revmap[w] = push!(Set{LHSVar}(), v)
     end
   else
     # when a variable is initialized more than once, set to Unknown
@@ -129,7 +128,7 @@ function from_lambda(state, expr :: Expr)
   local ast  = expr.args
   local typ  = expr.typ
   assert(length(ast) == 3)
-  local linfo = lambdaExprToLambdaVarInfo(expr)
+  local linfo = lambdaToLambdaVarInfo(expr)
   # very conservative handling by setting free variables to Unknown.
   # TODO: may want to simulate function call at call site to get
   #       more accurate information.
@@ -145,9 +144,9 @@ function from_exprs(state, ast, callback=not_handled, cbdata :: ANY = nothing)
 end
 
 function from_body(state, expr :: Expr, callback, cbdata :: ANY)
-  local exprs = expr.args
+  exprs = expr.args
   local ret = NotArray       # default return
-  for i = 1:length(exprs)
+  for i = 1:length(expr.args)
     if state.nest_level == 0
       state.top_level_idx = i
     end
@@ -164,8 +163,8 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   local lhs = ast[1]
   local rhs = ast[2]
   @dprintln(2, "AA ", lhs, " = ", rhs)
-  lhs = toSymGen(lhs)
-  assert(isa(lhs, SymGen))
+  lhs = toLHSVar(lhs)
+  assert(isa(lhs, LHSVar))
   if lookup(state, lhs) != NotArray
     rhs = from_expr(state, rhs, callback, cbdata)
     # if all vars that have rhs are not alive afterwards
@@ -196,7 +195,7 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
         @dprintln(3, "rhs not in state.revmap = ", state.revmap)
       end
     end
-    @dprintln(2, "AA update ", lhs, " <- ", rhs)
+    @dprintln(2, "AA update ", lhs, "::", typeof(lhs), " <- ", rhs)
     update(state, lhs, rhs)
   end
 end
@@ -213,6 +212,14 @@ function from_call(state, expr :: Expr, callback, cbdata)
   @dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
   #fun = from_expr(state, fun)
   #@dprintln(2, "AA from_call: new fun=", fun)
+  if isa(fun, RHSVar) 
+    ftyp = getType(fun, state.linfo) 
+    @dprintln(2, "AA from_call: ftyp=", ftyp)
+    if ftyp <: Function 
+       fun = ftyp.name.name
+    end
+  end 
+  @dprintln(2, "AA from_call: fun=", fun)
   fun = isa(fun, TopNode) ? fun.name : fun
   fun = isa(fun, GlobalRef) ? fun.name : fun
   if is(fun, :reshape)
@@ -225,7 +232,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
   elseif fun == :ccall && (args[1] == QuoteNode(:jl_new_array) || args[1] == QuoteNode(:jl_alloc_array_1d) || 
          args[1] == QuoteNode(:jl_alloc_array_2d) || args[1] == QuoteNode(:jl_alloc_array_3d))
     return next_node(state)
-  elseif isa(ast[1], GlobalRef) && isFromBase(ast[1]) && endswith(string(fun), '!')
+  elseif isFromBase(state, ast[1]) && endswith(string(fun), '!')
     # if the function is from base, and follow julia convention of ending with !, and
     # only one input is an array, then we consider it aliases the output
     alias = nothing
@@ -233,7 +240,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
       if (isa(exp, Expr) && (exp.typ == nothing || !iselementarytype(exp.typ)))
         # non-flattened input AST is not handled
         alias = Unknown
-      elseif isa(exp, SymNodeGen) 
+      elseif isa(exp, RHSVar) 
         # A local var
         typ = getType(exp, state.linfo)
         if !iselementarytype(typ)
@@ -244,7 +251,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
               alias = Unknown
             else
               # remember possible match
-              alias = lookup(state, toSymGen(exp))
+              alias = lookup(state, toLHSVar(exp))
             end
           else  
             # non array, non elementary type
@@ -257,18 +264,8 @@ function from_call(state, expr :: Expr, callback, cbdata)
     if alias == Unknown
       # if we don't know the result, it could alias any input
       for exp in args
-if VERSION > v"0.5.0-dev+3260"
-        if isa(exp, Slot)
-          #update_unknown(state, slotToSym(exp, state.linfo))
-          update_unknown(state, exp.id)
-        end
-else
-        if isa(exp, SymbolNode)
-          update_unknown(state, exp.name)
-        end
-end
-        if isa(exp, Symbol)
-          update_unknown(state, exp)
+        if isa(exp, RHSVar)
+            update_unknown(state, toLHSVar(exp))
         end
       end
     end
@@ -278,19 +275,9 @@ end
     # For unknown calls, conservative assumption is that the result
     # might alias one of (or an element of) the non-leaf-type inputs.
     for exp in args
-if VERSION > v"0.5.0-dev+3260"
-      if isa(exp, Slot)
-        #update_unknown(state, slotToSym(exp, state.linfo))
-        update_unknown(state, exp.id)
-      end
-else
-      if isa(exp, SymbolNode)
-        update_unknown(state, exp.name)
-      end
-end
-      if isa(exp, Symbol)
-        update_unknown(state, exp)
-      end
+        if isa(exp, RHSVar)
+            update_unknown(state, toLHSVar(exp))
+        end
     end
     return Unknown
   end
@@ -305,17 +292,6 @@ function from_return(state, expr :: Expr, callback, cbdata :: ANY)
   else
     return Unknown
   end
-end
-
-if VERSION > v"0.5.0-dev+3260"
-using Base.uncompressed_ast
-function from_expr(state, ast::LambdaInfo, callback=not_handled, cbdata :: ANY = nothing)
-    return from_expr(state, uncompressed_ast(ast), callback, cbdata)
-end
-else
-function from_expr(state, ast::LambdaStaticData, callback=not_handled, cbdata :: ANY = nothing)
-    return from_expr(state, uncompressed_ast(ast), callback, cbdata)
-end
 end
 
 function process_callback(handled::Array, state, ast, callback, cbdata)
@@ -346,7 +322,7 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
     if is(head, :lambda)
         return from_lambda(state, ast)
     elseif is(head, :body)
-        return from_body(state, ast, callback, cbdata)
+        return from_body(state, ast.args, callback, cbdata)
     elseif is(head, :(=))
         return from_assignment(state, ast, callback, cbdata)
     elseif is(head, :return)
@@ -381,9 +357,9 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
   return Unknown
 end
 
-function from_expr_inner(state, ast::SymNodeGen, callback, cbdata)
-    @dprintln(2, " ", ast)
-    return lookup(state, toSymGen(ast))
+function from_expr_inner(state, ast::RHSVar, callback, cbdata)
+    @dprintln(2, "RHSVar", ast, " :: ", typeof(ast))
+    return lookup(state, toLHSVar(ast))
 end
 
 function from_expr_inner(state, ast::ANY, callback, cbdata)
@@ -395,14 +371,27 @@ function not_handled(a,b,c)
   nothing
 end
 
+function from_expr(state, ast::LambdaInfo, callback=not_handled, cbdata :: ANY = nothing)
+    return from_expr(state, getBody(ast), callback, cbdata)
+end
+
 function from_expr(state, ast :: ANY, callback=not_handled, cbdata :: ANY = nothing)
   # "nothing" output means couldn't be handled
   handled = callback(ast, state, cbdata)
   return process_callback(handled, state, ast, callback, cbdata);
 end
 
-function isFromBase(x::GlobalRef)
+function isFromBase(state, x::GlobalRef)
   startswith(string(Base.resolve(x, force=true).mod), "Base")
+end
+
+function isFromBase(state, x::RHSVar)
+  tname = getType(x, state.linfo).name
+  isFromBase(state, GlobalRef(tname.module, tname.name))
+end
+
+function isFromBase(state, x::ANY)
+  false
 end
 
 function iselementarytype(typ::DataType)
@@ -413,94 +402,23 @@ function iselementarytype(typ::Any)
   return false
 end
 
-if VERSION > v"0.5.0-dev+3260"
-
-function analyze_lambda_body(body :: Array{Any,1}, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
+function analyze_lambda_body(body, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
   local state = init_state(LambdaVarInfo, liveness)
-  for (v, vd) in LambdaVarInfo.var_defs
-    if !isArrayType(vd.typ)
-      update_notarray(state, vd.id)
-    end
-  end
-  for v in LambdaVarInfo.input_params
+  #@dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
+  for v in getLocals(LambdaVarInfo)
     vtyp = getType(v, LambdaVarInfo)
-    # Note we assume all input parameters do not aliasing each other,
-    # which is a very strong assumption. This may require reconsideration.
-    # Update: changed to assum nothing by default.
-    if isArrayType(vtyp)
-      #update_node(state, v, next_node(state))
-      update_unknown(state, v)
-    end
-  end
-  @dprintln(2, "AA locals=", state.locals)
-  for bi = 1:length(body)
-    state.top_level_idx = bi
-    from_expr(state, body[bi], callback, cbdata)
-  end
-  @dprintln(2, "AA locals=", state.locals)
-  local revmap = Dict{Int, SymGen}()
-  local unique = Set{SymGen}()
-  # keep only variables that have unique object IDs.
-  # TODO: should consider liveness either here or during analysis,
-  #       since its ok to alias dead vars.
-  for (v, w) in state.locals
-    if w > 0
-      if haskey(revmap, w)
-        delete!(unique, revmap[w])
-      else
-        push!(unique, v)
-        revmap[w] = v
-      end
-    end
-  end
-  @dprintln(3, "AA after alias analysis: ", unique)
-  unique_symbol = Set()
-  for u in unique
-    if isa(u, Int)
-      @dprintln(3, "Adding to unique_symbol Int ", u, " ", LambdaVarInfo.orig_info.slotnames[u])
-      push!(unique_symbol, LambdaVarInfo.orig_info.slotnames[u])
-    elseif isa(u, GenSym)
-      @dprintln(3, "Adding to unique_symbol GenSym ", u)
-      push!(unique_symbol, u)
-    else
-      throw(string("No slot or GenSym in unique set of alias analysis."))
-    end
-  end
-  @dprintln(2, "AA after alias analysis: ", unique_symbol)
-  # return the set of variables that are confirmed to have no aliasing
-  return unique_symbol
-end
-
-function analyze_lambda(lambda :: LambdaInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  LambdaVarInfo = lambdaInfoToLambdaVarInfo(lambda)
-  analyze_lambda_body(getBody(lambda), LambdaVarInfo, liveness, callback, cbdata)
-end
-
-else
-
-function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  local state = init_state(LambdaVarInfo, liveness)
-  @dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
-  for (v, vd) in LambdaVarInfo.var_defs
-    if !isArrayType(vd.typ)
+    @dprintln(2, "v = ", v, " vtyp = ", vtyp)
+    if !isArrayType(vtyp)
       update_notarray(state, v)
-    end
-  end
-  for v in LambdaVarInfo.input_params
-    vtyp = getType(v, LambdaVarInfo)
-    # Note we assume all input parameters do not aliasing each other,
-    # which is a very strong assumption. This may require reconsideration.
-    # Update: changed to assum nothing by default.
-    if isArrayType(vtyp)
-      #update_node(state, v, next_node(state))
+    elseif isInputParameter(v, LambdaVarInfo)
       update_unknown(state, v)
     end
   end
   @dprintln(2, "AA locals=", state.locals)
-  from_expr(state, body, callback, cbdata)
+  from_body(state, body, callback, cbdata)
   @dprintln(2, "AA locals=", state.locals)
-  local revmap = Dict{Int, SymGen}()
-  local unique = Set{SymGen}()
+  local revmap = Dict{Int, LHSVar}()
+  local unique = Set{LHSVar}()
   # keep only variables that have unique object IDs.
   # TODO: should consider liveness either here or during analysis,
   #       since its ok to alias dead vars.
@@ -519,11 +437,10 @@ function analyze_lambda_body(body :: Expr, LambdaVarInfo :: LambdaVarInfo, liven
   return unique
 end
 
-function analyze_lambda(expr :: Expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  LambdaVarInfo = lambdaExprToLambdaVarInfo(expr)
-  analyze_lambda_body(getBody(expr), LambdaVarInfo, liveness, callback, cbdata)
-end
-
+function analyze_lambda(expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
+  LambdaVarInfo = lambdaToLambdaVarInfo(expr)
+  body = getBody(expr)
+  analyze_lambda_body(body, LambdaVarInfo, liveness, callback, cbdata)
 end
 
 end

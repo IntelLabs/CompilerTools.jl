@@ -54,12 +54,12 @@ Contains def, use, live_in, and live_out for the current statement.
 type TopLevelStatement
     tls :: CFGs.TopLevelStatement
 
-    def      :: Set{SymGen}
-    use      :: Set{SymGen}
-    live_in  :: Set{SymGen}
-    live_out :: Set{SymGen}
+    def      :: Set{LHSVar}
+    use      :: Set{LHSVar}
+    live_in  :: Set{LHSVar}
+    live_out :: Set{LHSVar}
 
-    TopLevelStatement(t) = new(t, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}())
+    TopLevelStatement(t) = new(t, Set{LHSVar}(), Set{LHSVar}(), Set{LHSVar}(), Set{LHSVar}())
 end
 
 """
@@ -113,14 +113,14 @@ Contains an array of liveness information for the top level statements in this b
 type BasicBlock
     cfgbb :: CFGs.BasicBlock
 
-    def      :: Set{SymGen}
-    use      :: Set{SymGen}
-    live_in  :: Set{SymGen}
-    live_out :: Set{SymGen}
+    def      :: Set{LHSVar}
+    use      :: Set{LHSVar}
+    live_in  :: Set{LHSVar}
+    live_out :: Set{LHSVar}
 
     statements :: Array{TopLevelStatement,1}
  
-    BasicBlock(bb) = new(bb, Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), Set{SymGen}(), TopLevelStatement[])
+    BasicBlock(bb) = new(bb, Set{LHSVar}(), Set{LHSVar}(), Set{LHSVar}(), Set{LHSVar}(), TopLevelStatement[])
 end
 
 """
@@ -289,9 +289,9 @@ function getBasicBlockFromBlockNumber(block_num, bl :: BlockLiveness)
 end
 
 """
-Helper function to say if the given SymGen is in some basic block in "bl" for the given field (which is :def, :use, :live_in, or :live_out).
+Helper function to say if the given LHSVar is in some basic block in "bl" for the given field (which is :def, :use, :live_in, or :live_out).
 """
-function is_internal(x :: SymGen, bl :: BlockLiveness, field)
+function is_internal(x :: LHSVar, bl :: BlockLiveness, field)
     for entry in bl.basic_blocks
         if in(x, getfield(entry[2], field))
             return true
@@ -302,30 +302,30 @@ function is_internal(x :: SymGen, bl :: BlockLiveness, field)
 end
 
 """
-Returns true if SymGen x is part of the live_in field in some basic block in bl.
+Returns true if LHSVar x is part of the live_in field in some basic block in bl.
 """
-function is_livein(x :: SymGen, bl :: BlockLiveness)
+function is_livein(x :: LHSVar, bl :: BlockLiveness)
     return is_internal(x, bl, :live_in)
 end
 
 """
-Returns true if SymGen x is part of the live_out field in some basic block in bl.
+Returns true if LHSVar x is part of the live_out field in some basic block in bl.
 """
-function is_liveout(x :: SymGen, bl :: BlockLiveness)
+function is_liveout(x :: LHSVar, bl :: BlockLiveness)
     return is_internal(x, bl, :live_out)
 end
 
 """
-Returns true if SymGen x is part of the def field in some basic block in bl.
+Returns true if LHSVar x is part of the def field in some basic block in bl.
 """
-function is_def(x :: SymGen, bl :: BlockLiveness)
+function is_def(x :: LHSVar, bl :: BlockLiveness)
     return is_internal(x, bl, :def)
 end
 
 """
-Returns true if SymGen x is part of the use field in some basic block in bl.
+Returns true if LHSVar x is part of the use field in some basic block in bl.
 """
-function is_use(x :: SymGen, bl :: BlockLiveness)
+function is_use(x :: LHSVar, bl :: BlockLiveness)
     return is_internal(x, bl, :use)
 end
 
@@ -408,7 +408,7 @@ end
 """
 Query if the symbol in argument "x" is defined in live_info which can be a BasicBlock or TopLevelStatement.
 """
-function isDef(x :: SymGen, live_info)
+function isDef(x :: LHSVar, live_info)
   in(x, live_info.def)
 end
 
@@ -492,14 +492,14 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             @dprintln(4, "Working on block ", bb_index)
 
             # add escaping variables to accum
-            accum = state.li == nothing ? Set{SymGen}() : Set{SymGen}(getEscapingVariables(state.li))
+            accum = state.li == nothing ? Set{LHSVar}() : Set{LHSVar}(getEscapingVariables(state.li))
 
             if bb_index == -2
               # Special case for final block.
               @dprintln(3,"Final block live_out = ", accum)
               # Nothing is live out of the final block.
               if array_params_live_out
-                  accum = Set{SymGen}(state.ref_params)
+                  accum = Set{LHSVar}(state.ref_params)
               end
             else
               # The live_out of any non-final block is the union of the live_in of every successor block.
@@ -580,36 +580,16 @@ function dump_bb(bl :: BlockLiveness)
     end
 end
 
-using Base.uncompressed_ast
-
-if VERSION > v"0.5.0-dev+3260"
-
 """
 Walk through a lambda expression.
 We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
 We don't recurse into the body here because from_expr handles that with fromCFG.
 """
-function from_lambda(ast :: LambdaInfo, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
+function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
     # :lambda expression
-    state.li = CompilerTools.LambdaHandling.lambdaInfoToLambdaVarInfo(ast)
+    state.li = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
     state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
     @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
-end
-
-else
-
-"""
-Walk through a lambda expression.
-We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
-We don't recurse into the body here because from_expr handles that with fromCFG.
-"""
-function from_lambda(ast :: Expr, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-    # :lambda expression
-    state.li = CompilerTools.LambdaHandling.lambdaExprToLambdaVarInfo(ast)
-    state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
-    @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
-end
-
 end
 
 """
@@ -668,36 +648,22 @@ function typeOfOpr(x::Expr, li :: LambdaVarInfo)
     return typeOfOpr_fixType(x.typ)
 end
 
-function typeOfOpr(x::SymGen, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = SymGen, x = ", x)
+function typeOfOpr(x::Symbol, li :: LambdaVarInfo)
+    @dprintln(3,"starting typeOfOpr, type = LHSVar, x = ", x)
     return typeOfOpr_fixType(getType(x, li))
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function typeOfOpr(x::Slot, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = Slot")
-    typ1 = getType(x, li)
-#    if x.typ != typ1
-#        @dprintln(2, "typeOfOpr x.typ and lambda type different")
-#        @dprintln(2, "x.id = ", x.id, " x.typ = ", x.typ, " typ1 = ", typ1)
-#        @dprintln(2, "li = ", li)
-#        if (x.typ <: typ1) || is(typ1, Box) 
-#            typ1 = x.typ
-#        elseif (typ1 <: x.typ) || is(x.typ, Box) 
-#        else
-#            throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
-#        end
-#    end
-    assert(isa(typ1, Type))
-    return typeOfOpr_fixType(typ1)
+function typeOfOpr(x::GenSym, li :: LambdaVarInfo)
+    @dprintln(3,"starting typeOfOpr, type = LHSVar, x = ", x)
+    return typeOfOpr_fixType(getType(x, li))
 end
-else
-function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = SymbolNode")
-    typ1 = getType(x.name, li)
+
+function typeOfOpr(x::TypedVar, li :: LambdaVarInfo)
+    @dprintln(3,"starting typeOfOpr, x = ", x)
+    typ1 = getType(toLHSVar(x), li)
     if x.typ != typ1
         @dprintln(2, "typeOfOpr x.typ and lambda type different")
-        @dprintln(2, "x.name = ", x.name, " x.typ = ", x.typ, " typ1 = ", typ1)
+        @dprintln(2, "x = ", x, " typ1 = ", typ1)
         @dprintln(2, "li = ", li)
         if (x.typ <: typ1) || is(typ1, Box) 
             typ1 = x.typ
@@ -708,7 +674,6 @@ function typeOfOpr(x::SymbolNode, li :: LambdaVarInfo)
     end
     assert(isa(typ1, Type))
     return typeOfOpr_fixType(typ1)
-end
 end
 
 function typeOfOpr(x::GlobalRef, li :: LambdaVarInfo)
@@ -983,31 +948,19 @@ function countSymbolDefs(s, lives)
   return count
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function from_expr(ast :: LambdaInfo, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
-  #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
-  cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
-  live_res = expr_state(cfg, no_mod, no_mod_cb)
-  from_lambda(ast, 1, live_res, callback, cbdata)
-  # Process the body of the function via the CFG.
-  fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
-end
-else
 """
 ENTRY point to liveness analysis.
-You must pass a :lambda Expr as "ast".
+You must pass a lambda as "ast".
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast :: Expr, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
+function from_expr(ast, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
   #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
-  assert(ast.head == :lambda)
   cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod, no_mod_cb)
   # Just to process the lambda and extract what the ref_params are.
-  from_expr(ast, 1, live_res, callback, cbdata)
+  from_lambda(ast, 1, live_res, callback, cbdata)
   # Process the body of the function via the CFG.
   fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
-end
 end
 
 """
@@ -1066,7 +1019,9 @@ function from_if(args, depth :: Int64, state :: expr_state, callback :: Function
     nothing
 end
 
-if VERSION > v"0.5.0-dev+3260"
+"""
+Generic routine for how to walk most AST node types.
+"""
 function from_expr(ast::LambdaInfo,
                    depth::Int64,
                    state::expr_state,
@@ -1074,19 +1029,6 @@ function from_expr(ast::LambdaInfo,
                    cbdata::ANY)
     # skip processing LambdaInfo
     return nothing
-end
-else
-"""
-Generic routine for how to walk most AST node types.
-"""
-function from_expr(ast::LambdaStaticData,
-                   depth::Int64,
-                   state::expr_state,
-                   callback::Function,
-                   cbdata::ANY)
-    # skip processing LambdaStaticData
-    return nothing
-end
 end
 
 function from_expr(ast::ANY,
@@ -1192,37 +1134,14 @@ function from_expr_helper(ast::Union{GotoNode,LineNumberNode,TopNode,Module},
     # Intentionally do nothing.
 end
 
-function from_expr_helper(ast::Union{Symbol,GenSym},
+function from_expr_helper(ast::RHSVar,
                           depth::Int64,
                           state::expr_state,
                           callback::Function,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
-    @dprintln(2, typeof(ast), " type ", ast)
-    add_access(state.cur_bb, ast, state.read)
-end
-
-if VERSION > v"0.5.0-dev+3260"
-function from_expr_helper(ast::Slot,
-                          depth::Int64,
-                          state::expr_state,
-                          callback::Function,
-                          cbdata::ANY)
-    # addStatement(top_level, state, ast)
-    @dprintln(2,"SymbolNode type ", ast.id, " ", ast.typ)
-    #add_access(state.cur_bb, slotToSym(ast, state.li), state.read)
-    add_access(state.cur_bb, ast.id , state.read)
-end
-else
-function from_expr_helper(ast::SymbolNode,
-                          depth::Int64,
-                          state::expr_state,
-                          callback::Function,
-                          cbdata::ANY)
-    # addStatement(top_level, state, ast)
-    @dprintln(2,"SymbolNode type ", ast.name, " ", ast.typ)
-    add_access(state.cur_bb, ast.name, state.read)
-end
+    @dprintln(2, "ast = ", ast, "::", typeof(ast))
+    add_access(state.cur_bb, toLHSVar(ast), state.read)
 end
 
 function from_expr_helper(ast::Union{DataType,ASCIIString,UTF8String,NewvarNode,Void},

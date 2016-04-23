@@ -34,15 +34,15 @@ DebugMsg.init()
 
 import Base.show
 
-#SymGen = Union{Symbol, GenSym}
+#LHSVar = Union{Symbol, GenSym}
 
 """
 Holds which scalars and which array are accessed and for array which index expressions are used.
 """
 type AccessSet
-    scalars :: Set{SymGen}
-    arrays  :: Dict{SymGen, Array{Array{Any,1},1}}
-    AccessSet() = new(Set{SymGen}(), Dict{SymGen, Array{Array{Any,1},1}}())
+    scalars :: Set{LHSVar}
+    arrays  :: Dict{LHSVar, Array{Array{Any,1},1}}
+    AccessSet() = new(Set{LHSVar}(), Dict{LHSVar, Array{Array{Any,1},1}}())
 end
 
 """
@@ -81,7 +81,7 @@ end
 """
 Return true if some symbol in "sym" is read either as a scalar or array within the computed ReadWriteSetType.
 """
-function isRead(sym :: SymGen, rws :: ReadWriteSetType)
+function isRead(sym :: LHSVar, rws :: ReadWriteSetType)
     if in(sym, rws.readSet.scalars)
         return true
     elseif haskey(rws.readSet.arrays, sym)
@@ -94,7 +94,7 @@ end
 """
 Return true if some symbol in "sym" is written either as a scalar or array within the computed ReadWriteSetType.
 """
-function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
+function isWritten(sym :: LHSVar, rws :: ReadWriteSetType)
     if in(sym, rws.writeSet.scalars)
         return true
     elseif haskey(rws.writeSet.arrays, sym)
@@ -103,8 +103,6 @@ function isWritten(sym :: SymGen, rws :: ReadWriteSetType)
         return false
     end
 end
-
-using Base.uncompressed_ast
 
 typealias CallbackType Union{Function, Void}
 
@@ -197,7 +195,7 @@ function from_assignment(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWrite
   local lhs = ast[1]
   local rhs = ast[2]
   # lhs_type = typeof(lhs)
-  push!(rws.writeSet.scalars, toSymGen(lhs))
+  push!(rws.writeSet.scalars, toLHSVar(lhs))
   from_expr(rhs, depth, rws, callback, cbdata)
 end
 
@@ -208,7 +206,7 @@ Makes sure there is an entry in the dictionary for this array and adds the index
 """
 function addIndexExpr!(this_dict, array_name, index_expr)
   @dprintln(2,"addIndexExpr! ", typeof(array_name), " index_expr = ", index_expr, " typeof(index_expr) = ", typeof(index_expr))
-  key = toSymGen(array_name)
+  key = toLHSVar(array_name)
   if(!haskey(this_dict, key))
     this_dict[key] = Array{Any,1}[]
   end
@@ -274,23 +272,10 @@ function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth 
   return true
 end
 
-if VERSION > v"0.5.0-dev+3260"
 function from_expr(ast :: LambdaInfo, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-    ast = uncompressed_ast(ast)
+    ast = CompilerTools.LambdaHandling.getBody(ast)
     from_expr(ast, depth, rws, callback, cbdata)
     return rws
-end
-else
-"""
-The main routine that switches on all the various AST node types.
-The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
-The leaf nodes of the AST all have different types.
-"""
-function from_expr(ast :: LambdaStaticData, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-    ast = uncompressed_ast(ast)
-    from_expr(ast, depth, rws, callback, cbdata)
-    return rws
-end
 end
 
 function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
@@ -361,39 +346,15 @@ function from_expr(ast::Union{LabelNode,GotoNode,LineNumberNode,DataType,Module,
     return rws
 end
 
-function from_expr(ast::Union{Symbol,GenSym},
+function from_expr(ast::RHSVar,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
                    cbdata::ANY)
-    push!(rws.readSet.scalars, ast)
+    push!(rws.readSet.scalars, toLHSVar(ast))
     @dprintln(3,"RWS ", typeof(ast), " type")
 
     return rws
-end
-
-if VERSION > v"0.5.0-dev+3260"
-function from_expr(ast::Slot,
-                   depth :: Integer,
-                   rws :: ReadWriteSetType,
-                   callback :: CallbackType,
-                   cbdata::ANY)
-    push!(rws.readSet.scalars, ast.id)
-    @dprintln(3,"RWS SymbolNode type")
-
-    return rws
-end
-else
-function from_expr(ast::SymbolNode,
-                   depth :: Integer,
-                   rws :: ReadWriteSetType,
-                   callback :: CallbackType,
-                   cbdata::ANY)
-    push!(rws.readSet.scalars, ast.name)
-    @dprintln(3,"RWS SymbolNode type")
-
-    return rws
-end
 end
 
 function from_expr(ast::Union{TopNode,ASCIIString,UTF8String},

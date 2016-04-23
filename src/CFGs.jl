@@ -31,7 +31,7 @@ DebugMsg.init()
 
 using CompilerTools
 using CompilerTools.AstWalker
-#using CompilerTools.Helper
+using CompilerTools.Helper
 
 import Base.show
 
@@ -837,8 +837,6 @@ function dump_bb(bl :: CFG)
     end
 end
 
-using Base.uncompressed_ast
-
 """
 To help construct the CFG given a lambda, we recursively process the body of the lambda.
 """
@@ -1032,16 +1030,10 @@ function from_ast(ast::Any)
   from_expr(ast, not_handled, nothing)
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function from_expr(ast::Array{Any,1}, depth, state, top_level, callback, cbdata) 
-  from_exprs(ast, depth, state, callback, cbdata)
-end
-
 function from_ast(ast::LambdaInfo)
   @dprintln(3,"from_ast for LambdaInfo")
-  body = uncompressed_ast(ast)
+  body = CompilerTools.LambdaHandling.getBody(ast)
   from_expr(body, not_handled, nothing)
-end
 end
 
 """
@@ -1049,7 +1041,7 @@ Another entry point to construct a control-flow graph but one that allows you to
 so that non-standard node types can be processed.
 """
 function from_expr(ast::Any, callback, cbdata)
-  @dprintln(2,"from_expr Any")
+  @dprintln(2,"from_expr Body")
   @dprintln(3,ast)
   live_res = expr_state()
   # Recursively process the AST.
@@ -1152,21 +1144,13 @@ function from_if(args, depth, state, callback, cbdata)
     nothing
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function from_expr(ast::LambdaInfo, depth, state, top_level, callback, cbdata)
-    return nothing
-end
-else
 """
 The main routine that switches on all the various AST node types.
 The internal nodes of the AST are of type Expr with various different Expr.head field values such as :lambda, :body, :block, etc.
 The leaf nodes of the AST all have different types.
 """
-function from_expr(ast::LambdaStaticData, depth, state, top_level, callback, cbdata)
-    # ast = uncompressed_ast(ast)
-    # skip processing LambdaStaticData
+function from_expr(ast::LambdaInfo, depth, state, top_level, callback, cbdata)
     return nothing
-end
 end
 
 function from_expr(ast::Any, depth, state, top_level, callback, cbdata)

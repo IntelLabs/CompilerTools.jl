@@ -38,15 +38,14 @@ import Base.show
 export VarDef, LambdaVarInfo
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
-export parameterToSymbol, getLocalVariables, getEscapingVariables
-export getBody, getReturnType
+export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables
+export getBody, getReturnType, setReturnType
+export lambdaToLambdaVarInfo
 if VERSION > v"0.5.0-dev+3260"
-export lambdaInfoToLambdaVarInfo
 #export LambdaVarInfoToLambdaInfo
 export slotToSym
 else
-export lambdaExprToLambdaVarInfo
-export LambdaVarInfoToLambdaExpr
+export LambdaVarInfoToLambda
 end
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
@@ -237,7 +236,7 @@ end
 Eliminates unused symbols from the LambdaVarInfo var_defs.
 Takes a LambdaVarInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
-function eliminateUnusedLocals!(li :: LambdaVarInfo, body :: Expr, AstWalkFunc = nothing)
+function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing)
   css = CountSymbolState()
   if AstWalkFunc == nothing
     CompilerTools.AstWalker.AstWalk(body, count_symbols, css)
@@ -254,7 +253,7 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body :: Expr, AstWalkFunc =
     end
   end
 
-  gensymdict = Dict{SymGen,Any}()
+  gensymdict = Dict{LHSVar,Any}()
   newgensym  = Any[]
   next_id    = 0
   for i = 0:length(li.gen_sym_typs)-1
@@ -351,6 +350,11 @@ function slotToSym(x::Slot, li::LambdaVarInfo)
     return li.orig_info.slotnames[x.id]
 end
 
+function getType(x::Int, li::LambdaVarInfo)
+    @dprintln(3,"getType for Slot, x = ", x)
+    return li.orig_info.slottypes[x]
+end
+
 function getType(x::Slot, li::LambdaVarInfo)
     @dprintln(3,"getType for Slot, x = ", x)
     if x.typ == Any
@@ -364,13 +368,13 @@ function getType(x::SymbolNode, li::LambdaVarInfo)
     return x.typ
 end
 end
-
-function getType(x::Expr, li::LambdaVarInfo)
-    return x.typ
-end
-
 function getType(x::Any, li::LambdaVarInfo)
     throw(string("getType called with neither Symbol or GenSym input.  Instead the input was ", x, " of type ", typeof(x)))
+end
+
+#- The following are not related to variables, and should be taken care of by the caller
+function getType(x::Expr, li::LambdaVarInfo)
+    return x.typ
 end
 
 function getType(x::Union{GlobalRef,QuoteNode}, li::LambdaVarInfo)
@@ -390,6 +394,7 @@ function getType(x::LambdaStaticData, li::LambdaVarInfo)
     return typeof(x)
 end
 end
+-#
 
 function updateType(li::LambdaVarInfo, x::Symbol, typ)
     if haskey(li.var_defs, x)
@@ -433,6 +438,16 @@ function getDesc(x :: Symbol, li :: LambdaVarInfo)
     end
 end
 
+if VERSION > v"0.5.0-dev+3260"
+function getDesc(x :: Slot, li :: LambdaVarInfo)
+    li.orig_info.slotflags[x.id]
+end
+else
+function getDesc(x :: SymbolNode, li :: LambdaVarInfo)
+    getDesc(x.name, li)
+end
+end
+
 function getDesc(x :: GenSym, li :: LambdaVarInfo)
   return ISASSIGNED | ISASSIGNEDONCE
 end
@@ -451,11 +466,21 @@ function isInputParameter(s :: Symbol, li :: LambdaVarInfo)
     for p in li.input_params
         if (isa(p, Symbol) && p == s) || 
            (isa(p, Expr) && p.args[1] == s) || 
-           (isa(p, SymbolNode) && p.name == s)
+           (isa(p, TypeVar) && p.name == s)
             return true
         end
     end
     return false
+end
+
+function isInputParameter(s::GenSym, li::LambdaVarInfo)
+    return false
+end
+
+if VERSION > v"0.5.0-dev+3260"
+function isInputParameter(s :: Int, li :: LambdaVarInfo)
+    isInputParameter(slotToSym(Slot(s),li), li)
+end
 end
 
 """
@@ -465,10 +490,57 @@ function isLocalVariable(s :: Symbol, li :: LambdaVarInfo)
   return haskey(li.var_defs, s) && !isInputParameter(s, li)
 end
 
+if VERSION > v"0.5.0-dev+3260"
 """
-Returns an array of Symbols/GenSyms for local variables and GenSyms.
+Returns an array of local variables and GenSyms.
 """
-function getLocalVariables(li :: LambdaVarInfo)
+function getLocals(li :: LambdaVarInfo)
+  locals = Any[]
+  for k in 1:length(li.var_defs)
+      push!(locals, k)
+  end
+  for i in 1:length(li.gen_sym_typs)
+      push!(locals, GenSym(i-1))
+  end
+  return locals
+end
+
+"""
+Returns an array of local variables and GenSyms, excluding parameters.
+"""
+function getLocalNoParams(li :: LambdaVarInfo)
+  locals = Any[]
+  for k in 1:length(li.var_defs)
+    if !isInputParameter(slotToSym(Slot(k),li), li)
+        push!(locals, k)
+    end
+  end
+  for i in 1:length(li.gen_sym_typs)
+      push!(locals, GenSym(i-1))
+  end
+  return locals
+end
+
+else
+
+"""
+Returns an array of local variables and GenSyms.
+"""
+function getLocals(li :: LambdaVarInfo)
+  locals = Any[]
+  for k in keys(li.var_defs)
+      push!(locals, k)
+  end
+  for i in 1:length(li.gen_sym_typs)
+      push!(locals, GenSym(i-1))
+  end
+  return locals
+end
+
+"""
+Returns an array of local variables and GenSyms, excluding parameters
+"""
+function getLocalNoParams(li :: LambdaVarInfo)
   locals = Any[]
   for k in keys(li.var_defs)
     if !isInputParameter(k, li)
@@ -479,6 +551,8 @@ function getLocalVariables(li :: LambdaVarInfo)
       push!(locals, GenSym(i-1))
   end
   return locals
+end
+
 end
 
 """
@@ -695,7 +769,7 @@ expressions (i.e., LambdaStaticData or DomainLambda or any other none Expr
 objects are left unchanged). If such lambdas have escaping names that are to be
 replaced, then the result will be wrong.
 """
-function replaceExprWithDict(expr::Any, dict::Dict{SymGen, Any})
+function replaceExprWithDict(expr::Any, dict::Dict{LHSVar, Any})
   function traverse(expr :: ANY)       # traverse expr to find the places where arrSym is refernced
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
@@ -735,7 +809,7 @@ input expression, and the input "expr" may be modified inplace and shall not be 
 after this call. Note that unlike "replaceExprWithDict", the traversal here is
 done by ASTWalker, which has the ability to traverse non-Expr data.
 """
-function replaceExprWithDict!(expr :: ANY, dict :: Dict{SymGen, Any}, AstWalkFunc = nothing)
+function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFunc = nothing)
   function update_sym(expr :: ANY, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     if isa(expr, Symbol) || isa(expr, GenSym)
       if haskey(dict, expr)
@@ -799,7 +873,7 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
     end
   end
   n = length(outer.gen_sym_typs)
-  dict = Dict{SymGen, Any}()
+  dict = Dict{LHSVar, Any}()
   for i = 1:length(inner.gen_sym_typs)
     push!(outer.gen_sym_typs, inner.gen_sym_typs[i])
     old_sym = GenSym(i - 1)
@@ -811,7 +885,7 @@ end
 
 if VERSION > v"0.5.0-dev+3260"
 
-function lambdaInfoToLambdaVarInfo(lambda :: LambdaInfo)
+function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
   ret = LambdaVarInfo(lambda)
   for i = 2:lambda.nargs
     one_input = lambda.slotnames[i]
@@ -840,7 +914,7 @@ function lambdaInfoToLambdaVarInfo(lambda :: LambdaInfo)
 
   ret.return_type = lambda.rettype
 
-  @dprintln(3,"Result of lambdaInfoToLambdaVarInfo = ", ret)
+  @dprintln(3,"Result of lambdaToLambdaVarInfo = ", ret)
   return ret
 end
 
@@ -849,7 +923,7 @@ else
 Convert a lambda expression into our internal storage format, LambdaVarInfo.
 The input is asserted to be an expression whose head is :lambda.
 """
-function lambdaExprToLambdaVarInfo(lambda :: Expr)
+function lambdaToLambdaVarInfo(lambda :: Expr)
   assert(lambda.head == :lambda)
   assert(length(lambda.args) == 3)
 
@@ -890,10 +964,17 @@ end
 end
 
 """
-Returns the type of the lambda as stored in LambdaVarInfo "li" and as extracted during lambdaExprToLambdaVarInfo.
+Returns the type of the lambda as stored in LambdaVarInfo "li" and as extracted during lambdaToLambdaVarInfo.
 """
 function getReturnType(li :: LambdaVarInfo)
   return li.return_type
+end
+
+"""
+set the return type of LambdaVarInfo "li".
+"""
+function setReturnType(ret_typ, li :: LambdaVarInfo)
+  li.return_type = ret_typ
 end
 
 if VERSION > v"0.5.0-dev+3260"
@@ -963,10 +1044,13 @@ Convert our internal storage format, LambdaVarInfo, back into a lambda expressio
 This takes a LambdaVarInfo and a body as input parameters.
 This body can be a body expression or you can pass "nothing" if you want but then you will probably need to set the body in args[3] manually by yourself.
 """
-function LambdaVarInfoToLambdaExpr(LambdaVarInfo :: LambdaVarInfo, body)
-  assert(typeof(body) == Expr)
-  assert(body.head == :body)
-  return Expr(:lambda, LambdaVarInfo.input_params, createMeta(LambdaVarInfo), body)
+function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1})
+  expr = Expr(:body)
+  expr.args = body
+  if LambdaVarInfo.return_type != nothing
+      expr.typ = LambdaVarInfo.return_type
+  end
+  return Expr(:lambda, LambdaVarInfo.input_params, createMeta(LambdaVarInfo), expr)
 end
 end
 
@@ -997,16 +1081,24 @@ end
 
 if VERSION > v"0.5.0-dev+3260"
 function getBody(lambda :: LambdaInfo)
-  return Base.uncompressed_ast(lambda)
+  return getBody(Base.uncompressed_ast(lambda), lambda.rettype)
 end
 else
-"""
-Returns the body expression part of a lambda expression.
-"""
+function getBody(lambda :: LambdaStaticData)
+  return getBody(Base.uncompressed_ast(lambda))
+end
+end
+
 function getBody(lambda :: Expr)
   assert(lambda.head == :lambda)
   return lambda.args[3]
 end
+
+function getBody(lambda :: Array{Any,1}, rettype)
+  body = Expr(:body)
+  body.args = lambda
+  body.typ = rettype
+  return body
 end
 
 """
@@ -1047,5 +1139,17 @@ else
 parameterToSymbol(x::SymbolNode) = x.name
 end
 parameterToSymbol(x::Expr) = begin assert(x.head == :(::)); return x.args[1] end
+
+"""
+Get the name of a local variable, either as Symbol or GenSym
+"""
+getVariableName(x::GenSym, info) = x
+if VERSION > v"0.5.0-dev+3260"
+getVariableName(x::Slot, info::LambdaInfo) = info.slotnames[x.id]
+getVariableName(x::Int, info::LambdaInfo) = info.slotnames[x]
+else
+getVariableName(x::Symbol, info) = x
+getVariableName(x::SymbolNode, info) = x.name
+end
 
 end
