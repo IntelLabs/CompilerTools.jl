@@ -24,7 +24,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
 =#
 
 using CompilerTools
-using CompilerTools.LambdaHandling: getVariableName
+using CompilerTools.LambdaHandling
 using Base.Test
 
 ## Tests for CompilerTools.AliasAnalysis
@@ -56,6 +56,7 @@ function test_alias_1(x::Int64, y::Int64, z::Int64)
 end
 
 ast = code_typed(test_alias_1, (Int64,Int64,Int64,))[1]
+linfo = lambdaToLambdaVarInfo(ast)
 #println("ast = ", ast)
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
@@ -68,7 +69,7 @@ lives = CompilerTools.LivenessAnalysis.from_expr(ast)
 #println("lives = ")
 #println(lives)
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
-handled = map(x -> getVariableName(x, ast), handled)
+handled = map(x -> getVariableName(x, linfo), handled)
 #println("handled = ", handled)
 
 @test (in(:A, handled))
