@@ -35,10 +35,10 @@ using Core.Inference: to_tuple_type
 
 import Base.show
 
-export VarDef, LambdaVarInfo
-export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym
+export VarDef, LambdaVarInfo, toRHSVar
+export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getTypedVar
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
-export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables
+export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo
 if VERSION > v"0.5.0-dev+3260"
@@ -95,6 +95,28 @@ type LambdaVarInfo
   end
 end
 
+function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
+  var_def = linfo.var_defs[s]
+  Slot(var_def.id, t) 
+end
+
+function toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo)
+    return getTypedVar(x, typ, linfo)
+end
+
+function toRHSVar(x :: TypedVar, typ, linfo :: LambdaVarInfo)
+    return x
+end
+
+function toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo)
+    return x
+end
+
+function toRHSVar(x, typ, linfo :: LambdaVarInfo)
+    xtyp = typeof(x)
+    throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
+end
+
 else
 
 """
@@ -137,6 +159,28 @@ type LambdaVarInfo
     new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type))
   end
 end
+
+function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
+  SymbolNode(s, t)
+end
+
+function toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo)
+    return SymbolNode(x, typ)
+end
+
+function toRHSVar(x :: SymbolNode, typ, linfo :: LambdaVarInfo)
+    return x
+end
+
+function toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo)
+    return x
+end
+
+function toRHSVar(x, typ, linfo :: LambdaVarInfo)
+    xtyp = typeof(x)
+    throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
+end
+
 
 end
 
@@ -195,24 +239,13 @@ function count_symbols(x::Symbol,
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function count_symbols(x::Slot,
+function count_symbols(x::TypedVar,
                        state::CountSymbolState,
                        top_level_number,
                        is_top_level,
                        read)
-    push!(state.used_symbols, x.id)
+    push!(state.used_symbols, toLHSVar(x))
     return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-else
-function count_symbols(x::SymbolNode,
-                       state::CountSymbolState,
-                       top_level_number,
-                       is_top_level,
-                       read)
-    push!(state.used_symbols, x.name)
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
 end
 
 function count_symbols(x::GenSym,
@@ -413,14 +446,8 @@ function updateType(li::LambdaVarInfo, x::GenSym, typ)
     return nothing
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function updateType(li::LambdaVarInfo, x::Slot, typ)
-    updateType(li, x.id, typ)
-end
-else
-function updateType(li::LambdaVarInfo, x::SymbolNode, typ)
-    updateType(li, x.name, typ)
-end
+function updateType(li::LambdaVarInfo, x::TypedVar, typ)
+    updateType(li, toLHSVar(x), typ)
 end
  
 function updateType(li::LambdaVarInfo, x, typ)
@@ -438,14 +465,8 @@ function getDesc(x :: Symbol, li :: LambdaVarInfo)
     end
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function getDesc(x :: Slot, li :: LambdaVarInfo)
-    li.orig_info.slotflags[x.id]
-end
-else
-function getDesc(x :: SymbolNode, li :: LambdaVarInfo)
-    getDesc(x.name, li)
-end
+function getDesc(x :: TypedVar, li :: LambdaVarInfo)
+    getDesc(toLHSVar(x), li)
 end
 
 function getDesc(x :: GenSym, li :: LambdaVarInfo)
@@ -609,7 +630,7 @@ end
 Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaVarInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
-function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
+@noinline function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
   # If it is already a local variable then just update its type and desc.
   if haskey(li.var_defs, s)
     var_def      = li.var_defs[s]
@@ -776,9 +797,10 @@ function replaceExprWithDict(expr::Any, dict::Dict{LHSVar, Any})
         return dict[expr]
       end
       return expr
-    elseif isa(expr, SymbolNode)
-      if haskey(dict, expr.name)
-        return dict[expr.name]
+    elseif isa(expr, TypedVar)
+      lhsVar = toLHSVar(expr)
+      if haskey(dict, lhsVar)
+        return dict[lhsVar]
       end
       return expr
     elseif isa(expr, Array)
@@ -815,9 +837,10 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
       if haskey(dict, expr)
         return dict[expr]
       end
-    elseif isa(expr, SymbolNode)
-      if haskey(dict, expr.name)
-        return dict[expr.name]
+    elseif isa(expr, TypedVar)
+      lhsVar = toLHSVar(expr)
+      if haskey(dict, lhsVar)
+        return dict[lhsVar]
       end
     end
     return CompilerTools.AstWalker.ASTWALK_RECURSE
@@ -1132,24 +1155,19 @@ end
 """
 Convert a parameter to Symbol.
 """
-parameterToSymbol(x::Symbol) = x
-if VERSION > v"0.5.0-dev+3260"
-parameterToSymbol(x::Slot) = x.id
-else
-parameterToSymbol(x::SymbolNode) = x.name
-end
-parameterToSymbol(x::Expr) = begin assert(x.head == :(::)); return x.args[1] end
+parameterToSymbol(x, info::LambdaVarInfo) = getVariableName(x, info)
 
 """
 Get the name of a local variable, either as Symbol or GenSym
 """
-getVariableName(x::GenSym, info) = x
+getVariableName(x::GenSym, info::LambdaVarInfo) = x
+getVariableName(x::Symbol, info::LambdaVarInfo) = x
 if VERSION > v"0.5.0-dev+3260"
-getVariableName(x::Slot, info::LambdaInfo) = info.slotnames[x.id]
-getVariableName(x::Int, info::LambdaInfo) = info.slotnames[x]
+getVariableName(x::Slot, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
+getVariableName(x::Int,  info::LambdaVarInfo) = info.orig_info.slotnames[x]
 else
-getVariableName(x::Symbol, info) = x
-getVariableName(x::SymbolNode, info) = x.name
+getVariableName(x::SymbolNode, info::LambdaVarInfo) = x.name
 end
+getVariableName(x::Expr, info::LambdaVarInfo) = begin assert(x.head == :(::)); return x.args[1] end
 
 end
