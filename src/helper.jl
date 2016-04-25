@@ -30,8 +30,7 @@ module Helper
 
 export LHSVar, RHSVar, TypedVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
-export isBitArrayType, isTupleType, isStringType
-
+export isBitArrayType, isTupleType, isStringType, isequal
 
 
 if VERSION > v"0.5.0-dev+3260"
@@ -39,12 +38,14 @@ typealias LHSVar     Union{Int, GenSym}
 typealias RHSVar     Union{Slot, GenSym}
 typealias TypedVar   Slot
 toLHSVar(tv::TypedVar) = tv.id
+isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
 else
 typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
 typealias TypedVar   SymbolNode
 typealias LambdaInfo LambdaStaticData
 toLHSVar(tv::TypedVar) = tv.name
+isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
 export LambdaInfo
 end
 
