@@ -149,8 +149,7 @@ function isbitstuple(a::Any)
 end
 
 function isIntType(typ::DataType)
-    is(typ, Int64)  || is(typ, Int32)  || is(typ, Int16)  || is(typ, Int8)  || 
-    is(typ, UInt64) || is(typ, UInt32) || is(typ, UInt16) || is(typ, UInt8)
+    typ<:Integer
 end
 
 function isIntType(typ::ANY)

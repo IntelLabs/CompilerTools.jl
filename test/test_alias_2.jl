@@ -30,25 +30,25 @@ using Base.Test
 ## Tests for CompilerTools.AliasAnalysis
 
 function test_alias_2(x::Int, y::Int, z::Int, s::Int)
-         A = rand(x, y)
-         D_arr = rand(x, y)
-	 C = rand(x,y)
-	 B = D_arr
+     A = rand(x, y)
+     D_arr = rand(x, y)
+     C = rand(x,y)
+     B = D_arr
 
-	 for i = 1:x
-	      if( i%2 == 0 )
-	      	  for j = 1:y
-		      D_arr[i,j] /= 2
-		  end
-	      end
-	  end
-	  
-	  E = B
-	  if( s > 0 )
-	      E = A
-	  end
-	  
-         return E
+     for i = 1:x
+          if( i%2 == 0 )
+              for j = 1:y
+              D_arr[i,j] /= 2
+          end
+          end
+      end
+      
+      E = B
+      if( s > 0 )
+          E = A
+      end
+      
+      return E
 
 end
 

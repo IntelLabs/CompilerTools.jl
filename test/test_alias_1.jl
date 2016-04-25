@@ -30,37 +30,43 @@ using Base.Test
 ## Tests for CompilerTools.AliasAnalysis
 
 function test_alias_1(x::Int64, y::Int64, z::Int64)
-         A = rand(x, y)
-         D_arr = rand(y, z)
-         C = zeros(x, z)
-	 B = D_arr
+    A = rand(x, y)
+    D_arr = rand(y, z)
+    C = zeros(x, z)
+    B = D_arr
 
-	 for i = 1:y
-	      if( i%2 == 0 )
-	      	  for j = 1:z
-		      D_arr[i,j] /= 2
-		  end
-	      end
-	  end
+    for i = 1:y
+        if( i%2 == 0 )
+            for j = 1:z
+                D_arr[i,j] /= 2
+            end
+        end
+    end
 
-         for i = 1:x
-             for j = 1:y
-                 A[i,j] += 1;
-             end
-             for j = 1:z
-                 for k = 1:y
-                     C[i,j] += A[i,k] * B[k,j] + 1
-                 end
-             end
-          end
+    for i = 1:x
+        for j = 1:y
+            A[i,j] += 1;
+        end
+        for j = 1:z
+            for k = 1:y
+                C[i,j] += A[i,k] * B[k,j] + 1
+            end
+        end
+    end
 end
 
 ast = code_typed(test_alias_1, (Int64,Int64,Int64,))[1]
+#println("ast = ", ast)
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
-#CompilerTools.LivenessAnalysis.set_debug_level(3)
 #CompilerTools.AliasAnalysis.set_debug_level(3)
+#CompilerTools.CFGs.set_debug_level(4)
+#CompilerTools.LivenessAnalysis.set_debug_level(5)
+#CompilerTools.LambdaHandling.set_debug_level(5)
+
 lives = CompilerTools.LivenessAnalysis.from_expr(ast)
+#println("lives = ")
+#println(lives)
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
 handled = map(x -> getVariableName(x, ast), handled)
 #println("handled = ", handled)
