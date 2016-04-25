@@ -38,11 +38,13 @@ if VERSION > v"0.5.0-dev+3260"
 typealias LHSVar     Union{Int, GenSym}
 typealias RHSVar     Union{Slot, GenSym}
 typealias TypedVar   Slot
+toLHSVar(tv::TypedVar) = tv.id
 else
 typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
 typealias TypedVar   SymbolNode
 typealias LambdaInfo LambdaStaticData
+toLHSVar(tv::TypedVar) = tv.name
 export LambdaInfo
 end
 
@@ -107,20 +109,12 @@ function toLHSVar(x :: GenSym)
     return x
 end
 
-if VERSION > v"0.5.0-dev+3260"
-function toLHSVar(x :: Slot)
-    return x.id
-end
 function toLHSVar(x :: Int)
     return x
 end
-else
-function toLHSVar(x :: SymbolNode)
-    return x.name
-end
+
 function toLHSVar(x :: Symbol)
     return x
-end
 end
 
 function toLHSVarOrNum(x :: RHSVar)
