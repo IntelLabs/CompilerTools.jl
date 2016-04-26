@@ -401,13 +401,12 @@ function getType(x::GenSym, li::LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
-function slotToSym(x::Slot, li::LambdaVarInfo)
-    return li.orig_info.slotnames[x.id]
-end
+slotToSym(x::Slot, li::LambdaVarInfo)   = li.orig_info.slotnames[x.id]
+slotToSym(x::SlotId, li::LambdaVarInfo) = li.orig_info.slotnames[x.id]
 
-function getType(x::Int, li::LambdaVarInfo)
+function getType(x::SlotId, li::LambdaVarInfo)
     @dprintln(3,"getType for Slot, x = ", x)
-    return li.orig_info.slottypes[x]
+    return li.orig_info.slottypes[x.id]
 end
 
 function getType(x::Slot, li::LambdaVarInfo)
@@ -521,8 +520,8 @@ function isInputParameter(s::GenSym, li::LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
-function isInputParameter(s :: Int, li :: LambdaVarInfo)
-    isInputParameter(slotToSym(Slot(s),li), li)
+function isInputParameter(s :: SlotId, li :: LambdaVarInfo)
+    isInputParameter(slotToSym(s,li), li)
 end
 end
 
@@ -539,8 +538,8 @@ Returns an array of local variables and GenSyms.
 """
 function getLocals(li :: LambdaVarInfo)
   locals = Any[]
-  for k in 1:length(li.var_defs)
-      push!(locals, k)
+  for k in li.var_defs
+      push!(locals, SlotId(k[2].id))
   end
   for i in 1:length(li.gen_sym_typs)
       push!(locals, GenSym(i-1))
@@ -1185,8 +1184,8 @@ Get the name of a local variable, either as Symbol or GenSym
 getVariableName(x::GenSym, info::LambdaVarInfo) = x
 getVariableName(x::Symbol, info::LambdaVarInfo) = x
 if VERSION > v"0.5.0-dev+3260"
-getVariableName(x::Slot, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
-getVariableName(x::Int,  info::LambdaVarInfo) = info.orig_info.slotnames[x]
+getVariableName(x::Slot, info::LambdaVarInfo)   = info.orig_info.slotnames[x.id]
+getVariableName(x::SlotId, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
 else
 getVariableName(x::SymbolNode, info::LambdaVarInfo) = x.name
 end
