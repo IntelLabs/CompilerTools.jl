@@ -58,6 +58,8 @@ end
 ast = code_typed(test_alias_1, (Int64,Int64,Int64,))[1]
 linfo = lambdaToLambdaVarInfo(ast)
 #println("ast = ", ast)
+#println("linfo = ", linfo)
+
 #cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.AliasAnalysis.set_debug_level(3)
