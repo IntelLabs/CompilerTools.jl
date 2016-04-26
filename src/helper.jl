@@ -28,17 +28,24 @@ A collection of helper functions for processing AST nodes
 """
 module Helper
 
+import Base.hash
+import Base.isequal
+
 export LHSVar, RHSVar, TypedVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
-export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol
-
+export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash
 
 if VERSION > v"0.5.0-dev+3260"
-typealias LHSVar     Union{Int, GenSym}
+immutable SlotId
+  id::Int
+end
+export SlotId
+typealias LHSVar     Union{SlotId, GenSym}
 typealias RHSVar     Union{Slot, GenSym}
 typealias TypedVar   Slot
-toLHSVar(tv::TypedVar) = tv.id
+toLHSVar(tv::TypedVar) = SlotId(tv.id)
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
+hash(x :: TypedVar) = hash(x.id)
 else
 typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
@@ -46,6 +53,7 @@ typealias TypedVar   SymbolNode
 typealias LambdaInfo LambdaStaticData
 toLHSVar(tv::TypedVar) = tv.name
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
+hash(x :: TypedVar) = hash(x.name)
 export LambdaInfo
 end
 
