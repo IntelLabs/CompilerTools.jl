@@ -30,7 +30,7 @@ module Helper
 
 export LHSVar, RHSVar, TypedVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
-export isBitArrayType, isTupleType, isStringType, isequal
+export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol
 
 
 if VERSION > v"0.5.0-dev+3260"
@@ -61,71 +61,26 @@ end
 """
 Returns true if the incoming type in "typ" is an array type.
 """
-function isArrayType(typ::DataType)
-    (typ<:Array) || (typ<:BitArray)
-end
-
-function isArrayType(x::ANY)
-    false
-end
-
-function isBitArrayType(typ::DataType)
-    typ<:BitArray
-end
-
-function isBitArrayType(x::ANY)
-    false
-end
-
-function isPtrType(typ::DataType)
-    typ<:Ptr
-end
-
-function isPtrType(typ::ANY)
-    return false
-end
-
-
-function isCall(node::Expr)
-    return node.head==:call
-end
-
-function isCall(node::Any)
-    return false
-end
-
-function isTopNode(node::TopNode)
-    return true
-end
-
-function isTopNode(node::Any)
-    return false
-end
+isArrayType(typ::DataType) = (typ<:Array) || (typ<:BitArray)
+isArrayType(x::ANY) = false
+isBitArrayType(typ::DataType) = typ<:BitArray
+isBitArrayType(x::ANY) = false
+isPtrType(typ::DataType) = typ<:Ptr
+isPtrType(typ::ANY) = false
+isCall(node::Expr) = node.head==:call
+isCall(node::Any) = false
+isTopNode(node::TopNode) = true
+isTopNode(node::Any) = false
 
 """
 In various places we need a LHSVar type which is the union of Symbol and GenSym.
 This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol or GenSym.
 """
-function toLHSVar(x :: GenSym)
-    return x
-end
-
-function toLHSVar(x :: Int)
-    return x
-end
-
-function toLHSVar(x :: Symbol)
-    return x
-end
-
-function toLHSVarOrNum(x :: RHSVar)
-    return toLHSVar(x)
-end
-
-function toLHSVarOrNum(x :: Number)
-    return x
-end
-
+toLHSVar(x :: GenSym) = x
+toLHSVar(x :: Int) = x
+toLHSVar(x :: Symbol) = x
+toLHSVarOrNum(x :: RHSVar) = toLHSVar(x)
+toLHSVarOrNum(x :: Number) = x
 
 """
 Returns true if input "a" is a tuple and each element of the tuple of isbits type.
@@ -139,33 +94,17 @@ function isbitstuple(a::Tuple)
     return true
 end
 
-function isbitstuple(a::Any)
-    return false
-end
-
-function isIntType(typ::DataType)
-    typ<:Integer
-end
-
-function isIntType(typ::ANY)
-    return false
-end
-
-function isTupleType(typ::DataType)
-    typ <: Tuple
-end
-
-function isTupleType(typ::ANY)
-    return false
-end
-
-function isStringType(typ::DataType)
-    typ <: AbstractString
-end
-
-function isStringType(typ::ANY)
-    return false
-end
+isbitstuple(a::Any) = false
+isIntType(typ::DataType) = typ<:Integer
+isIntType(typ::ANY) = false
+isTupleType(typ::DataType) = typ <: Tuple
+isTupleType(typ::ANY) = false
+isStringType(typ::DataType) = typ <: AbstractString
+isStringType(typ::ANY) = false
+hasSymbol(ssn :: Symbol) = true
+hasSymbol(ssn :: TypedVar) = true
+hasSymbol(ssn :: Expr) = ssn.head == :(::)
+hasSymbol(ssn) = false
 
 end # module Helper
 
