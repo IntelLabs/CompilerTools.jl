@@ -87,6 +87,7 @@ This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol o
 toLHSVar(x :: GenSym) = x
 toLHSVar(x :: Int) = x
 toLHSVar(x :: Symbol) = x
+toLHSVar(x) = x
 toLHSVarOrNum(x :: RHSVar) = toLHSVar(x)
 toLHSVarOrNum(x :: Number) = x
 
