@@ -40,7 +40,7 @@ export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapin
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
 export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
 export getBody, getReturnType, setReturnType
-export lambdaToLambdaVarInfo
+export lambdaToLambdaVarInfo, updateTypedVar, getSymbol
 if VERSION > v"0.5.0-dev+3260"
 #export LambdaVarInfoToLambdaInfo
 export slotToSym
@@ -101,21 +101,29 @@ function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
 end
 
 function toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo)
-    return getTypedVar(x, typ, linfo)
+  return getTypedVar(x, typ, linfo)
 end
 
 function toRHSVar(x :: TypedVar, typ, linfo :: LambdaVarInfo)
-    return x
+  return x
 end
 
 function toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo)
-    return x
+  return x
 end
 
 function toRHSVar(x, typ, linfo :: LambdaVarInfo)
-    xtyp = typeof(x)
-    throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
+  xtyp = typeof(x)
+  throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
 end
+
+function updateTypedVar(tv::TypedVar, s::Symbol, linfo :: LambdaVarInfo)
+  var_def = linfo.var_defs[s]    # Get the VarDef for the new symbol.
+  tv.id = var_def.id             # Put that symbol's slot id in the current Slot.
+  return tv
+end
+
+getSymbol(s :: TypedVar, linfo :: LambdaVarInfo) = slotToSym(s, linfo)
 
 else
 
@@ -181,7 +189,21 @@ function toRHSVar(x, typ, linfo :: LambdaVarInfo)
     throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
 end
 
+function updateTypedVar(tv::TypedVar, s::Symbol, linfo :: LambdaVarInfo)
+    tv.name = s
+    return tv
+end
 
+getSymbol(s :: TypedVar, linfo :: LambdaVarInfo) = s.name
+
+end
+
+getSymbol(s :: Symbol, linfo :: LambdaVarInfo) = s
+getSymbol(s :: GenSym, linfo :: LambdaVarInfo) = s
+function getSymbol(s :: Expr, linfo :: LambdaVarInfo)
+    @dprintln(0, "ssn.head = ", ssn.head)
+    assert(ssn.head == :(::))
+    return ssn.args[1]
 end
 
 """
