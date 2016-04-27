@@ -419,7 +419,7 @@ end
 
 # The following are for non-Expr AST nodes are generally leaf nodes of the AST where no 
 # recursive processing is possible.
-function from_expr_helper(ast::Union{RHSVar,TopNode},
+function from_expr_helper(ast::Union{RHSVar,TopNode,LHSVar,Symbol},
                           depth,
                           callback,
                           cbdata::ANY,
