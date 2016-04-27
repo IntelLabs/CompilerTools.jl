@@ -37,7 +37,7 @@ import Base.show
 
 export VarDef, LambdaVarInfo, toRHSVar
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getTypedVar
-export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym
+export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym, deleteEscapingVariable
 export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo, updateTypedVar, getSymbol
@@ -86,8 +86,8 @@ type LambdaVarInfo
   return_type   :: Any
   orig_info     :: LambdaInfo
 
-  function LambdaVarInfo(li)
-    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing, li)
+  function LambdaVarInfo()
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, li)
   end
 
   function LambdaVarInfo(li::LambdaVarInfo)
@@ -160,7 +160,7 @@ type LambdaVarInfo
   return_type   :: Any
 
   function LambdaVarInfo()
-    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], nothing)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void)
   end
 
   function LambdaVarInfo(li::LambdaVarInfo)
@@ -705,6 +705,13 @@ function addEscapingVariable(vd :: VarDef, li :: LambdaVarInfo)
 end
 
 """
+Deletes a new escaping variable from a VarDef in parameter "vd" into LambdaVarInfo "li".
+"""
+function deleteEscapingVariable(s :: Symbol, li :: LambdaVarInfo)
+  delete!(li.escaping_defs, s)
+end
+
+"""
 Add a new GenSym to the LambdaVarInfo in "li" with the given type in "typ".
 Returns the new GenSym.
 """
@@ -967,6 +974,10 @@ else
 Convert a lambda expression into our internal storage format, LambdaVarInfo.
 The input is asserted to be an expression whose head is :lambda.
 """
+function lambdaToLambdaVarInfo(lambda :: LambdaStaticData)
+  lambdaToLambdaVarInfo(Base.uncompressed_ast(lambda))
+end
+
 function lambdaToLambdaVarInfo(lambda :: Expr)
   assert(lambda.head == :lambda)
   assert(length(lambda.args) == 3)
@@ -1018,18 +1029,13 @@ end
 set the return type of LambdaVarInfo "li".
 """
 function setReturnType(ret_typ, li :: LambdaVarInfo)
+  @assert (ret_typ != nothing)
   li.return_type = ret_typ
 end
 
 if VERSION > v"0.5.0-dev+3260"
 function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
-  ast::Expr = Base.uncompressed_ast(lambda)
-  if lambda.inferred
-    ty = lambda.rettype
-  else
-    throw(string("Return type from uninferred LambdaInfo not supported yet in lambdaTypeinf"))
-  end
-  return ast, ty
+    throw(string("Force inference LambdaInfo not supported yet in lambdaTypeinf"))
 end
 else
 """
@@ -1041,8 +1047,7 @@ function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
   types::Any = to_tuple_type(Tuple{typs...})
   (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
   lambda.ast = tree
-  ast::Expr = Base.uncompressed_ast(lambda)
-  return ast, ty
+  return lambda, ty
 end
 end
 
@@ -1052,8 +1057,7 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
     (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
     lambda.ast = tree
-    ast::Expr = Base.uncompressed_ast(lambda)
-    return ast, ty
+    return lambda, ty
 end
 
 """
