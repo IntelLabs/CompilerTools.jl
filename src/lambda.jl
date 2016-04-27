@@ -86,10 +86,6 @@ type LambdaVarInfo
   return_type   :: Any
   orig_info     :: LambdaInfo
 
-  function LambdaVarInfo()
-    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, li)
-  end
-
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type), copy(li.orig_info))
   end
