@@ -33,7 +33,7 @@ import Base.isequal
 
 export LHSVar, RHSVar, TypedVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
-export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash
+export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead
 
 if VERSION > v"0.5.0-dev+3260"
 immutable SlotId
@@ -114,6 +114,12 @@ hasSymbol(ssn :: Symbol) = true
 hasSymbol(ssn :: TypedVar) = true
 hasSymbol(ssn :: Expr) = ssn.head == :(::)
 hasSymbol(ssn) = false
+
+if VERSION > v"0.5.0-dev+3260"
+isfunctionhead(x) = isa(x, LambdaInfo)
+else
+isfunctionhead(x) = isa(x, Expr) && x.head == :lambda && isa(x.args[3], Expr) && x.args[3].head == :body
+end
 
 end # module Helper
 
