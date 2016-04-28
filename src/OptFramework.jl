@@ -114,7 +114,8 @@ function getCodeAtLevel(func, sig::Tuple, level)
   @dprintln(3, "getCodeAtLevel ", dumpLevel(level), " ast = ", ast)
   @assert (length(ast) > 0) ("Failed to retrieve AST for function " * dump(func) * " with signature " * dump(sig))
   @assert (length(ast) == 1) ("Expect one AST but got many for function " * dump(func) * " with signature " * dump(sig) * ": " * dump(ast))
-  @assert (isa(ast[1], Expr) && ast[1].head == :lambda) ("Expect Expr with :lambda head, but got " * dump(ast[1]))
+  @dprintln(3, "typeof(ast[1]) ", typeof(ast[1]))
+  @assert (isfunctionhead(ast[1])) ("Expected function head but got " * dump(ast[1]))
   @dprintln(3, "getCodeAtLevel returns")
   return ast[1]
 end
@@ -123,7 +124,7 @@ end
 convert AST from "old_level" to "new_level". The input "ast" can be either Expr or Function type. In the latter case, the result AST will be obtained from this function using an matching signature "sig". The last "func" is a skeleton function that is used internally to facility such conversion.
 """
 function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
-  @dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig))
+  @dprintln(3,"convertCodeToLevel sig = ", sig, " ", old_level, "=>", new_level, " func = ", func, " typeof(sig) = ", typeof(sig), " typeof(ast) = ", typeof(ast), " typeof(func) = ", typeof(func))
   if isa(ast, Function)
     return getCodeAtLevel(ast, sig, new_level)
   end
@@ -136,7 +137,7 @@ function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
     func_methods = methods(func, sig)
     @assert (length(func_methods) == 1) ("Expect only one matching method for " * func * " of signature " * sig * " but got " * length(func_methods))
     lambda = func_methods[1].func.code
-    @assert (isa(lambda, LambdaStaticData)) ("LambdaStaticData not found for " * func * " of signature " * sig)
+    @assert (isa(lambda, LambdaInfo)) ("LambdaInfo not found for " * func * " of signature " * sig)
     lambda.ast = ccall(:jl_compress_ast, Any, (Any,Any), lambda, ast)
     if new_level == PASS_UNOPTTYPED
       @dprintln(3,"Calling lambdaTypeinf with optimize=false")
@@ -257,22 +258,22 @@ function removeDupLabels(stmts)
   ret
 end
 
-"""
-Clean up the labels in AST by renaming them, and removing duplicates.
-"""
-function cleanupASTLabels(ast)
-  assert(isa(ast, Expr) && ast.head == :lambda)
-  body = ast.args[3]
-  assert(typeof(body) == Expr && body.head == :body)
-  state = lmstate()
-  CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
-  #@dprintln(3,"label mapping = ", state.label_map)
-  state.last_was_label = false
-  body = CompilerTools.AstWalker.AstWalk(body, update_labels, state)
-  body.args = removeDupLabels(body.args)
-  ast.args[3] = body
-  return ast
-end
+#"""
+#Clean up the labels in AST by renaming them, and removing duplicates.
+#"""
+#function cleanupASTLabels(ast)
+#  assert(isa(ast, Expr) && ast.head == :lambda)
+#  body = ast.args[3]
+#  assert(typeof(body) == Expr && body.head == :body)
+#  state = lmstate()
+#  CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
+#  #@dprintln(3,"label mapping = ", state.label_map)
+#  state.last_was_label = false
+#  body = CompilerTools.AstWalker.AstWalk(body, update_labels, state)
+#  body.args = removeDupLabels(body.args)
+#  ast.args[3] = body
+#  return ast
+#end
 
 """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
@@ -330,7 +331,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
       cur_level = per_site_opt_set[i].level
       if cur_level > PASS_MACRO
         cur_ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, cur_level, new_func)
-        assert(typeof(cur_ast.args[3]) == Expr && cur_ast.args[3].head == :body)
+        assert(isfunctionhead(cur_ast))
         # Call the current optimization on the current AST.
         try
           cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
