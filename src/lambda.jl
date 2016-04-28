@@ -84,10 +84,18 @@ type LambdaVarInfo
   escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
   return_type   :: Any
-  orig_info     :: LambdaInfo
+  orig_info     :: Union{LambdaInfo,Void}
+
+  function LambdaVarInfo()
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, nothing)
+  end
 
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type), copy(li.orig_info))
+  end
+
+  function LambdaVarInfo(li::LambdaInfo)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, li)
   end
 end
 
@@ -463,10 +471,8 @@ function updateType(li::LambdaVarInfo, x::GenSym, typ)
     return nothing
 end
 
-function updateType(li::LambdaVarInfo, x::TypedVar, typ)
-    updateType(li, toLHSVar(x), typ)
-end
- 
+updateType(li::LambdaVarInfo, x::TypedVar, typ) = updateType(li, toLHSVar(x), typ)
+
 function updateType(li::LambdaVarInfo, x, typ)
     throw(string("updateType called with neither Symbol or GenSym input.  Instead the input type was ", typeof(x)))
 end
@@ -1050,10 +1056,34 @@ end
 function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
     types::Any = to_tuple_type(Tuple{ftyp, typs...})
     env = Core.Inference.svec()
+#    println("lambdaTypeinf typeof(ftyp) = ", typeof(ftyp))
+#    println("lambdaTypeinf typeof(ftyp.name) = ", typeof(ftyp.name))
+#    println("lambdaTypeinf typeof(ftyp.name.mt) = ", typeof(ftyp.name.mt))
+#    println("lambdaTypeinf typeof(ftyp.name.mt.defs) = ", typeof(ftyp.name.mt.defs))
+#    println("ftyp = ", ftyp)
+#    println("ftyp.name = ", ftyp.name)
+#    println("ftyp.name.mt = ", ftyp.name.mt)
+#    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
+if VERSION > v"0.5.0-dev+3260"
+    meth = Base._methods(ftyp, typs, -1)
+    if length(meth) == 1
+#        println("meth in _methods ", meth)
+        meth = meth[1]
+        linfo = Base.func_for_method_checked(meth[3].func, typs)
+        (tree, ty) = Core.Inference.typeinf_uncached(linfo, meth[1], meth[2], optimize = optimize)
+#        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
+        return tree, ty
+    else
+        throw(string("Expected one method from call to Base._methods in lambdaTypeinf."))
+    end
+else
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
+#    println("lambdaTypeinf typeof(lambda) = ", typeof(lambda))
     (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
+#    println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
     lambda.ast = tree
     return lambda, ty
+end
 end
 
 """
@@ -1186,6 +1216,9 @@ getVariableName(x::Symbol, info::LambdaVarInfo) = x
 if VERSION > v"0.5.0-dev+3260"
 getVariableName(x::Slot, info::LambdaVarInfo)   = info.orig_info.slotnames[x.id]
 getVariableName(x::SlotId, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
+updateType(li::LambdaVarInfo, x::SlotId, typ) = updateType(li, getVariableName(x, li), typ)
+getDesc(x :: SlotId, li :: LambdaVarInfo) = getDesc(getVariableName(x, li), li)
+
 else
 getVariableName(x::SymbolNode, info::LambdaVarInfo) = x.name
 end
