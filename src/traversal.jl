@@ -29,6 +29,9 @@ module Traversal
 export traverse, fold, build, fmap
 export getSymbols, normalize, substSymbols
 
+using CompilerTools.Helper
+using CompilerTools.LambdaHandling
+
 # A generic immutable traversal based on recursion schemes.
 # One only has to define a method of fmap (aka Functor) for a custom type in order to traverse it.
 
@@ -62,13 +65,10 @@ fmap(f, e::Any)   = e
 Collect all symbols in an Expr, and we skip Symbols that occur in Types, and in the type 
 position of Expr x::T. 
 """
-function getSymbols(e)
+function getSymbols(e, linfo :: LambdaVarInfo)
   syms = Set{Symbol}()
-  process(h, e::Symbol) = begin push!(syms, e); e end
-  process(h, e::SymbolNode) = begin push!(syms, e.name); e end
   process(h, e::Type) = e
-  process(h, e::Expr) = if e.head == :(::) h(e.args[1]) else h(e) end
-  process(h, e::Any) = h(e)
+  process(h, e::Any)  = hasSymbol(e) ? push!(syms, getVariableName(e, linfo)) : h(e)
   traverse(process, e)
   return syms
 end
@@ -152,13 +152,13 @@ assumption of the replacement variable, which could clash with variables
 in inner lambdas. When clash happens, we rename the inner lambda first
 before the substitution.
 """
-function substSymbols(e, dict::Dict{Symbol,Symbol})
+function substSymbols(e, dict::Dict{Symbol,Symbol}, linfo :: LambdaVarInfo)
   function process(h, e::Expr)
     if e.head == :lambda
-      params = getSymbols(e.args[1])
+      params = getSymbols(e.args[1], linfo)
       varinfo = e.args[2]
-      locals = getSymbols(varinfo[1])
-      escapes = getSymbols(varinfo[2])
+      locals = getSymbols(varinfo[1], linfo)
+      escapes = getSymbols(varinfo[2], linfo)
       new_dict = Dict{Symbol,Symbol}()
       for (k,v) in dict
         # only keep the keys for 
@@ -182,10 +182,19 @@ function substSymbols(e, dict::Dict{Symbol,Symbol})
     end
     return e
   end
-  process(h, e::Symbol) = get(dict, e, e)
-  process(h, e::SymbolNode) = haskey(dict, e.name) ? SymbolNode(dict[e.name], e.typ) : e
   process(h, e::NewvarNode) = haskey(dict, e.name) ? NewvarNode(dict[e.name]) : e
-  process(h, e::Any) = h(e)
+  function process(h, e::Any) 
+     if hasSymbol(e) 
+         sym = getVariableName(e, linfo)
+         if haskey(dict, sym)
+             return genWithRename(e, dict[sym], linfo) 
+         else
+             return e
+         end
+     else
+         return h(e)
+     end
+  end
   traverse(process, e)
 end
 

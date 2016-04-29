@@ -39,11 +39,7 @@ include("OptFramework.jl")
 include("udchains.jl")
 include("loops.jl")
 include("alias-analysis.jl")
-if VERSION > v"0.5.0-dev+3260"
-include("traversal3260.jl")
-else
 include("traversal.jl")
-end
 
 importall .OptFramework
 export @acc, @noacc

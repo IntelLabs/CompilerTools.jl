@@ -40,7 +40,7 @@ export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapin
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym, deleteEscapingVariable
 export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
 export getBody, getReturnType, setReturnType
-export lambdaToLambdaVarInfo, updateTypedVar, getSymbol
+export lambdaToLambdaVarInfo, updateTypedVar, getSymbol, genWithRename
 if VERSION > v"0.5.0-dev+3260"
 #export LambdaVarInfoToLambdaInfo
 export slotToSym
@@ -101,7 +101,7 @@ end
 
 function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
   var_def = linfo.var_defs[s]
-  Slot(var_def.id, t) 
+  TypedSlot(var_def.id, t) 
 end
 
 function toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo)
@@ -121,9 +121,10 @@ function toRHSVar(x, typ, linfo :: LambdaVarInfo)
   throw(string("Found object type ", xtyp, " for object ", x, " in toRHSVar and don't know what to do with it."))
 end
 
+symbolToSlotId(s::Symbol, linfo :: LambdaVarInfo) = linfo.var_defs[s].id
+
 function updateTypedVar(tv::TypedVar, s::Symbol, linfo :: LambdaVarInfo)
-  var_def = linfo.var_defs[s]    # Get the VarDef for the new symbol.
-  tv.id = var_def.id             # Put that symbol's slot id in the current Slot.
+  tv.id = symbolToSlotId(s)
   return tv
 end
 
@@ -405,16 +406,16 @@ function getType(x::GenSym, li::LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
-slotToSym(x::Slot, li::LambdaVarInfo)   = li.orig_info.slotnames[x.id]
-slotToSym(x::SlotId, li::LambdaVarInfo) = li.orig_info.slotnames[x.id]
+slotToSym(x::TypedSlot, li::LambdaVarInfo)  = li.orig_info.slotnames[x.id]
+slotToSym(x::SlotNumber, li::LambdaVarInfo) = li.orig_info.slotnames[x.id]
 
-function getType(x::SlotId, li::LambdaVarInfo)
+function getType(x::SlotNumber, li::LambdaVarInfo)
     @dprintln(3,"getType for Slot, x = ", x)
     return li.orig_info.slottypes[x.id]
 end
 
-function getType(x::Slot, li::LambdaVarInfo)
-    @dprintln(3,"getType for Slot, x = ", x)
+function getType(x::TypedSlot, li::LambdaVarInfo)
+    @dprintln(3,"getType for TypedSlot, x = ", x)
     if x.typ == Any
         return li.orig_info.slottypes[x.id]
     else
@@ -522,7 +523,7 @@ function isInputParameter(s::GenSym, li::LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
-function isInputParameter(s :: SlotId, li :: LambdaVarInfo)
+function isInputParameter(s :: SlotNumber, li :: LambdaVarInfo)
     isInputParameter(slotToSym(s,li), li)
 end
 end
@@ -541,7 +542,7 @@ Returns an array of local variables and GenSyms.
 function getLocals(li :: LambdaVarInfo)
   locals = Any[]
   for k in li.var_defs
-      push!(locals, SlotId(k[2].id))
+      push!(locals, SlotNumber(k[2].id))
   end
   for i in 1:length(li.gen_sym_typs)
       push!(locals, GenSym(i-1))
@@ -1213,15 +1214,19 @@ Get the name of a local variable, either as Symbol or GenSym
 """
 getVariableName(x::GenSym, info::LambdaVarInfo) = x
 getVariableName(x::Symbol, info::LambdaVarInfo) = x
+genWithRename(x::Symbol, new_name::Symbol, linfo::LambdaVarInfo) = new_name
 if VERSION > v"0.5.0-dev+3260"
-getVariableName(x::Slot, info::LambdaVarInfo)   = info.orig_info.slotnames[x.id]
-getVariableName(x::SlotId, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
-updateType(li::LambdaVarInfo, x::SlotId, typ) = updateType(li, getVariableName(x, li), typ)
-getDesc(x :: SlotId, li :: LambdaVarInfo) = getDesc(getVariableName(x, li), li)
-
+getVariableName(x::TypedSlot,  info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
+getVariableName(x::SlotNumber, info::LambdaVarInfo) = info.orig_info.slotnames[x.id]
+updateType(li::LambdaVarInfo, x::SlotNumber, typ) = updateType(li, getVariableName(x, li), typ)
+getDesc(x :: SlotNumber, li :: LambdaVarInfo) = getDesc(getVariableName(x, li), li)
+genWithRename(x::TypedSlot,  new_name::Symbol, linfo::LambdaVarInfo) = TypedSlot(symbolToSlotId(new_name, linfo), x.typ)
+genWithRename(x::SlotNumber, new_name::Symbol, linfo::LambdaVarInfo) = SlotNumber(symbolToSlotId(new_name, linfo))
 else
 getVariableName(x::SymbolNode, info::LambdaVarInfo) = x.name
+genWithRename(x::SymbolNode, new_name::Symbol, linfo::LambdaVarInfo) = SymbolNode(new_name, x.typ)
 end
 getVariableName(x::Expr, info::LambdaVarInfo) = begin assert(x.head == :(::)); return x.args[1] end
+genWithRename(x::Expr, new_name::Symbol, info::LambdaVarInfo) = begin assert(x.head == :(::)); return TypedExpr(x.typ, :(::), new_name, x.args[2]) end
 
 end

@@ -36,14 +36,11 @@ export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbit
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead
 
 if VERSION > v"0.5.0-dev+3260"
-immutable SlotId
-  id::Int
-end
-export SlotId
-typealias LHSVar     Union{SlotId, GenSym}
-typealias RHSVar     Union{Slot, GenSym}
-typealias TypedVar   Slot
-toLHSVar(tv::TypedVar) = SlotId(tv.id)
+typealias LHSVar     Union{SlotNumber, GenSym}
+typealias RHSVar     Union{SlotNumber, TypedSlot, GenSym}
+typealias TypedVar   TypedSlot
+toLHSVar(tv::TypedVar) = SlotNumber(tv.id)
+toLHSVar(tv::SlotNumber) = tv
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.id)
 else
