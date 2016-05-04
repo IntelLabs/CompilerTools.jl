@@ -40,12 +40,10 @@ export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapin
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym, deleteEscapingVariable
 export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
 export getBody, getReturnType, setReturnType
-export lambdaToLambdaVarInfo, updateTypedVar, getSymbol, genWithRename
+export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, updateTypedVar, getSymbol, genWithRename
 if VERSION > v"0.5.0-dev+3260"
 #export LambdaVarInfoToLambdaInfo
 export slotToSym
-else
-export LambdaVarInfoToLambda
 end
 export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
@@ -1114,6 +1112,11 @@ function createMeta(LambdaVarInfo :: LambdaVarInfo)
 end
 
 if VERSION > v"0.5.0-dev+3260"
+function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1})
+  li = LambdaVarInfo.orig_info
+  li.code =  ccall(:jl_compress_ast, Any, (Any,Any), li, body)
+  return li
+end
 else
 """
 Convert our internal storage format, LambdaVarInfo, back into a lambda expression.
