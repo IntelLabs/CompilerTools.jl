@@ -357,7 +357,7 @@ function from_expr(ast::RHSVar,
     return rws
 end
 
-function from_expr(ast::Union{TopNode,ASCIIString,UTF8String},
+function from_expr(ast::Union{TopNode,AbstractString},
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,

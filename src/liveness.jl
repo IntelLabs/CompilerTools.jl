@@ -1144,7 +1144,7 @@ function from_expr_helper(ast::RHSVar,
     add_access(state.cur_bb, toLHSVar(ast), state.read)
 end
 
-function from_expr_helper(ast::Union{DataType,ASCIIString,UTF8String,NewvarNode,Void},
+function from_expr_helper(ast::Union{DataType,AbstractString,NewvarNode,Void},
                           depth::Int64,
                           state::expr_state,
                           callback::Function,

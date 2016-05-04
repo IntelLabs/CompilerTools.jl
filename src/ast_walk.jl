@@ -35,7 +35,10 @@ using ..Helper
 
 # Return this value to indicate to AstWalk that you didn't process the current node
 # and that AstWalk should recursively process the given node.
-immutable ASTWALK_RECURSE
+abstract ASTWALK_DIDNT_MODIFY
+immutable ASTWALK_RECURSE <: ASTWALK_DIDNT_MODIFY
+end
+immutable ASTWALK_RECURSE_DUPLICATE <: ASTWALK_DIDNT_MODIFY
 end
 
 # Return this node to indicate that AstWalk should remove the current node from
@@ -43,7 +46,7 @@ end
 immutable ASTWALK_REMOVE
 end
 
-export AstWalk, ASTWALK_RECURSE, ASTWALK_REMOVE
+export AstWalk, ASTWALK_RECURSE, ASTWALK_DUPLICATE, ASTWALK_REMOVE
 
 
 """
@@ -220,13 +223,16 @@ function from_expr(ast :: ANY, depth, callback, cbdata :: ANY, top_level_number,
     @dprintln(2,"callback ret = ",ret)
     # If the return value of the callback isn't ASTWALK_RECURSE then the callback is replaced the current
     # AST node with "ret".
-    if ret != ASTWALK_RECURSE
+    if !isa(ret, ASTWALK_DIDNT_MODIFY)
         return ret
     end
 
     # The user callback didn't replace the AST node so recursively process it.
     # We have a different from_expr_helper that is accurately typed for each possible AST node type.
     ast = from_expr_helper(ast, depth, callback, cbdata, top_level_number, is_top_level, read)
+    if isa(ret, ASTWALK_RECURSE_DUPLICATE)
+        ast = copy(ast)
+    end
 
     @dprintln(3,"Before return for ", ast)
     return ast
@@ -431,7 +437,7 @@ function from_expr_helper(ast::Union{RHSVar,TopNode,LHSVar,Symbol},
     return ast
 end
 
-function from_expr_helper(ast::Union{LineNumberNode,LabelNode,GotoNode,DataType,ASCIIString,UTF8String,NewvarNode,Void,Function,Module},
+function from_expr_helper(ast::Union{LineNumberNode,LabelNode,GotoNode,DataType,AbstractString,NewvarNode,Void,Function,Module},
                           depth,
                           callback,
                           cbdata::ANY,
