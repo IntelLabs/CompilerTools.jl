@@ -36,6 +36,10 @@ export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbit
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead
 
 if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.5.0-dev+3875"
+typealias GenSym     SSAValue
+export GenSym
+end
 typealias LHSVar     Union{SlotNumber, GenSym}
 typealias RHSVar     Union{SlotNumber, TypedSlot, GenSym}
 typealias TypedVar   TypedSlot

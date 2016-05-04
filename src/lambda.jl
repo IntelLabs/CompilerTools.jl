@@ -959,10 +959,11 @@ function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
   ret.var_defs = createVarDict(lambda)
 # FIX FIX FIX
 #  ret.escaping_defs = createVarDict(meta[2])
-  if !isa(lambda.gensymtypes, Array) 
+  ssafieldname = VERSION >= v"0.5.0-dev+3875" ? :ssavaluetypes : :gensymtypes
+  if !isa(getfield(lambda, ssafieldname), Array) 
     ret.gen_sym_typs = Any[]
   else
-    ret.gen_sym_typs = lambda.gensymtypes
+    ret.gen_sym_typs = getfield(lambda, ssafieldname)
   end
 #  ret.static_parameter_names = length(meta) > 3 ? meta[4] : Any[]
 
