@@ -206,7 +206,9 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
 end
 
 function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    from_expr(CompilerTools.LambdaHandling.getBody(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
+    LambdaVarInfo = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+    new_body = from_expr(CompilerTools.LambdaHandling.getBody(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
+    CompilerTools.LambdaHandling.LambdaVarInfoToLambda(LambdaVarInfo, new_body)
 end
 
 """
