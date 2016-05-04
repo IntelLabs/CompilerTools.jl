@@ -1117,6 +1117,10 @@ function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1
   li.code =  ccall(:jl_compress_ast, Any, (Any,Any), li, body)
   return li
 end
+function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body_expr :: Expr)
+  assert(body_expr.head == :body)
+  LambdaVarInfoToLambda(LambdaVarInfo, body_expr.args)
+end
 else
 """
 Convert our internal storage format, LambdaVarInfo, back into a lambda expression.
