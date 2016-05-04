@@ -332,7 +332,7 @@ end
 """
 Add Symbol "v" as input parameter to LambdaVarInfo "li".
 """
-function addInputParameter(v::Symbol, ty, desc::Int64, li :: LambdaVarInfo)
+function addInputParameter(v::Symbol, ty, desc, li :: LambdaVarInfo)
   push!(li.input_params, v)
   addLocalVariable(v, ty, desc, li)
 end
@@ -638,7 +638,7 @@ end
 """
 Add one or more bitfields in "desc_flag" to the descriptor for a variable.
 """
-function addDescFlag(s :: Symbol, desc_flag :: Int64, li :: LambdaVarInfo)
+function addDescFlag(s :: Symbol, desc_flag, li :: LambdaVarInfo)
   if haskey(li.var_defs, s)
     var_def      = li.var_defs[s]
     var_def.desc = var_def.desc | desc_flag
@@ -652,7 +652,7 @@ end
 Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaVarInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
-@noinline function addLocalVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
+@noinline function addLocalVariable(s :: Symbol, typ, desc, li :: LambdaVarInfo)
   # If it is already a local variable then just update its type and desc.
   if haskey(li.var_defs, s)
     var_def      = li.var_defs[s]
@@ -676,7 +676,7 @@ end
 Adds a new escaping variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaVarInfo "li".
 Returns true if the variable already existed and its type and descriptor were updated, false otherwise.
 """
-function addEscapingVariable(s :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
+function addEscapingVariable(s :: Symbol, typ, desc, li :: LambdaVarInfo)
   assert(!isInputParameter(s, li))
   # If it is already a local variable then just update its type and desc.
   if haskey(li.escaping_defs, s)
@@ -725,7 +725,7 @@ end
 Add a local variable to the function corresponding to LambdaVarInfo in "li" with name (as String), type and descriptor.
 Returns true if variable already existed and was updated, false otherwise.
 """
-function addLocalVar(name :: AbstractString, typ, desc :: Int64, li :: LambdaVarInfo)
+function addLocalVar(name :: AbstractString, typ, desc, li :: LambdaVarInfo)
   addLocalVar(Symbol(name), typ, desc, li)
 end
 
@@ -733,7 +733,7 @@ end
 Add a local variable to the function corresponding to LambdaVarInfo in "li" with name (as Symbol), type and descriptor.
 Returns true if variable already existed and was updated, false otherwise.
 """
-function addLocalVar(name :: Symbol, typ, desc :: Int64, li :: LambdaVarInfo)
+function addLocalVar(name :: Symbol, typ, desc, li :: LambdaVarInfo)
   addLocalVariable(name, typ, desc, li)
 end
 
