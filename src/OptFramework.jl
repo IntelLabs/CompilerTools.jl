@@ -398,7 +398,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   @dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
-  new_call_sig_args = Symbol[ Symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
+  new_call_sig_args = Symbol[ Symbol(string("makeWrapperFuncArgument",i)) for i = 1:length(call_sig_args)]
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   static_typeof_ret = Expr(:static_typeof, :ret)
