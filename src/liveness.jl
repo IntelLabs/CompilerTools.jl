@@ -587,6 +587,7 @@ We don't recurse into the body here because from_expr handles that with fromCFG.
 """
 function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
     # :lambda expression
+    @dprintln(3, "from_lambda typeof(ast) = ", typeof(ast))
     state.li = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
     state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
     @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
