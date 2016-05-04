@@ -1069,7 +1069,7 @@ if VERSION > v"0.5.0-dev+3260"
     if length(meth) == 1
 #        println("meth in _methods ", meth)
         meth = meth[1]
-        linfo = Base.func_for_method_checked(meth[3].func, typs)
+        linfo = Base.func_for_method_checked(meth[3], typs)
         (tree, ty) = Core.Inference.typeinf_uncached(linfo, meth[1], meth[2], optimize = optimize)
 #        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
         return tree, ty
