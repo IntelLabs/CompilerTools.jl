@@ -242,11 +242,11 @@ function get_function_from_string(mod :: AbstractString, func :: AbstractString)
     modobj  = eval(:Main)
     modules = split(mod, '.')
     for m in modules
-        msym = symbol(m)
+        msym = Symbol(m)
         modobj = eval(:($modobj.$msym))
     end
     
-    fsym   = symbol(func)
+    fsym   = Symbol(func)
     return eval(:($modobj.$fsym))
 end
 

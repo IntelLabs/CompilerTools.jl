@@ -401,7 +401,7 @@ function from_expr_helper(ast::Expr,
         end
     elseif head == :(...) || head == :parameters || head == :kw
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
-    elseif head == symbol("'")
+    elseif head == Symbol("'")
         for i = 1:length(args)
             args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end

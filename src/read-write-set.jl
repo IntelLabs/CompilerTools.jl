@@ -300,7 +300,7 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     elseif head == :call1
         from_call(args, depth, rws, callback, cbdata)
         # TODO?: tuple
-    elseif head == symbol("'")
+    elseif head == Symbol("'")
         from_exprs(args, depth, rws, callback, cbdata)
     elseif head == :line
         # skip

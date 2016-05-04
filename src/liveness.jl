@@ -1105,7 +1105,7 @@ function from_expr_helper(ast::Expr,
         from_exprs(args[2], depth+1, state, callback, cbdata)
     elseif head == :assert || head == :select || head == :ranges || head == :range ||
         head == :tomask || head == :arraysize || head == :copy || head == :new ||
-        head == :tuple || head == :getindex || head == :quote || head == symbol("'") ||
+        head == :tuple || head == :getindex || head == :quote || head == Symbol("'") ||
         head == :(&) || head == :(~) || head == :(|) || head == :($) || head == :(>>>) || head == :(>>) || head == :(<<)
         from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :(.)

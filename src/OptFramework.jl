@@ -398,7 +398,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   @dprintln(3, "call_sig_args = ", call_sig_args)
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
-  new_call_sig_args = Symbol[ symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
+  new_call_sig_args = Symbol[ Symbol("makeWrapperFuncArgument",i) for i = 1:length(call_sig_args)]
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   static_typeof_ret = Expr(:static_typeof, :ret)
@@ -465,14 +465,14 @@ function opt_calls_insert_trampoline(x, state:: opt_calls_insert_trampoline_stat
       @dprintln(2, "Start opt_calls = ", call_expr, " signature = ", call_sig_args, " typeof(call_expr) = ", typeof(call_expr))
 
       # The name of the new trampoline function.
-      real_func = symbol(string(call_expr))
+      real_func = Symbol(string(call_expr))
 
       # Recursively process the arguments to this function possibly finding other calls to replace.
       for i = 2:length(x.args)
         x.args[i] = CompilerTools.AstWalker.AstWalk(x.args[i], opt_calls_insert_trampoline, state)
       end
 
-      trampoline_func = symbol(string("opt_calls_trampoline_", real_func))
+      trampoline_func = Symbol(string("opt_calls_trampoline_", real_func))
       wrapper_ast = makeWrapperFunc(trampoline_func, real_func, call_sig_args, state.per_site_opt_set) 
       Core.eval(current_module(), wrapper_ast)
       # Update the call expression to call our trampoline and pass the original function so that we can
@@ -532,7 +532,7 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
     mod = current_module()
     call_sig_args = ast.args[1].args[2:end]
     macro_ast     = deepcopy(ast)
-    macro_only    = all(Bool[p.level <= PASS_MACRO for p in opt_set]) || (length(macros) > 0 && macros[1] == symbol("@inline"))
+    macro_only    = all(Bool[p.level <= PASS_MACRO for p in opt_set]) || (length(macros) > 0 && macros[1] == Symbol("@inline"))
     real_fname    = gensym(string(fname))
     real_func     = GlobalRef(mod, real_fname)
     macro_fname   = macro_only ? fname : gensym(string(fname))

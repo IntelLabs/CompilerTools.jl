@@ -362,7 +362,7 @@ the #self# parameter if it is present.
 """
 function getParamsNoSelf(li::LambdaVarInfo)
   params = li.input_params
-  if length(params) > 0 && params[1] == symbol("#self#")
+  if length(params) > 0 && params[1] == Symbol("#self#")
     return params[2:end]
   else
     return params
@@ -376,7 +376,7 @@ parameter to the actual parameter list.
 """
 function setParamsNoSelf(new_params::Array{Any,1}, li::LambdaVarInfo)
   params = li.input_params
-  if length(params) > 0 && params[1] == symbol("#self#")
+  if length(params) > 0 && params[1] == Symbol("#self#")
     li.input_params = vcat(Any[params[1]], new_params)
   else
     li.input_params = copy(new_params)
