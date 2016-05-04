@@ -202,7 +202,7 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
 end
 
 function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    from_expr(CompilerTools.Lambda.getBody(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
+    from_expr(CompilerTools.LambdaHandling.getBody(ast), depth, callback, cbdata, top_level_number, is_top_level, read)
 end
 
 """
