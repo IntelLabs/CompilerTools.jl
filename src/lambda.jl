@@ -329,6 +329,10 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
   return body
 end
 
+function getInputParameters(li :: LambdaVarInfo)
+  return li.input_params
+end
+
 """
 Add Symbol "v" as input parameter to LambdaVarInfo "li".
 """
