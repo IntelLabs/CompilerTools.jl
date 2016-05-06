@@ -35,7 +35,7 @@ using Core.Inference: to_tuple_type
 
 import Base.show
 
-export VarDef, LambdaVarInfo, toRHSVar
+export VarDef, LambdaVarInfo, toRHSVar, symbolToLHSVar, prependStatements
 export getDesc, getType, getVarDef, isInputParameter, isLocalVariable, isEscapingVariable, isLocalGenSym, getTypedVar
 export getParamsNoSelf, setParamsNoSelf, addInputParameter, addLocalVariable, addEscapingVariable, addGenSym, deleteEscapingVariable
 export parameterToSymbol, getLocalNoParams, getLocals, getEscapingVariables, getVariableName
@@ -96,6 +96,8 @@ type LambdaVarInfo
     new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, li)
   end
 end
+
+symbolToLHSVar(s :: Symbol, linfo :: LambdaVarInfo) = SlotNumber(linfo.var_defs[s].id)
 
 function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
   var_def = linfo.var_defs[s]
@@ -161,15 +163,22 @@ type LambdaVarInfo
   escaping_defs :: Dict{Symbol,VarDef}
   static_parameter_names :: Array{Any,1}
   return_type   :: Any
+  orig_info     :: Union{Expr,Void}
 
   function LambdaVarInfo()
-    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, nothing)
   end
 
   function LambdaVarInfo(li::LambdaVarInfo)
-    new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type))
+    new(copy(li.input_params), copy(li.var_defs), copy(li.gen_sym_typs), copy(li.escaping_defs), copy(li.static_parameter_names), copy(li.return_type), deepcopy(li.orig_info))
+  end
+
+  function LambdaVarInfo(li :: Expr)
+    new(Any[], Dict{Symbol,VarDef}(), Any[], Dict{Symbol,VarDef}(), Any[], Void, li)
   end
 end
+
+symbolToLHSVar(s :: Symbol, linfo :: LambdaVarInfo) = s
 
 function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
   SymbolNode(s, t)
@@ -988,7 +997,7 @@ function lambdaToLambdaVarInfo(lambda :: Expr)
   assert(lambda.head == :lambda)
   assert(length(lambda.args) == 3)
 
-  ret = LambdaVarInfo()
+  ret = LambdaVarInfo(lambda)
   for i = 1:length(lambda.args[1])
     one_input = lambda.args[1][i]
     push!(ret.input_params, one_input)
@@ -1121,10 +1130,6 @@ function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1
   li.code =  ccall(:jl_compress_ast, Any, (Any,Any), li, body)
   return li
 end
-function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body_expr :: Expr)
-  assert(body_expr.head == :body)
-  LambdaVarInfoToLambda(LambdaVarInfo, body_expr.args)
-end
 else
 """
 Convert our internal storage format, LambdaVarInfo, back into a lambda expression.
@@ -1139,6 +1144,11 @@ function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1
   end
   return Expr(:lambda, LambdaVarInfo.input_params, createMeta(LambdaVarInfo), expr)
 end
+end
+
+function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body_expr :: Expr)
+  assert(body_expr.head == :body)
+  LambdaVarInfoToLambda(LambdaVarInfo, body_expr.args)
 end
 
 """
@@ -1176,6 +1186,10 @@ function getBody(lambda :: LambdaStaticData)
 end
 end
 
+function getBody(lambda :: LambdaVarInfo)
+  return getBody(lambda.orig_info)
+end
+
 function getBody(lambda :: Expr)
   assert(lambda.head == :lambda)
   return lambda.args[3]
@@ -1185,6 +1199,12 @@ function getBody(lambda :: Array{Any,1}, rettype)
   body = Expr(:body)
   body.args = lambda
   body.typ = rettype
+  return body
+end
+
+function prependStatements(body :: Expr, stmts:: Array{Any, 1})
+  assert(body.head == :body)
+  body.args = [stmts; body.args]
   return body
 end
 
