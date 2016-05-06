@@ -214,10 +214,14 @@ end
 getSymbol(s :: Symbol, linfo :: LambdaVarInfo) = s
 getSymbol(s :: GenSym, linfo :: LambdaVarInfo) = s
 function getSymbol(s :: Expr, linfo :: LambdaVarInfo)
-    @dprintln(0, "ssn.head = ", ssn.head)
-    assert(ssn.head == :(::))
-    return ssn.args[1]
+    @dprintln(0, "s.head = ", s.head)
+    if s.head == :(::)
+        return s.args[1]
+    else
+        return s
+    end
 end
+getSymbol(s :: ANY, linfo :: LambdaVarInfo) = s
 
 """
 Pretty print a LambdaVarInfo.
