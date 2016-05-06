@@ -52,6 +52,7 @@ typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
 typealias TypedVar   SymbolNode
 typealias LambdaInfo LambdaStaticData
+toLHSVar(x :: Symbol) = x
 toLHSVar(tv::TypedVar) = tv.name
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.name)
@@ -87,7 +88,6 @@ This function takes a Symbol, SymbolNode, or GenSym and return either a Symbol o
 """
 toLHSVar(x :: GenSym) = x
 toLHSVar(x :: Int) = x
-toLHSVar(x :: Symbol) = x
 toLHSVar(x) = x
 toLHSVarOrNum(x :: RHSVar) = toLHSVar(x)
 toLHSVarOrNum(x :: Number) = x
