@@ -129,6 +129,7 @@ function updateTypedVar(tv::TypedVar, s::Symbol, linfo :: LambdaVarInfo)
 end
 
 getSymbol(s :: TypedVar, linfo :: LambdaVarInfo) = slotToSym(s, linfo)
+getSymbol(s :: SlotNumber, linfo :: LambdaVarInfo) = slotToSym(s, linfo)
 
 else
 
@@ -566,9 +567,9 @@ Returns an array of local variables and GenSyms, excluding parameters.
 """
 function getLocalNoParams(li :: LambdaVarInfo)
   locals = Any[]
-  for k in 1:length(li.var_defs)
-    if !isInputParameter(slotToSym(Slot(k),li), li)
-        push!(locals, k)
+  for k in li.var_defs
+    if !isInputParameter(k[1], li)
+        push!(locals, k[1])
     end
   end
   for i in 1:length(li.gen_sym_typs)
