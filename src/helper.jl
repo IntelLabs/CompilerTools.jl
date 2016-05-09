@@ -31,7 +31,7 @@ module Helper
 import Base.hash
 import Base.isequal
 
-export LHSVar, RHSVar, TypedVar
+export LHSVar, RHSVar, TypedVar, LHSRealVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead
 
@@ -40,6 +40,7 @@ if VERSION >= v"0.5.0-dev+3875"
 typealias GenSym     SSAValue
 export GenSym
 end
+typealias LHSRealVar SlotNumber
 typealias LHSVar     Union{SlotNumber, GenSym}
 typealias RHSVar     Union{SlotNumber, TypedSlot, GenSym}
 typealias TypedVar   TypedSlot
@@ -48,6 +49,7 @@ toLHSVar(tv::SlotNumber) = tv
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.id)
 else
+typealias LHSRealVar Symbol
 typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
 typealias TypedVar   SymbolNode
