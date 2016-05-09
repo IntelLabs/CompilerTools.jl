@@ -259,13 +259,13 @@ type expr_state
     map :: Dict{CFGs.BasicBlock, BasicBlock}
     cur_bb
     read
-    ref_params :: Array{Symbol, 1}
+    ref_params :: Array{LHSVar, 1}
     params_not_modified :: Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}} # Store function/signature mapping to an array whose entries corresponding to whether that argument passed to that function can be modified.
     params_not_modified_cb # a callback function to ask if some unknown function has unmodified args
     li :: Union{Void, LambdaVarInfo}
 
     function expr_state(cfg, no_mod, no_mod_cb)
-        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, Symbol[], no_mod, no_mod_cb, nothing)
+        new(cfg, Dict{CFGs.BasicBlock, BasicBlock}(), nothing, true, LHSVar[], no_mod, no_mod_cb, nothing)
     end
 end
 
