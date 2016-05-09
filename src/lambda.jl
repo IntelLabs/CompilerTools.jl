@@ -45,7 +45,7 @@ if VERSION > v"0.5.0-dev+3260"
 #export LambdaVarInfoToLambdaInfo
 export slotToSym
 end
-export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!
+export getRefParams, updateType, updateAssignedDesc, lambdaTypeinf, replaceExprWithDict, replaceExprWithDict!, getArrayParams
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
 # Possible values of VarDef descriptor that can be OR'ed together.
@@ -74,6 +74,7 @@ type VarDef
   end
 end
 
+VarDefToLHSRealVar(vd :: VarDef) = SlotNumber(vd.id)
 
 type LambdaVarInfo
   input_params  :: Array{Any,1}
@@ -104,17 +105,10 @@ function getTypedVar(s :: Symbol, t, linfo :: LambdaVarInfo)
   TypedSlot(var_def.id, t) 
 end
 
-function toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo)
-  return getTypedVar(x, typ, linfo)
-end
-
-function toRHSVar(x :: TypedVar, typ, linfo :: LambdaVarInfo)
-  return x
-end
-
-function toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo)
-  return x
-end
+toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo) = getTypedVar(x, typ, linfo)
+toRHSVar(x :: TypedVar, typ, linfo :: LambdaVarInfo) = x
+toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo) = x
+toRHSVar(x :: SlotNumber, typ, linfo :: LambdaVarInfo) = x
 
 function toRHSVar(x, typ, linfo :: LambdaVarInfo)
   xtyp = typeof(x)
@@ -149,6 +143,7 @@ type VarDef
   end
 end
 
+VarDefToLHSRealVar(vd :: VarDef) = vd.name
 
 """
 An internal format for storing a lambda expression's args[1] and args[2].
@@ -1218,7 +1213,7 @@ Returns an array of Symbols corresponding to those parameters to the method that
 In short, isbits() types are passed by value and !isbits() types are passed by reference.
 """
 function getRefParams(LambdaVarInfo :: LambdaVarInfo)
-  ret = Symbol[]
+  ret = LHSRealVar[]
 
   input_vars = LambdaVarInfo.input_params
   var_types  = LambdaVarInfo.var_defs
@@ -1231,7 +1226,31 @@ function getRefParams(LambdaVarInfo :: LambdaVarInfo)
     if haskey(var_types, iv)
       var_def = var_types[iv] 
       if !isbits(var_def.typ)
-        push!(ret, iv)
+        push!(ret, VarDefToLHSRealVar(var_def))
+      end
+    else
+      throw(string("Didn't find parameter variable ", iv, " in type list."))
+    end
+  end
+
+  return ret
+end
+
+function getArrayParams(LambdaVarInfo :: LambdaVarInfo)
+  ret = LHSRealVar[]
+
+  input_vars = LambdaVarInfo.input_params
+  var_types  = LambdaVarInfo.var_defs
+
+  @dprintln(3,"input_vars = ", input_vars)
+  @dprintln(3,"var_types = ", var_types)
+
+  for iv in input_vars
+    @dprintln(3,"iv = ", iv, " type = ", typeof(iv))
+    if haskey(var_types, iv)
+      var_def = var_types[iv] 
+      if isArrayType(var_def.typ)
+        push!(ret, VarDefToLHSRealVar(var_def))
       end
     else
       throw(string("Didn't find parameter variable ", iv, " in type list."))
