@@ -335,6 +335,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
         # Call the current optimization on the current AST.
         try
           cur_ast = per_site_opt_set[i].func(func_ref, cur_ast, call_sig_arg_tuple)
+          assert(isfunctionhead(cur_ast) || isa(cur_ast, Function))
         catch texp
           if CompilerTools.DebugMsg.PROSPECT_DEV_MODE
             rethrow(texp)
@@ -348,9 +349,11 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
 
   @dprintln(3,"After optimization passes")
 
-  if isa(cur_ast, Expr)
+  #if isa(cur_ast, Expr)
+  if isfunctionhead(cur_ast)
     ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
-    @dprintln(3,"Last opt pass after converting to typed AST.\n", cur_ast.args[3])
+    assert(isfunctionhead(ast))
+    @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(cur_ast))
 
     # Write the modifed code back to the function.
     @dprintln(2,"Before methods at end of processFuncCall.")
