@@ -124,6 +124,17 @@ else
 isfunctionhead(x) = isa(x, Expr) && x.head == :lambda && isa(x.args[3], Expr) && x.args[3].head == :body
 end
 
+function print_by_field(obj)
+  fields = fieldnames(obj)
+  for f in fields
+    try
+      println(f, " = ", getfield(obj, f), " type = " , typeof(getfield(obj,f)))
+    catch
+      println("Failed for field ", f)
+    end
+  end
+end
+
 end # module Helper
 
 
