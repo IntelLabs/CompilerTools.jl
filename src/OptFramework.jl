@@ -275,11 +275,84 @@ end
 #  return ast
 #end
 
+if VERSION > v"0.5.0-dev+3260"
 """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
 """
 function tfuncPresent(func, tt)
-  m = methods(func, tt)[1]
+  code_typed(func, tt)
+
+if false
+  meth_list = methods(func, tt).ms
+  @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list))
+  def = meth_list[1]
+  assert(isa(def,Method))
+  @dprintln(2, "def = ", def)
+  @dprintln(2, "def.tfunc = ", def.tfunc)
+  if def.tfunc == nothing
+    @dprintln(2, "tfunc NOT present before code_typed")
+    code_typed(func, tt)
+    if is(def.tfunc, nothing) 
+      error("tfunc still NOT present after code_typed")
+    else
+      @dprintln(2, "tfunc present after code_typed")
+    end
+  else
+    if is(def.tfunc.func, nothing)
+      @dprintln(2, "tfunc.func NOT present before code_typed")
+      code_typed(func, tt)
+      if is(def.tfunc.func, nothing)
+        @dprintln(2, "tfunc.func still NOT present after code_typed")
+      else
+        @dprintln(2, "tfunc.func present after code_typed")
+      end
+    else
+      @dprintln(2, "tfunc present on call")
+    end
+  end 
+end
+end
+
+function setCode(func, arg_tuple, ast)
+  assert(isfunctionhead(ast))
+  tfuncPresent(func, arg_tuple)
+  @dprintln(2, "setCode fields of ast")
+  CompilerTools.Helper.print_by_field(ast)
+  @dprintln(2, "setCode fields of ast.def")
+  CompilerTools.Helper.print_by_field(ast.def)
+
+  meth_list = methods(func, arg_tuple).ms
+  @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list), " len = ", length(meth_list))
+  def = meth_list[1]
+  assert(isa(def,Method))
+
+  @dprintln(2, "setCode fields of def")
+  CompilerTools.Helper.print_by_field(def)
+  @dprintln(2, "typeof(def.tfunc) = ", typeof(def.tfunc))
+  @dprintln(2, "setCode fields of def.tfunc")
+  CompilerTools.Helper.print_by_field(def.tfunc)
+  assert(isa(def.tfunc.func, LambdaInfo))
+  @dprintln(2, "setCode fields of def.tfunc.func")
+  CompilerTools.Helper.print_by_field(def.tfunc.func)
+
+  new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+  
+  def.tfunc.func = deepcopy(ast)
+  def.tfunc.func.def = def
+  def.lambda_template = def.tfunc.func
+  def.tfunc.func.code = ccall(:jl_compress_ast, Any, (Any,Any), def.tfunc.func, new_body_args)
+  @dprintln(2, "setCode fields of def after")
+  CompilerTools.Helper.print_by_field(def)
+end
+
+else
+"""
+Makes sure that a newly created function is correctly present in the internal Julia method table.
+"""
+function tfuncPresent(func, tt)
+  meth_list = methods(func, tt)
+  @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list))
+  m = meth_list[1]
   def = m.func.code
   if is(def.tfunc, nothing)
     @dprintln(2, "tfunc NOT present before code_typed")
@@ -292,6 +365,17 @@ function tfuncPresent(func, tt)
   else
     @dprintln(2, "tfunc present on call")
   end 
+end
+
+function setCode(func, arg_tuple, ast)  
+  assert(isfunctionhead(ast))  
+  tfuncPresent(func, arg_tuple)
+  method = methods(new_func, call_sig_arg_tuple)
+  assert(length(method) == 1) 
+  method = method[1]      
+  @dprintln(2, "tfunc type = ", typeof(method.func.code.tfunc))
+  method.func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method.func.code, ast)
+end
 end
 
 """
@@ -317,6 +401,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   fake_args = Any[ gensym() for a in call_sig_arg_tuple ]
   new_func = Core.eval(func_module, :(function $(new_func_name)($(fake_args...)) end))
   @dprintln(2,"temp_func is ", new_func)
+  code_typed(new_func, call_sig_arg_tuple)
 
   # Remember what level the AST was in.
   cur_level = per_site_opt_set[1].level
@@ -357,11 +442,12 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
 
     # Write the modifed code back to the function.
     @dprintln(2,"Before methods at end of processFuncCall.")
-    tfuncPresent(new_func, call_sig_arg_tuple)
-    method = methods(new_func, call_sig_arg_tuple)
-    assert(length(method) == 1)
-    method = method[1]
-    method.func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method.func.code, cur_ast)
+    setCode(new_func, call_sig_arg_tuple, cur_ast)
+#    tfuncPresent(new_func, call_sig_arg_tuple)
+#    method = methods(new_func, call_sig_arg_tuple)
+#    assert(length(method) == 1)
+#    method = method[1]
+#    method.func.code.tfunc[2] = ccall(:jl_compress_ast, Any, (Any,Any), method.func.code, cur_ast)
 
     @dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
