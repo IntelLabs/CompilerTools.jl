@@ -405,7 +405,7 @@ end
 function analyze_lambda_body(body, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
   local state = init_state(LambdaVarInfo, liveness)
   #@dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
-  for v in getLocals(LambdaVarInfo)
+  for v in getLocalVariables(LambdaVarInfo)
     vtyp = getType(v, LambdaVarInfo)
     @dprintln(2, "v = ", v, " vtyp = ", vtyp)
     if !isArrayType(vtyp)

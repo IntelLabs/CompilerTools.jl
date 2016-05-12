@@ -71,7 +71,7 @@ lives = CompilerTools.LivenessAnalysis.from_expr(ast)
 #println("lives = ")
 #println(lives)
 handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
-handled = map(x -> getVariableName(x, linfo), handled)
+handled = map(x -> lookupVariableName(x, linfo), handled)
 #println("handled = ", handled)
 
 @test (in(:A, handled))

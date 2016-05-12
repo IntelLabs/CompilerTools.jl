@@ -651,7 +651,7 @@ end
 
 function typeOfOpr(x::Symbol, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, type = LHSVar, x = ", x)
-    return typeOfOpr_fixType(getType(x, li))
+    return isLocalVariable(x, li) ? typeOfOpr_fixType(getType(x, li)) : Void
 end
 
 function typeOfOpr(x::GenSym, li :: LambdaVarInfo)
