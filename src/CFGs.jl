@@ -838,19 +838,6 @@ function dump_bb(bl :: CFG)
 end
 
 """
-To help construct the CFG given a lambda, we recursively process the body of the lambda.
-"""
-function from_lambda(ast::Array{Any,1}, depth, state, callback, cbdata)
-  # :lambda expression
-  # ast = [ parameters, meta (local, types, etc), body ]
-  assert(length(ast) == 3)
-  local param = ast[1]
-  local meta  = ast[2]
-  local body  = ast[3]
-  from_expr(body, depth, state, false, callback, cbdata)
-end
-
-"""
 Process an array of expressions.
 We know that the first array of expressions we will find is for the lambda body.
 top_level_number starts out 0 and if we find it to be 0 then we know that we're processing the array of expr for the body
@@ -1023,16 +1010,15 @@ end
 
 """
 The main entry point to construct a control-flow graph.
-Typically you would pass in a :lambda Expr here.
 """
-function from_ast(ast::Any)
-  # ENTRY
-  from_expr(ast, not_handled, nothing)
+function from_lambda(lambda::LambdaInfo)
+  @dprintln(3,"from_lambda for LambdaInfo")
+  body = CompilerTools.LambdaHandling.getBody(lambda)
+  from_expr(body, not_handled, nothing)
 end
 
-function from_ast(ast::LambdaInfo)
-  @dprintln(3,"from_ast for LambdaInfo")
-  body = CompilerTools.LambdaHandling.getBody(ast)
+function from_lambda(body::Expr)
+  @dprintln(3,"from_lambda for LambdaVarInfo and body")
   from_expr(body, not_handled, nothing)
 end
 
@@ -1182,7 +1168,8 @@ function from_expr_helper(ast::Expr, depth, state, top_level, callback, cbdata)
     local typ  = ast.typ
     @dprintln(2,head, " ", args)
     if head == :lambda
-        from_lambda(args, depth, state, callback, cbdata)
+        assert(length(args) == 3)
+        from_expr(args[3], depth, state, false, callback, cbdata)
     elseif head == :body
         from_exprs(args, depth+1, state, callback, cbdata)
     elseif head == :return

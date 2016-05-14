@@ -50,7 +50,7 @@ function test_loops(a::Int64)
 end
 
 ast_lv_2 = code_typed(test_loops, (Int64,))[1]
-cfg_2 = CompilerTools.CFGs.from_ast(ast_lv_2) :: CompilerTools.CFGs.CFG
+cfg_2 = CompilerTools.CFGs.from_lambda(ast_lv_2) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.Loops.set_debug_level(3)
 

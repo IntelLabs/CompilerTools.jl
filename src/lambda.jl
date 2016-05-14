@@ -102,13 +102,49 @@ type LambdaVarInfo
 
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.vararg_params), copy(li.escaping_vars), copy(li.var_defs), 
-        copy(li.static_parameter_names), copy(li.return_type), li.orig_info == nothing ? nothing : copy(li.orig_info))
+        copy(li.static_parameter_names), li.return_type, li.orig_info == nothing ? nothing : copy(li.orig_info))
   end
 
 if VERSION >= v"0.5.0-dev+3875"
-  function LambdaVarInfo(li::LambdaInfo)
+  function LambdaVarInfo(lambda::LambdaInfo, body)
+    @dprintln(3, "lambda = ", lambda)
+    return_typ = lambda.rettype
+    input_params = Symbol[]
+    vararg_params = Symbol[]
+    var_defs = VarDef[]
+    escaping_vars = Symbol[]
+    allnames = Set{Symbol}()
+    for i = 1:length(lambda.slotnames)
+        name = lambda.slotnames[i]
+        typ = lambda.slottypes[i]
+        desc = lambda.slotflags[i]
+        if in(name, allnames)
+            name = Symbol(string(name, "@", i))
+        end
+        push!(allnames, name)
+        vd = VarDef(name, typ, desc, i)
+        push!(var_defs, vd)
+        # skip #self# in parameters
+        if i > 1 && i <= lambda.nargs
+            push!(input_params, name)
+        end
+    end
+
+    for i = 1:length(lambda.ssavaluetypes)
+        vd = VarDef(emptyVarName, lambda.ssavaluetypes[i], convert(DescType, ISASSIGNED | ISASSIGNEDONCE), i-1)
+        push!(var_defs, vd)
+    end
+    x = new(input_params, vararg_params, Symbol[], var_defs, Any[], return_typ, lambda)
+    @dprintln(3, "LambdaVarInfo = ", x)
+    return x
   end
 else
+  function LambdaVarInfo(lambda::LambdaInfo, ast)
+    li = LambdaVarInfo(ast)
+    li.orig_info = lambda
+    return li
+  end
+
   function LambdaVarInfo(lambda::Expr)
     @assert (lambda.head == :lambda) "Expect a lambda Expr as argument to LambdaVarInfo(..)"
     assert(length(lambda.args) == 3) 
@@ -188,13 +224,17 @@ if VERSION >= v"0.5.0-dev+3875"
 
 matchVarDef(x :: Symbol, vd :: VarDef) = vd.name == x
 matchVarDef(x :: SlotNumber, vd :: VarDef) = vd.name != emptyVarName && vd.id == x.id
+matchVarDef(x :: TypedSlot, vd :: VarDef) = vd.name != emptyVarName && vd.id == x.id
 matchVarDef(x :: SSAValue, vd :: VarDef) = vd.name == emptyVarName && vd.id == x.id
 
+toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo) = toRHSVar(lookupLHSVarByName(x, linfo), linfo)
 toRHSVar(x :: SlotNumber, typ, linfo :: LambdaVarInfo) = TypedSlot(x.id, typ)
 toRHSVar(x :: TypedSlot, typ, linfo :: LambdaVarInfo) = x
 toRHSVar(x :: SSAValue, typ, linfo :: LambdaVarInfo) = x
 toRHSVar(vd :: VarDef) = vd.name == emptyVarName ? SSAValue(vd.id) : TypedSlot(vd.id, vd.typ)
 
+toLHSVar(x :: Symbol, linfo :: LambdaVarInfo) = lookupLHSVarByName(x, linfo)
+toLHSVar(x, linfo) = toLHSVar(x) 
 toLHSVar(vd :: VarDef) = vd.name == emptyVarName ? SSAValue(vd.id) : SlotNumber(vd.id)
 
 else
@@ -207,7 +247,9 @@ toRHSVar(x :: SymbolNode, typ, linfo :: LambdaVarInfo) = x
 toRHSVar(x :: GenSym, typ, linfo :: LambdaVarInfo) = x
 toRHSVar(vd :: VarDef) = vd.name == emptyVarName ? GenSym(vd.id) : SymbolNode(vd.name, vd.typ)
 
+toLHSVar(x, linfo) = toLHSVar(x) 
 toLHSVar(vd :: VarDef) = vd.name == emptyVarName ? GenSym(vd.id) : vd.name
+end
 
 """
 Consolidate GenSym ids in LambdaVarInfo.
@@ -250,7 +292,6 @@ function consolidateLambdaVarInfo!(li::LambdaVarInfo)
     return dict
 end
 
-end
 
 function toRHSVar(x, linfo)
     return toRHSVar(x, getType(x, linfo), linfo)
@@ -333,8 +374,8 @@ end
 """
 Returns the type of a variable. 
 """
-function getType(s::RHSVar, li::LambdaVarInfo)
-    x = toLHSVar(s)
+function getType(s::Union{Symbol,RHSVar}, li::LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.typ
@@ -348,8 +389,8 @@ end
 """
 Set the type for a local variable. 
 """
-function setType(s :: RHSVar, typ :: Type, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function setType(s :: Union{Symbol,RHSVar}, typ :: Type, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             vd.typ = typ
@@ -362,8 +403,8 @@ end
 """
 Returns the descriptor for a local variable. 
 """
-function getDesc(s :: RHSVar, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function getDesc(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.desc
@@ -375,11 +416,11 @@ end
 """
 Set the descriptor for a local variable. 
 """
-function setDesc(s :: RHSVar, desc :: DescType, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function setDesc(s :: Union{Symbol,RHSVar}, desc, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
-            vd.desc = desc
+            vd.desc = convert(DescType, desc)
             return
         end
     end
@@ -389,8 +430,7 @@ end
 """
 Returns true if the given variable is a local variable (including input parameters, but exclude escaping variables). 
 """
-function isLocalVariable(s::RHSVar, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function isLocalVariable(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     name = nothing
     for vd in li.var_defs
         if matchVarDef(x, vd)
@@ -403,8 +443,8 @@ end
 """
 Returns true if the given variable is an escaping variable. 
 """
-function isEscapingVariable(s::RHSVar, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function isEscapingVariable(s::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     name = nothing
     for vd in li.var_defs
         if matchVarDef(x, vd)
@@ -450,8 +490,8 @@ Adds a new local variable with the given Symbol "s", type "typ", descriptor "des
 Throw error if the variable has already existed. 
 Return the newly added variable (RHSVar) as result.
 """
-function addLocalVariable(s :: Symbol, typ :: Type, desc :: DescType, li :: LambdaVarInfo)
-    max_id = -1
+function addLocalVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo)
+    max_id = 0 
     for vd in li.var_defs
         if matchVarDef(s, vd)
             error("Variable ", s, " already exists in ", li)
@@ -460,7 +500,7 @@ function addLocalVariable(s :: Symbol, typ :: Type, desc :: DescType, li :: Lamb
             max_id = vd.id
         end
     end
-    vd = VarDef(s, typ, desc, max_id + 1)
+    vd = VarDef(s, typ, convert(DescType, desc), max_id + 1)
     push!(li.var_defs, vd)
     return toRHSVar(vd)
 end
@@ -471,7 +511,7 @@ the given variable already exists locally, or is a GenSym
 (or SSAValue in 0.5) or parameter.  Return true if it is not 
 already escaping, or false otherwise.
 """
-function addEscapingVariable(s :: Symbol, typ :: Type, desc :: DescType, li :: LambdaVarInfo)
+function addEscapingVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo)
     x = addLocalVariable(s, typ, desc, li)
     setEscapingVariable(x, li)
 end
@@ -482,8 +522,8 @@ Set the given variable to be escaping. Will error if the given variable
 doesn't already exist, or is a GenSym (or SSAValue in 0.5) or parameter.
 Return true if it is not already escaping, or false otherwise.
 """
-function setEscapingVariable(s :: RHSVar, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function setEscapingVariable(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             @assert (vd.name != emptyVarName) "Variable " * string(x) * " does not have a Symbol name, and cannot be made escaping"
@@ -504,8 +544,8 @@ Set a local variable to be not escaping. Will error if the given variable
 doesn't already exist, or is a GenSym (or SSAValue in 0.5) or parameter.
 Return false if it is not already escaping, or true otherwise.
 """
-function unsetEscapingVariable(s :: LHSVar, li :: LambdaVarInfo)
-    x = toLHSVar(s)
+function unsetEscapingVariable(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    x = toLHSVar(s,li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             @assert (vd.name != emptyVarName) "Variable " * string(x) * " does not have a Symbol name, and cannot be made escaping"
@@ -537,7 +577,7 @@ function addTempVariable(typ, li :: LambdaVarInfo)
             max_id = vd.id
         end
     end
-    vd = VarDef(typ, ISASSIGNEDONCE | ISASSIGNED, max_id + 1)
+    vd = VarDef(typ, convert(DescType, ISASSIGNEDONCE | ISASSIGNED), max_id + 1)
     push!(li.var_defs, vd)
     return toRHSVar(vd)
 end
@@ -551,12 +591,11 @@ after this call.
 function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFunc = nothing)
   function update_sym(expr :: ANY, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     if isfunctionhead(expr) 
-        linfo = lambdaToLambdaVarInfo(expr)
-        body = getBody(expr)
+        linfo, body = lambdaToLambdaVarInfo(expr)
         new_dict = Dict{LHSVar,Any}()
         for (k,v) in dict
             if !isLocalVariable(k, linfo) && isEscapingVariable(k, linfo)
-                new_v = toLHSVar(v)
+                new_v = toLHSVar(v,linfo)
                 if isa(new_v, Symbol) 
                     if !isLocalVariable(new_v, linfo)
                         @dprintln(3, "replaceExprWithDict! nested lambda replace ", k, " with ", v)
@@ -577,7 +616,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
         end
         replaceExprWithDict!(body, new_dict, AstWalkFunc)
         return expr
-    elseif isa(expr, Symbol) || isa(expr, GenSym)
+    elseif isa(expr, LHSVar)
       if haskey(dict, expr)
         return toLHSVar(dict[expr])
       end
@@ -639,10 +678,12 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
                 if in(name, inner.escaping_vars)
                     # if escaping, must exist as variable in outer
                     @assert (isLocalVariable(name, outer) || isEscapingVariable(name, outer)) "Variable " * string(vd.name) * " is not found in outer info " * string(outer)
-                    # clear ISCAPTURED and ISASSIGNEDBYINNERFUNCTION
-                    desc = desc & (0xff - ISASSIGNEDBYINNERFUNCTION)
-                    desc = desc & (0xff - ISCAPTURED)
-                    setDesc(name, desc, outer)
+                    # clear ISCAPTURED and ISASSIGNEDBYINNERFUNCTION is not correct since this variable could still be escaping in other context
+                    # desc = desc & (~ ISASSIGNEDBYINNERFUNCTION)
+                    # desc = desc & (~ ISCAPTURED)
+                    # setDesc(name, desc, outer)
+                    # must replace escaping variables too, because the actual variable representation would be different in 0.5 between outer and inner
+                    dict[toLHSVar(vd)] = toRHSVar(lookupLHSVarByName(name, outer), outer)
                 else
                     # fresh name if there is name conflict
                     if isLocalVariable(name, outer) || isEscapingVariable(name, outer)
@@ -657,13 +698,17 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
 end
 
 function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
-    li = LambdaVarInfo(Base.uncompressed_ast(lambda))
-    li.orig_info = lambda
-    return li
+    ast = Base.uncompressed_ast(lambda)
+    linfo = LambdaVarInfo(lambda, ast)
+    body = getBody(ast, linfo.return_type)
+    return linfo, body
 end
 
 function lambdaToLambdaVarInfo(lambda :: Expr)
-    LambdaVarInfo(lambda)
+    @assert (lambda.head == :lambda) "Expect a :lambda Expr, but got " * string(lambda)
+    linfo = LambdaVarInfo(lambda)
+    body = getBody(lambda)
+    return linfo, body
 end
 
 """
@@ -733,13 +778,105 @@ end
 end
 
 if VERSION > v"0.5.0-dev+3260"
-function LambdaVarInfoToLambda(LambdaVarInfo :: LambdaVarInfo, body::Array{Any,1})
-  error("Needs to consolidate LambdaVarInfo and make a new LambdaInfo object")
-  li = LambdaVarInfo.orig_info
-  li.code =  ccall(:jl_compress_ast, Any, (Any,Any), li, body)
-  return li
+function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkFunc = nothing)
+    @assert (length(li.escaping_vars)==0) "LambdaVarInfo has escaping variables, and cannot be converted back to LambdaInfo " * string(li)
+    lambda = li.orig_info
+    @assert (lambda != nothing) "li.orig_info is not found " * string(li)
+    @dprintln(3, "LambdaVarInfoToLambda, LambdaVarInfo = ", li, " body = ", body)
+    nparams = length(li.input_params)
+    dict = Dict{LHSVar,Any}()
+    vars = Any[nothing for i = 1:length(li.var_defs)]
+    ssas = Any[nothing for i = 1:length(li.var_defs)]
+    vars_pending = VarDef[]
+    ssas_pending = VarDef[]
+    # parameters come first
+    nvars = 0
+    nssas = 0
+    for vd in li.var_defs
+      if vd.name == Symbol("#self#")
+        assert(vars[1] == nothing)
+        vars[1] = vd
+        nvars += 1
+      elseif vd.name != emptyVarName
+        nvars += 1
+        j = findfirst(li.input_params, vd.name)
+        if j > 0
+          # parameter
+          assert(vars[j + 1] == nothing) 
+          vars[j+1] = vd
+        else
+          # non-parameter variable
+          if vd.id <= nparams + 1 && vars[vd.id] == nothing
+            vars[vd.id] = vd
+          else # place already taken
+            push!(vars_pending, vd)
+          end
+        end
+      else # ssavalues
+        nssas += 1
+        if ssas[vd.id+1] == nothing
+          ssas[vd.id+1] = vd
+        else
+          push!(ssas_pending, vd)
+        end
+      end
+    end
+    lambda.slotnames = Array(Any, nvars)
+    lambda.slottypes = Array(Any, nvars)
+    lambda.slotflags = Array(DescType, nvars)
+    @dprintln(3, "nvars = ", nvars)
+    @dprintln(3, "vars = ", vars)
+    @dprintln(3, "vars_pending = ", vars_pending)
+    @dprintln(3, "ssas = ", ssas)
+    @dprintln(3, "ssas_pending = ", ssas_pending)
+    j = 1
+    for i = 1:nvars
+      if vars[i] == nothing
+        assert(j <= length(vars_pending))
+        vars[i] = vars_pending[j]
+        j += 1
+      end
+      vd = vars[i]
+      if vd.id != i
+        # id mismatch, must replace
+        dict[toLHSVar(vd)] = TypedSlot(i, vd.typ)
+        vd.id = i
+      end
+      li.var_defs[i] = vd
+      lambda.slotnames[i] = vd.name
+      lambda.slottypes[i] = vd.typ
+      lambda.slotflags[i] = vd.desc
+    end
+    @dprintln(3, "lambda.nargs = ", lambda.nargs, " nparams = ", nparams)
+    lambda.nargs = nparams + 1
+    lambda.ssavaluetypes = Array(Type, nssas)
+    j = 1
+    for i = 1:nssas
+      if ssas[i] == nothing
+        assert(j <= length(ssas_pending))
+        ssas[i] = ssas_pending[j]
+        j += 1
+      end
+      vd = ssas[i]
+      if vd.id != i - 1
+        dict[toLHSVar(vd)] = GenSym(i - 1)
+        vd.id = i - 1
+      end
+      li.var_defs[nvars + i] = vd
+      lambda.ssavaluetypes[i] = vd.typ
+    end
+    lambda.rettype = li.return_type
+    body = replaceExprWithDict!(body, dict, AstWalkFunc)
+    lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
+    @dprintln(3, "lambda.slotnames = ", lambda.slotnames)
+    @dprintln(3, "lambda.slottypes = ", lambda.slottypes)
+    @dprintln(3, "lambda.slotflags = ", lambda.slotflags)
+    @dprintln(3, "lambda.ssavaluetypes = ", lambda.ssavaluetypes)
+    @dprintln(3, "LambdaVarInfoToLambda, lambda = ", lambda)
+    return lambda
 end
-else
+
+else # if VERSION
 
 function createMeta(li::LambdaVarInfo)
     locals = Any[]
@@ -774,7 +911,7 @@ Convert our internal storage format, LambdaVarInfo, back into a lambda expressio
 This takes a LambdaVarInfo and a body as input parameters.
 This body can be a body expression or you can pass "nothing" if you want but then you will probably need to set the body in args[3] manually by yourself.
 """
-function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1})
+function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkFunc = nothing)
   expr = Expr(:body)
   expr.args = body
   if li.return_type != nothing
@@ -782,11 +919,12 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1})
   end
   return Expr(:lambda, getInputParametersAsExpr(li), createMeta(li), expr)
 end
-end
 
-function LambdaVarInfoToLambda(li :: LambdaVarInfo, body_expr :: Expr)
+end # if VERSION
+
+function LambdaVarInfoToLambda(li :: LambdaVarInfo, body_expr :: Expr, AstWalkFunc = nothing)
   assert(body_expr.head == :body)
-  LambdaVarInfoToLambda(li, body_expr.args)
+  LambdaVarInfoToLambda(li, body_expr.args, AstWalkFunc)
 end
 
 """
@@ -823,13 +961,13 @@ function getBody(lambda :: LambdaStaticData)
 end
 end
 
-function getBody(lambda :: LambdaVarInfo)
-  return getBody(lambda.orig_info)
-end
-
-function getBody(lambda :: Expr)
+function getBody(lambda :: Expr, rettype = nothing)
   assert(lambda.head == :lambda)
-  return lambda.args[3]
+  body = lambda.args[3]
+  if rettype != nothing
+    body.typ = rettype
+  end
+  return body
 end
 
 function getBody(lambda :: Array{Any,1}, rettype)
@@ -882,8 +1020,8 @@ end
 """
 Get the name of a local variable, either as Symbol or GenSym
 """
-function lookupVariableName(s::RHSVar, li::LambdaVarInfo) 
-    x = toLHSVar(s)
+function lookupVariableName(s::Union{Symbol,RHSVar}, li::LambdaVarInfo) 
+    x = toLHSVar(s, li)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.name == emptyVarName ? toLHSVar(vd) : vd.name
@@ -954,7 +1092,7 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
   @dprintln(3,"used = ", used)
   var_defs = VarDef[]
   for vd in li.var_defs
-    if !in(vd.name, li.input_params)
+    if !in(vd.name, li.input_params) && vd.name != Symbol("#self#")
       lhsVar = toLHSVar(vd)
       if !in(lhsVar, used) continue end
     end

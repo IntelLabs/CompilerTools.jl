@@ -51,7 +51,7 @@ ast_lv_1 = code_typed(test_liveness_1, (Int64,Int64,Int64))[1]
 
 #CompilerTools.LivenessAnalysis.set_debug_level(3)
 #CompilerTools.LambdaHandling.set_debug_level(3)
-lives_1 = CompilerTools.LivenessAnalysis.from_expr(ast_lv_1)
+lives_1 = CompilerTools.LivenessAnalysis.from_lambda(ast_lv_1)
 
 
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].live_in) == 3

@@ -123,12 +123,12 @@ function lookup(state, v)
 end
 
 # (:lambda, {param, meta@{localvars, types, freevars}, body})
-function from_lambda(state, expr :: Expr)
+function from_innerlambda(state, expr :: Expr)
   local head = expr.head
   local ast  = expr.args
   local typ  = expr.typ
   assert(length(ast) == 3)
-  local linfo = lambdaToLambdaVarInfo(expr)
+  linfo, body = lambdaToLambdaVarInfo(expr)
   # very conservative handling by setting free variables to Unknown.
   # TODO: may want to simulate function call at call site to get
   #       more accurate information.
@@ -320,7 +320,7 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
     local typ  = ast.typ
     @dprintln(2, " --> ", head)
     if is(head, :lambda)
-        return from_lambda(state, ast)
+        return from_innerlambda(state, ast)
     elseif is(head, :body)
         return from_body(state, ast.args, callback, cbdata)
     elseif is(head, :(=))
@@ -402,7 +402,7 @@ function iselementarytype(typ::Any)
   return false
 end
 
-function analyze_lambda_body(body, LambdaVarInfo :: LambdaVarInfo, liveness, callback=not_handled, cbdata :: ANY = nothing)
+function from_lambda(LambdaVarInfo :: LambdaVarInfo, body, liveness, callback=not_handled, cbdata :: ANY = nothing)
   local state = init_state(LambdaVarInfo, liveness)
   #@dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   for v in getLocalVariables(LambdaVarInfo)
@@ -437,10 +437,9 @@ function analyze_lambda_body(body, LambdaVarInfo :: LambdaVarInfo, liveness, cal
   return unique
 end
 
-function analyze_lambda(expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  LambdaVarInfo = lambdaToLambdaVarInfo(expr)
-  body = getBody(expr)
-  analyze_lambda_body(body, LambdaVarInfo, liveness, callback, cbdata)
+function from_lambda(expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
+  LambdaVarInfo, body = lambdaToLambdaVarInfo(expr)
+  from_lambda(LambdaVarInfo, body, liveness, callback, cbdata)
 end
 
 end
