@@ -54,6 +54,7 @@ const ISASSIGNEDBYINNERFUNCTION = 4
 const ISCONST = 8
 const ISASSIGNEDONCE = 16
 
+const digits = Char[x for x in "0123456789" ]
 
 if VERSION >= v"0.5.0-dev+3875"
 typealias DescType UInt8
@@ -120,6 +121,8 @@ if VERSION >= v"0.5.0-dev+3875"
         desc = lambda.slotflags[i]
         if in(name, allnames)
             name = Symbol(string(name, "@", i))
+        elseif startswith(string(name), digits) # numerical names are very confusing, fix them!
+            name = Symbol(string("@", name))
         end
         push!(allnames, name)
         vd = VarDef(name, typ, desc, i)
@@ -444,7 +447,7 @@ end
 Returns true if the given variable is an escaping variable. 
 """
 function isEscapingVariable(s::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+    x = isa(s, Symbol) ? s : toLHSVar(s,li)
     name = nothing
     for vd in li.var_defs
         if matchVarDef(x, vd)
@@ -756,17 +759,19 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name.mt = ", ftyp.name.mt)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
 if VERSION > v"0.5.0-dev+3260"
-    meth = Base._methods(ftyp, typs, -1)
-    if length(meth) == 1
+    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+#    meth = Base._methods(ftyp, typs, -1)
+#    if length(meth) == 1
 #        println("meth in _methods ", meth)
-        meth = meth[1]
-        linfo = Base.func_for_method_checked(meth[3], typs)
-        (tree, ty) = Core.Inference.typeinf_uncached(linfo, meth[1], meth[2], optimize = optimize)
+#        meth = meth[1]
+        
+        lambda = Core.Inference.func_for_method_checked(ftyp.name.mt.defs.func, types)
+        (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
 #        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
         return tree, ty
-    else
-        throw(string("Expected one method from call to Base._methods in lambdaTypeinf."))
-    end
+#    else
+#        error("Expected one method from call to Base._methods in lambdaTypeinf, but got ", meth)
+#    end
 else
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
 #    println("lambdaTypeinf typeof(lambda) = ", typeof(lambda))
