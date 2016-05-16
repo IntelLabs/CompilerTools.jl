@@ -774,7 +774,7 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
   if typeof(func) == GlobalRef
     func = Base.resolve(func, force=true)
     @dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
-  elseif typeof(func) == TopNode
+  elseif isTopNode(func)
     func = eval(func)
     @dprintln(3,"getUnmodifiedArgs func = ", func, " type = ", typeof(func))
   elseif typeof(func) == Expr
@@ -817,7 +817,7 @@ function getUnmodifiedArgs(func :: ANY, args, arg_type_tuple :: Array{DataType,1
     params_res[1] = 0
     addUnmodifiedParams(func, arg_type_tuple, params_res, state)
   else
-    if func == eval(TopNode(:tuple))
+    if isBaseFunc(func, :tuple)
       @dprintln(3,"Detected tuple in getUnmodifiedArgs so returning that no arguments are modified.")
       addUnmodifiedParams(func, arg_type_tuple, [1 for x in arg_type_tuple], state)
       return state.params_not_modified[fs]
