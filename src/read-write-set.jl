@@ -224,7 +224,7 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
   for i = 1:length(args)
     @dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
   end
-  if(fun == TopNode(:arrayref) || fun == TopNode(:unsafe_arrayref))
+  if(isBaseFunc(fun, :arrayref) || isBaseFunc(fun, :unsafe_arrayref))
     @dprintln(2,"Handling arrayref in from_call")
     # args[1]  = array
     # args[2+] = index expressions
@@ -235,7 +235,7 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
     end
-  elseif (fun == TopNode(:arrayset) || fun == TopNode(:unsafe_arrayset))
+  elseif (isBaseFunc(fun, :arrayset) || isBaseFunc(fun, :unsafe_arrayset))
     @dprintln(2,"Handling arrayset in from_call, length(args) = ",length(args))
     # args[1]  = array
     # args[2]  = value

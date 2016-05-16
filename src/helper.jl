@@ -33,13 +33,19 @@ import Base.isequal
 
 export LHSVar, RHSVar, TypedVar, LHSRealVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
-export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead
+export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
 
 if VERSION > v"0.5.0-dev+3260"
-if VERSION >= v"0.5.0-dev+3875"
-typealias GenSym     SSAValue
-export GenSym
-end
+  if VERSION >= v"0.5.0-dev+3875"
+    typealias GenSym     SSAValue
+    export GenSym
+    if VERSION >= v"0.5.0-dev+4094"
+      immutable TopNode 
+        name :: Symbol
+      end
+      export TopNode
+    end
+  end
 typealias LHSRealVar SlotNumber
 typealias LHSVar     Union{SlotNumber, GenSym}
 typealias RHSVar     Union{SlotNumber, TypedSlot, GenSym}
@@ -83,6 +89,25 @@ isCall(node::Expr) = node.head==:call
 isCall(node::Any) = false
 isTopNode(node::TopNode) = true
 isTopNode(node::Any) = false
+
+"""
+TopNode is removed in recent 0.5 versions, we need a backward compatible way to compare 
+them, or their equivalent Base functions.
+"""
+isBaseFunc(node::TopNode, name::Symbol) = node.name == name
+function isBaseFunc(node::GlobalRef, name::Symbol) 
+  m = node.mod
+  if node.name == name
+    while m != Base && m != Core && m != Main
+      m = module_parent(m)
+    end
+    return m == Base || m == Core
+  else
+    return false
+  end
+end
+
+isBaseFunc(node, name) = false
 
 """
 In various places we need a LHSVar type which is the union of Symbol and GenSym.
