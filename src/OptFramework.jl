@@ -335,7 +335,8 @@ function setCode(func, arg_tuple, ast)
   @dprintln(2, "setCode fields of def.tfunc.func")
   CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-  new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+  #new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+  new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   
   def.tfunc.func = deepcopy(ast)
   def.tfunc.func.def = def
