@@ -45,7 +45,7 @@ function test_liveness_3(x::Int64, y::Int64, z::Int64)
 end
 
 ast_lv_2 = code_lowered(test_liveness_3, (Int64,Int64,Int64))[1]
-cfg_2 = CompilerTools.CFGs.from_ast(ast_lv_2) :: CompilerTools.CFGs.CFG
+cfg_2 = CompilerTools.CFGs.from_lambda(ast_lv_2) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.Loops.set_debug_level(3)
 

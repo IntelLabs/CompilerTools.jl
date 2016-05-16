@@ -30,7 +30,7 @@ DebugMsg.init()
 
 using CompilerTools
 using CompilerTools.Helper
-using CompilerTools.CFGs
+import CompilerTools.CFGs
 using CompilerTools.LambdaHandling
 using Core: Box, IntrinsicFunction
 
@@ -581,19 +581,6 @@ function dump_bb(bl :: BlockLiveness)
 end
 
 """
-Walk through a lambda expression.
-We just need to extract the ref_params because liveness needs to keep those ref_params live at the end of the function.
-We don't recurse into the body here because from_expr handles that with fromCFG.
-"""
-function from_lambda(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-    # :lambda expression
-    @dprintln(3, "from_lambda typeof(ast) = ", typeof(ast))
-    state.li = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
-    state.ref_params = CompilerTools.LambdaHandling.getRefParams(state.li)
-    @dprintln(3,"from_lambda: ref_params = ", state.ref_params)
-end
-
-"""
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
@@ -651,18 +638,13 @@ end
 
 function typeOfOpr(x::Symbol, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, type = LHSVar, x = ", x)
-    return typeOfOpr_fixType(getType(x, li))
+    return isLocalVariable(x, li) ? typeOfOpr_fixType(getType(x, li)) : Void
 end
 
-function typeOfOpr(x::GenSym, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = LHSVar, x = ", x)
-    return typeOfOpr_fixType(getType(x, li))
-end
-
-function typeOfOpr(x::TypedVar, li :: LambdaVarInfo)
+function typeOfOpr(x::RHSVar, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, x = ", x)
     typ1 = getType(toLHSVar(x), li)
-    if x.typ != typ1
+    if isa(x, TypedVar) && x.typ != typ1
         @dprintln(2, "typeOfOpr x.typ and lambda type different")
         @dprintln(2, "x = ", x, " typ1 = ", typ1)
         @dprintln(2, "li = ", li)
@@ -951,17 +933,27 @@ end
 
 """
 ENTRY point to liveness analysis.
-You must pass a lambda as "ast".
+You must pass a lambda either as two parts, LambdaVarInfo and body, or as Expr (with :lambda head).
 If you have non-standard AST nodes, you may pass a callback that will be given a chance to process the non-standard node first.
 """
-function from_expr(ast, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
+function from_lambda(LambdaVarInfo :: LambdaVarInfo, body::ANY, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
+  if isa(body, Array)
+    body = CompilerTools.LambdaHandling.getBody(body, getReturnType(LambdaVarInfo))
+  end
+  @assert (isa(body, Expr)) "Expect body to be Expr, but got " * string(typeof(body))
   #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
-  cfg = CFGs.from_ast(ast)      # Create the CFG from this lambda Expr.
+  cfg = CFGs.from_lambda(body)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod, no_mod_cb)
   # Just to process the lambda and extract what the ref_params are.
-  from_lambda(ast, 1, live_res, callback, cbdata)
+  live_res.li = LambdaVarInfo
+  live_res.ref_params = CompilerTools.LambdaHandling.getRefParams(live_res.li)
   # Process the body of the function via the CFG.
   fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
+end
+
+function from_lambda(lambda::Union{Expr,LambdaInfo}, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
+    linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(lambda)
+    from_lambda(linfo, body, callback, cbdata, no_mod; no_mod_cb = no_mod_cb, array_params_live_out = array_params_live_out)
 end
 
 """
@@ -1029,6 +1021,7 @@ function from_expr(ast::LambdaInfo,
                    callback::Function,
                    cbdata::ANY)
     # skip processing LambdaInfo
+    @dprintln(3, "LivenessAnalysis: skip processing nested LambdaInfo")
     return nothing
 end
 
@@ -1083,7 +1076,8 @@ function from_expr_helper(ast::Expr,
     local typ  = ast.typ
     @dprintln(2,head, " ", args)
     if head == :lambda
-        from_lambda(ast, depth, state, callback, cbdata)
+        # from_lambda(ast, depth, state, callback, cbdata)
+        @dprintln(0, "nested :lambda skipped")
     elseif head == :body
         @dprintln(0,":body found in from_expr")
         throw(string(":body found in from_expr"))
@@ -1200,6 +1194,8 @@ function from_expr_helper(ast::ANY,
         for i = 1:length(ast)
             from_expr(ast[i], depth, state, callback, cbdata)
         end
+    elseif asttyp == Symbol
+        # skip
     else
         throw(string("from_expr: unknown AST type :", asttyp, " ", ast))
     end

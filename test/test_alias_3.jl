@@ -59,14 +59,14 @@ function test_alias_3(x::Int, y::Int, z::Int, s::Int)
 end
 
 ast = code_typed(test_alias_3, (Int,Int,Int,Int))[1]
-linfo = lambdaToLambdaVarInfo(ast)
-#cfg_2 = CompilerTools.CFGs.from_ast(ast) :: CompilerTools.CFGs.CFG
+linfo, body = lambdaToLambdaVarInfo(ast)
+#cfg_2 = CompilerTools.CFGs.from_lambda(ast) :: CompilerTools.CFGs.CFG
 
 #CompilerTools.CFGs.set_debug_level(3)
 #CompilerTools.LivenessAnalysis.set_debug_level(3)
-lives = CompilerTools.LivenessAnalysis.from_expr(ast)
-handled = CompilerTools.AliasAnalysis.analyze_lambda(ast, lives)
-handled = map(x -> getVariableName(x, linfo), handled)
+lives = CompilerTools.LivenessAnalysis.from_lambda(linfo, body)
+handled = CompilerTools.AliasAnalysis.from_lambda(linfo, body, lives)
+handled = map(x -> lookupVariableName(x, linfo), handled)
 #println(handled)
 @test (in(:C, handled))
 @test (in(:E, handled) == false)
