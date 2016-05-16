@@ -492,7 +492,7 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             @dprintln(4, "Working on block ", bb_index)
 
             # add escaping variables to accum
-            accum = state.li == nothing ? Set{LHSVar}() : Set{LHSVar}(getEscapingVariables(state.li))
+            accum = state.li == nothing ? Set{LHSVar}() : Set{LHSVar}([toLHSVar(x, state.li) for x in getEscapingVariables(state.li)])
 
             if bb_index == -2
               # Special case for final block.
