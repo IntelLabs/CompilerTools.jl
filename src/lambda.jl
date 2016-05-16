@@ -511,12 +511,12 @@ end
 """
 Add the given variable to be an escaping variable. Will error if 
 the given variable already exists locally, or is a GenSym 
-(or SSAValue in 0.5) or parameter.  Return true if it is not 
-already escaping, or false otherwise.
+(or SSAValue in 0.5) or parameter.  Return the variable itself.
 """
 function addEscapingVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo)
     x = addLocalVariable(s, typ, desc, li)
     setEscapingVariable(x, li)
+    return x
 end
 
 
@@ -759,7 +759,7 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name.mt = ", ftyp.name.mt)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
 if VERSION > v"0.5.0-dev+3260"
-    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+#    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
 #    meth = Base._methods(ftyp, typs, -1)
 #    if length(meth) == 1
 #        println("meth in _methods ", meth)
