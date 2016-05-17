@@ -43,7 +43,7 @@ export isEscapingVariable, getEscapingVariables, addEscapingVariable, setEscapin
 export isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
-export getRefParams, getArrayParams, updateAssignedDesc
+export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
 export mergeLambdaVarInfo, replaceExprWithDict!, countVariables
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
@@ -487,6 +487,7 @@ end
 Returns the (fresh copy of) escaping variables as an array of Symbols.
 """
 getEscapingVariables(li :: LambdaVarInfo) = copy(li.escaping_vars)
+getEscapingVariablesAsLHSVar(li :: LambdaVarInfo) = map(x -> toLHSVar(x, li), li.escaping_vars)
 
 """
 Adds a new local variable with the given Symbol "s", type "typ", descriptor "desc" in LambdaVarInfo "li".
