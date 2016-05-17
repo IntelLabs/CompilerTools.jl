@@ -38,9 +38,9 @@ import Base.show
 
 export VarDef, LambdaVarInfo, toRHSVar, lookupLHSVarByName, lookupVariableName
 export getDesc, setDesc, getType, setType, getReturnType, setReturnType 
-export isInputParameter, getInputParameters, setInputParameters, getInputParametersAsExpr
+export isInputParameter, isVarArgParameter, getInputParameters, setInputParameters, getInputParametersAsExpr
 export isEscapingVariable, getEscapingVariables, addEscapingVariable, setEscapingVariable, unsetEscapingVariable
-export isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
+export isDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
 export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
@@ -111,7 +111,6 @@ if VERSION >= v"0.5.0-dev+3875"
     @dprintln(3, "lambda = ", lambda)
     return_typ = lambda.rettype
     input_params = Symbol[]
-    vararg_params = Symbol[]
     var_defs = VarDef[]
     escaping_vars = Symbol[]
     allnames = Set{Symbol}()
@@ -137,6 +136,7 @@ if VERSION >= v"0.5.0-dev+3875"
         vd = VarDef(emptyVarName, lambda.ssavaluetypes[i], convert(DescType, ISASSIGNED | ISASSIGNEDONCE), i-1)
         push!(var_defs, vd)
     end
+    vararg_params = lambda.isva ? Symbol[input_params[end]] : Symbol[]
     x = new(input_params, vararg_params, Symbol[], var_defs, Any[], return_typ, lambda)
     @dprintln(3, "LambdaVarInfo = ", x)
     return x
@@ -243,6 +243,7 @@ toLHSVar(vd :: VarDef) = vd.name == emptyVarName ? SSAValue(vd.id) : SlotNumber(
 else
 
 matchVarDef(x :: Symbol, vd :: VarDef) = vd.name == x
+matchVarDef(x :: SymbolNode, vd :: VarDef) = vd.name == x.name
 matchVarDef(x :: GenSym, vd :: VarDef) = vd.name == emptyVarName && vd.id == x.id
 
 toRHSVar(x :: Symbol, typ, linfo :: LambdaVarInfo) = SymbolNode(x, typ)
@@ -377,8 +378,7 @@ end
 """
 Returns the type of a variable. 
 """
-function getType(s::Union{Symbol,RHSVar}, li::LambdaVarInfo)
-    x = toLHSVar(s,li)
+function getType(x::Union{Symbol,RHSVar}, li::LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.typ
@@ -392,8 +392,7 @@ end
 """
 Set the type for a local variable. 
 """
-function setType(s :: Union{Symbol,RHSVar}, typ :: Type, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+function setType(x :: Union{Symbol,RHSVar}, typ :: Type, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             vd.typ = typ
@@ -406,8 +405,7 @@ end
 """
 Returns the descriptor for a local variable. 
 """
-function getDesc(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+function getDesc(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.desc
@@ -419,8 +417,7 @@ end
 """
 Set the descriptor for a local variable. 
 """
-function setDesc(s :: Union{Symbol,RHSVar}, desc, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+function setDesc(x :: Union{Symbol,RHSVar}, desc, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             vd.desc = convert(DescType, desc)
@@ -431,6 +428,19 @@ function setDesc(s :: Union{Symbol,RHSVar}, desc, li :: LambdaVarInfo)
 end
 
 """
+Returns true if the given variable is either a local (including input parameters) or escaping variable.
+"""
+function isDefined(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    name = nothing
+    for vd in li.var_defs
+        if matchVarDef(x, vd)
+            name = vd.name
+        end
+    end
+    return name != nothing 
+end
+
+""""
 Returns true if the given variable is a local variable (including input parameters, but exclude escaping variables). 
 """
 function isLocalVariable(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
@@ -446,8 +456,7 @@ end
 """
 Returns true if the given variable is an escaping variable. 
 """
-function isEscapingVariable(s::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
-    x = isa(s, Symbol) ? s : toLHSVar(s,li)
+function isEscapingVariable(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     name = nothing
     for vd in li.var_defs
         if matchVarDef(x, vd)
@@ -526,8 +535,7 @@ Set the given variable to be escaping. Will error if the given variable
 doesn't already exist, or is a GenSym (or SSAValue in 0.5) or parameter.
 Return true if it is not already escaping, or false otherwise.
 """
-function setEscapingVariable(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+function setEscapingVariable(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             @assert (vd.name != emptyVarName) "Variable " * string(x) * " does not have a Symbol name, and cannot be made escaping"
@@ -548,8 +556,7 @@ Set a local variable to be not escaping. Will error if the given variable
 doesn't already exist, or is a GenSym (or SSAValue in 0.5) or parameter.
 Return false if it is not already escaping, or true otherwise.
 """
-function unsetEscapingVariable(s :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
-    x = toLHSVar(s,li)
+function unsetEscapingVariable(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             @assert (vd.name != emptyVarName) "Variable " * string(x) * " does not have a Symbol name, and cannot be made escaping"
@@ -1026,8 +1033,7 @@ end
 """
 Get the name of a local variable, either as Symbol or GenSym
 """
-function lookupVariableName(s::Union{Symbol,RHSVar}, li::LambdaVarInfo) 
-    x = toLHSVar(s, li)
+function lookupVariableName(x::Union{Symbol,RHSVar}, li::LambdaVarInfo) 
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.name == emptyVarName ? toLHSVar(vd) : vd.name
@@ -1112,6 +1118,9 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
   return body
 end
 
-
+function isVarArgParameter(s::Symbol, linfo::LambdaVarInfo)
+    @assert(in(s, linfo.input_params))
+    in(s, linfo.vararg_params)
+end
 
 end
