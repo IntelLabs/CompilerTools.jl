@@ -61,6 +61,7 @@ typealias DescType UInt8
 else
 typealias DescType Int64
 end
+getDefaultDesc() = convert(DescType, 0)
 
 const emptyVarName = Symbol("")
 
