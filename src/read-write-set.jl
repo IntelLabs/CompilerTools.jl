@@ -326,7 +326,7 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         from_exprs(args, depth+1, rws, callback, cbdata)
     elseif head == :gotoifnot
         from_expr(args[1], depth, rws, callback, cbdata)
-    elseif head == :meta || head == :inbounds
+    elseif head == :meta || head == :inbounds || head == :static_parameter
         # skip
     else
         #println("from_expr: unknown Expr head :", head)

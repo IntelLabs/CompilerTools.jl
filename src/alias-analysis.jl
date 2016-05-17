@@ -350,6 +350,8 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
         # skip
     elseif is(head, :meta)
         # skip
+    elseif is(head, :static_parameter)
+        # skip
     else
         throw(string("from_expr: unknown Expr head :", head))
     end

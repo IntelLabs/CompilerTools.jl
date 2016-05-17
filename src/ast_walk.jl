@@ -404,6 +404,8 @@ function from_expr_helper(ast::Expr,
 	end
     elseif head == :simdloop
         # skip
+    elseif head == :static_parameter
+        # skip
     elseif head == :macrocall
         for i = 1:length(args)
             args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
