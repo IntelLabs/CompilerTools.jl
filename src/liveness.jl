@@ -492,7 +492,7 @@ function compute_live_ranges(state :: expr_state, dfn, array_params_live_out)
             @dprintln(4, "Working on block ", bb_index)
 
             # add escaping variables to accum
-            accum = state.li == nothing ? Set{LHSVar}() : Set{LHSVar}(getEscapingVariables(state.li))
+            accum = state.li == nothing ? Set{LHSVar}() : Set{LHSVar}(getEscapingVariablesAsLHSVar(state.li))
 
             if bb_index == -2
               # Special case for final block.
@@ -1091,7 +1091,7 @@ function from_expr_helper(ast::Expr,
         # TODO?: tuple
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
-    elseif head == :line || head == :inbounds || head == :boundscheck || head == :meta || head == :type_goto
+    elseif head == :line || head == :inbounds || head == :boundscheck || head == :meta || head == :type_goto || head == :static_parameter
         # Intentionally do nothing.
     elseif head == :copyast
         @dprintln(2,"copyast type")
