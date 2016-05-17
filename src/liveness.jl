@@ -1129,14 +1129,17 @@ function from_expr_helper(ast::Union{GotoNode,LineNumberNode,TopNode,Module},
     # Intentionally do nothing.
 end
 
-function from_expr_helper(ast::RHSVar,
+function from_expr_helper(ast::Union{Symbol,RHSVar},
                           depth::Int64,
                           state::expr_state,
                           callback::Function,
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
     @dprintln(2, "ast = ", ast, "::", typeof(ast))
-    add_access(state.cur_bb, toLHSVar(ast), state.read)
+    if isDefined(ast, state.li)
+        v = toLHSVar(ast, state.li)
+        add_access(state.cur_bb, v, state.read)
+    end
 end
 
 function from_expr_helper(ast::Union{DataType,AbstractString,NewvarNode,Void},
