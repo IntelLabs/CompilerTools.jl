@@ -32,7 +32,7 @@ import Base.hash
 import Base.isequal
 
 export LHSVar, RHSVar, TypedVar, LHSRealVar
-export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, isbitstuple, isPtrType, isIntType
+export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, toLHSVarOrInt, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
 
 if VERSION > v"0.5.0-dev+3260"
@@ -118,6 +118,9 @@ toLHSVar(x :: Int) = x
 toLHSVar(x) = x
 toLHSVarOrNum(x :: RHSVar) = toLHSVar(x)
 toLHSVarOrNum(x :: Number) = x
+toLHSVarOrInt(x :: RHSVar) = toLHSVar(x)
+toLHSVarOrInt(x :: Int) = x
+
 
 """
 Returns true if input "a" is a tuple and each element of the tuple of isbits type.
