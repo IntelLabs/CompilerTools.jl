@@ -401,7 +401,9 @@ function from_expr(ast::Any,
                    cbdata::ANY)
     asttyp = typeof(ast)
 
-    if isbits(asttyp)
+    # For Julia 0.5, Symbol won't be in RHSVar and so will come here.
+    # All such uses can currently be ignored.
+    if isbits(asttyp) || asttyp == Symbol
         #skip
     else
         if tryCallback(ast, callback, cbdata, depth, rws)
