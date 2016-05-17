@@ -82,6 +82,12 @@ type VarDef
     new(n, t, d, -1)
   end
 
+  # no id, assuming -1.
+  # no desc, assuming 0
+  function VarDef(n::Symbol, t::Type)
+    new(n, t, convert(DescType,0), -1)
+  end
+
   # no symbol name, meaning GenSym (or SSAValue)
   function VarDef(t::Type, d::DescType, i::Int)
     new(emptyVarName, t, d, i)
