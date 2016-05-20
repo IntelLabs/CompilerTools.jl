@@ -574,7 +574,7 @@ function unsetEscapingVariable(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
                 if y == vd.name 
                     found = true 
                 else
-                    push!(escaps, y) 
+                    push!(escapes, y) 
                 end 
             end
             li.escaping_vars = found ? escapes : li.escaping_vars
@@ -1053,19 +1053,19 @@ function lookupVariableName(x::Union{Symbol,RHSVar}, li::LambdaVarInfo)
             return vd.name == emptyVarName ? toLHSVar(vd) : vd.name
         end
     end
-    error("Variable ", s, " is not found in ", li)
+    error("Variable ", x, " is not found in ", li)
 end
 
 """
 Lookup a Symbol in local variables, and return that variable (as LHSVar).
 """
-function lookupLHSVarByName(s::Symbol, li::LambdaVarInfo)
+function lookupLHSVarByName(x::Symbol, li::LambdaVarInfo)
     for vd in li.var_defs
-        if matchVarDef(s, vd)
+        if matchVarDef(x, vd)
             return toLHSVar(vd)
         end
     end
-    error("Variable ", s, " is not found in ", li)
+    error("Variable ", x, " is not found in ", li)
 end
 
 """
@@ -1117,13 +1117,20 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
   used = countVariables(body, AstWalkFunc)
   @dprintln(3,"used = ", used)
   var_defs = VarDef[]
+  escapings = Symbol[]
   for vd in li.var_defs
     if !in(vd.name, li.input_params) && vd.name != Symbol("#self#")
       lhsVar = toLHSVar(vd)
-      if !in(lhsVar, used) continue end
+      if !in(lhsVar, used) 
+        continue 
+      end
+    end
+    if in(vd.name, li.escaping_vars) 
+        push!(escapings, vd.name)
     end
     push!(var_defs, vd)
   end
+  li.escaping_vars = escapings
   li.var_defs = var_defs
   dict = consolidateLambdaVarInfo!(li)
   @dprintln(3,"dict = ", dict)
