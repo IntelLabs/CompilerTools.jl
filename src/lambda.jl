@@ -813,18 +813,23 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     nvars = 0
     nssas = 0
     for vd in li.var_defs
+      dprintln(3, "Processing ", vd)
       if vd.name == Symbol("#self#")
+        dprintln(3, "Found self, putting in vars[1]")
         assert(vars[1] == nothing)
         vars[1] = vd
         nvars += 1
       elseif vd.name != emptyVarName
+        dprintln(3, "Found non-empty varname")
         nvars += 1
         j = findfirst(li.input_params, vd.name)
         if j > 0
           # parameter
           assert(vars[j + 1] == nothing) 
           vars[j+1] = vd
+          dprintln(3, "is a param, putting in slot ", j+1)
         else
+          dprintln(3, "is NOT a param ", vd.id, " ", nparams+1)
           # non-parameter variable
           if vd.id <= nparams + 1 && vars[vd.id] == nothing
             vars[vd.id] = vd
@@ -833,6 +838,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
           end
         end
       else # ssavalues
+        dprintln(3, "Found ssavalue")
         nssas += 1
         if ssas[vd.id+1] == nothing
           ssas[vd.id+1] = vd
@@ -887,6 +893,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     end
     lambda.rettype = li.return_type
     body = replaceExprWithDict!(body, dict, AstWalkFunc)
+    @dprintln(3, "body = ", body)
     lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
     @dprintln(3, "lambda.slotnames = ", lambda.slotnames)
     @dprintln(3, "lambda.slottypes = ", lambda.slottypes)
