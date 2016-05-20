@@ -313,13 +313,16 @@ if false
 end
 end
 
+import Base.deepcopy_internal
+deepcopy_internal(x :: Module, stackdict::ObjectIdDict) = x
+
 function setCode(func, arg_tuple, ast)
   assert(isfunctionhead(ast))
   tfuncPresent(func, arg_tuple)
   @dprintln(2, "setCode fields of ast")
-  CompilerTools.Helper.print_by_field(ast)
+#  CompilerTools.Helper.print_by_field(ast)
   @dprintln(2, "setCode fields of ast.def")
-  CompilerTools.Helper.print_by_field(ast.def)
+#  CompilerTools.Helper.print_by_field(ast.def)
 
   meth_list = methods(func, arg_tuple).ms
   @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list), " len = ", length(meth_list))
@@ -327,23 +330,33 @@ function setCode(func, arg_tuple, ast)
   assert(isa(def,Method))
 
   @dprintln(2, "setCode fields of def")
-  CompilerTools.Helper.print_by_field(def)
+#  CompilerTools.Helper.print_by_field(def)
   @dprintln(2, "typeof(def.tfunc) = ", typeof(def.tfunc))
   @dprintln(2, "setCode fields of def.tfunc")
-  CompilerTools.Helper.print_by_field(def.tfunc)
+#  CompilerTools.Helper.print_by_field(def.tfunc)
   assert(isa(def.tfunc.func, LambdaInfo))
   @dprintln(2, "setCode fields of def.tfunc.func")
-  CompilerTools.Helper.print_by_field(def.tfunc.func)
+#  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-  #new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
-  new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
+  new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+  #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   
+
   def.tfunc.func = deepcopy(ast)
   def.tfunc.func.def = def
   def.lambda_template = def.tfunc.func
+#  def.tfunc = nothing
+#  def.lambda_template = deepcopy(ast)
+#  precompile(func, arg_tuple)
+
   def.tfunc.func.code = ccall(:jl_compress_ast, Any, (Any,Any), def.tfunc.func, new_body_args)
   @dprintln(2, "setCode fields of def after")
-  CompilerTools.Helper.print_by_field(def)
+#  CompilerTools.Helper.print_by_field(def)
+  @dprintln(2, "setCode fields of def.tfunc.func after")
+#  CompilerTools.Helper.print_by_field(def.tfunc.func)
+
+  @dprintln(2, CompilerTools.LambdaHandling.getBody(def.tfunc.func))
+  #@dprintln(2, "Done precompiling.")
 end
 
 else
@@ -436,7 +449,19 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   @dprintln(3,"After optimization passes")
 
   #if isa(cur_ast, Expr)
-  if isfunctionhead(cur_ast)
+  if isa(cur_ast,Tuple) && length(cur_ast)==2 && isa(cur_ast[1], CompilerTools.LambdaHandling.LambdaVarInfo) && isa(cur_ast[2], Expr)
+    lvi = cur_ast[1]
+    body = cur_ast[2]
+    @dprintln(3,"After last optimization pass, got Tuple of LambdaVarInfo and Expr with head = ", body.head)
+    ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
+    ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(ast[1], ast[2])
+    assert(isfunctionhead(ast))
+    @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(ast))
+    setCode(new_func, call_sig_arg_tuple, ast)
+
+    @dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
+    return new_func
+  elseif isfunctionhead(cur_ast)
     ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
     assert(isfunctionhead(ast))
     @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(cur_ast))
@@ -455,6 +480,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   elseif isa(cur_ast, Function)
     return cur_ast
   else
+    @dprintln(1,"typeof(cur_ast) = ", typeof(cur_ast))
     error("Expect either AST or Function after processFuncCall, but got ", cur_ast)
   end
 end
