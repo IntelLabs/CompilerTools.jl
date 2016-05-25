@@ -831,7 +831,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
         else
           dprintln(3, "is NOT a param ", vd.id, " ", nparams+1)
           # non-parameter variable
-          if vd.id <= nparams + 1 && vars[vd.id] == nothing
+          if vd.id > nparams+1 && vd.id <= length(vars) && [vd.id] == nothing
             vars[vd.id] = vd
           else # place already taken
             push!(vars_pending, vd)
