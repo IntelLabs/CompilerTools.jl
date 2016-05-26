@@ -396,6 +396,8 @@ function getType(x::Union{Symbol,RHSVar}, li::LambdaVarInfo)
     #return Void
 end
 
+getType(x::Number, li::LambdaVarInfo) = typeof(x)
+
 """
 Set the type for a local variable. 
 """
