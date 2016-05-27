@@ -749,6 +749,7 @@ function __init__()
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:arraylen), force = true))
   push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base,:arraysize), force = true))
 #  push!(wellknown_all_unmodified, eval(TopNode(:(!))))
+  push!(wellknown_all_unmodified, Base.resolve(GlobalRef(Base.LinAlg,:typeof), force = true))
 
     push!(wellknown_only_first_modified, Base.resolve(GlobalRef(Base.LinAlg,:gemm_wrapper!), force = true))
     push!(wellknown_only_first_modified, Base.resolve(GlobalRef(Base.LinAlg,:gemv!), force = true))
