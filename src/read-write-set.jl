@@ -248,6 +248,13 @@ function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetTyp
     for j = 1:length(indices)
       from_expr(indices[j], depth, rws, callback, cbdata)
     end
+  elseif isBaseFunc(fun, :setfield!)
+    @dprintln(2,"Handling setfield! in from_call")
+    obj = toLHSVar(args[1])
+    if isa(obj,LHSVar)
+      push!(rws.writeSet.scalars, obj)
+    end
+    from_exprs(args[2:end], depth+1, rws, callback, cbdata)
   else
     @dprintln(2,"Unhandled function ", fun, " in from_call")
     from_exprs(args, depth+1, rws, callback, cbdata)
