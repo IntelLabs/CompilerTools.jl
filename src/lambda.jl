@@ -513,6 +513,7 @@ Throw error if the variable has already existed.
 Return the newly added variable (RHSVar) as result.
 """
 function addLocalVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo)
+    @dprintln(3, "addLocalVariable s = ", s, " type = ", typ, " desc = ", desc, " li = ", li)
     max_id = 0 
     for vd in li.var_defs
         if matchVarDef(s, vd)
