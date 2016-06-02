@@ -313,9 +313,6 @@ if false
 end
 end
 
-import Base.deepcopy_internal
-deepcopy_internal(x :: Module, stackdict::ObjectIdDict) = x
-
 function setCode(func, arg_tuple, ast)
   assert(isfunctionhead(ast))
   tfuncPresent(func, arg_tuple)
