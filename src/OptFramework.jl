@@ -494,6 +494,16 @@ end
 
 identical{T}(t::Type{T}, x::T)=x
 
+function createWrapperFuncArgWithType(i, arg::Symbol)
+    return Symbol(string("makeWrapperFuncArgument",i))
+end
+
+function createWrapperFuncArgWithType(i, arg::Expr)
+    assert(arg.head == :(::))
+    typ = arg.args[2]
+    return Expr(:(::), Symbol(string("makeWrapperFuncArgument",i)), typ)
+end
+
 """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
@@ -512,14 +522,16 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
   temp_tuple = tuple(temp_typs...)
   new_call_sig_args = Symbol[ Symbol(string("makeWrapperFuncArgument",i)) for i = 1:length(call_sig_args)]
+  new_call_sig_args_with_types = Any[ createWrapperFuncArgWithType(i, call_sig_args[i]) for i = 1:length(call_sig_args)]
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
+  @dprintln(3, "new_call_sig_args_with_types = ", new_call_sig_args_with_types)
   @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   static_typeof_ret = Expr(:static_typeof, :ret)
   gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
-  wrapper_ast = :(function $new_fname($(new_call_sig_args...))
+  wrapper_ast = :(function $new_fname($(new_call_sig_args_with_types...))
          #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
          call_sig_arg_tuple = tuple(call_sig_arg_typs...)
@@ -729,6 +741,9 @@ function convert_block(per_site_opt_set, opt_set, macros, ast)
       @dprintln(3, "@acc processing macro within block = ", expr)
       ast.args[i] = convert_macro(per_site_opt_set, opt_set, macros, expr)
       @dprintln(3, "@acc done processing macro within block = ", ast.args[i])
+    else
+      @dprintln(3, "Don't know how to process block element[", i, "] of type ", typeof(expr))
+      @dprintln(3, "Value = ", expr)
     end
   end
   @dprintln(3, "@acc processing block done = ", ast)
