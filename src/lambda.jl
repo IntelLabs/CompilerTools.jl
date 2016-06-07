@@ -1147,4 +1147,10 @@ function isVarArgParameter(s::Symbol, linfo::LambdaVarInfo)
     in(s, linfo.vararg_params)
 end
 
+function stripCaptureFlag(linfo :: LambdaVarInfo)
+  for i = 1:length(linfo.var_defs)
+    linfo.var_defs[i].desc &= (~ISCAPTURED)
+  end
+end
+
 end
