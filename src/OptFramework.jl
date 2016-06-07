@@ -75,6 +75,16 @@ function setOptPasses(passes :: Array{OptPass,1})
 end
 
 """
+Sometimes the original function shouldn't be evaluated since it is not valid Julia syntax.
+This happens when DSL constructs are used that cannot have function implementations.
+    motivation: DataTables in HPAT
+"""
+saveOriginalFunction = true
+function setSaveOriginalFunction(val::Bool)
+    global saveOriginalFunction = val
+end
+
+"""
 Add an optimization pass. If this is going to be called multiple times then you need some external way of corrdinating the code/modules that are calling this function so that optimization passes are added in some sane order.
 """
 function addOptPass(pass :: OptPass)
@@ -689,10 +699,18 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
     end
     if !macro_only
       @dprintln(3, "Calling makeWrapperFunc")
-      ast = Expr(:block, ast, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
+      if saveOriginalFunction
+          ast = Expr(:block, ast, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
+      else
+          ast = Expr(:block, macro_ast, makeWrapperFunc(fname, macro_fname, call_sig_args, per_site_opt_set))
+      end
     else
       @dprintln(3, "macro_only conversion")
-      ast = Expr(:block, ast, macro_ast)
+      if saveOriginalFunction
+          ast = Expr(:block, ast, macro_ast)
+      else
+          ast = Expr(:block, macro_ast)
+      end
     end
     @dprintln(3, "macro_func = ", macro_func, " real_func = ", real_func)
     gOptFrameworkDict[macro_func] = real_func
