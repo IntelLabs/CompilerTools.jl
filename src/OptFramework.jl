@@ -291,36 +291,6 @@ Makes sure that a newly created function is correctly present in the internal Ju
 """
 function tfuncPresent(func, tt)
   code_typed(func, tt)
-
-if false
-  meth_list = methods(func, tt).ms
-  @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list))
-  def = meth_list[1]
-  assert(isa(def,Method))
-  @dprintln(2, "def = ", def)
-  @dprintln(2, "def.tfunc = ", def.tfunc)
-  if def.tfunc == nothing
-    @dprintln(2, "tfunc NOT present before code_typed")
-    code_typed(func, tt)
-    if is(def.tfunc, nothing) 
-      error("tfunc still NOT present after code_typed")
-    else
-      @dprintln(2, "tfunc present after code_typed")
-    end
-  else
-    if is(def.tfunc.func, nothing)
-      @dprintln(2, "tfunc.func NOT present before code_typed")
-      code_typed(func, tt)
-      if is(def.tfunc.func, nothing)
-        @dprintln(2, "tfunc.func still NOT present after code_typed")
-      else
-        @dprintln(2, "tfunc.func present after code_typed")
-      end
-    else
-      @dprintln(2, "tfunc present on call")
-    end
-  end 
-end
 end
 
 function setCode(func, arg_tuple, ast)
