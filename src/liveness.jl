@@ -950,7 +950,25 @@ function from_lambda(LambdaVarInfo :: LambdaVarInfo, body::ANY, callback=not_han
   live_res.li = LambdaVarInfo
   live_res.ref_params = CompilerTools.LambdaHandling.getRefParams(live_res.li)
   # Process the body of the function via the CFG.
-  fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
+  res = fromCFG(live_res, cfg, callback, cbdata, array_params_live_out=array_params_live_out)
+  input_params = CompilerTools.LambdaHandling.getInputParameters(live_res.li)
+  ip_lhsvar = [CompilerTools.LambdaHandling.toLHSVar(x, live_res.li) for x in input_params]
+  escape_lhsvar = CompilerTools.LambdaHandling.getEscapingVariablesAsLHSVar(live_res.li)
+  start_live_in = getBasicBlockFromBlockNumber(CompilerTools.CFGs.CFG_ENTRY_BLOCK, res).live_in
+  combined = union(ip_lhsvar, escape_lhsvar)
+  use_before_init = setdiff(start_live_in, combined)
+  @dprintln(2, "input_params = ", input_params)
+  @dprintln(2, "ip_lhsvar = ", ip_lhsvar)
+  @dprintln(2, "escape_lhsvar = ", escape_lhsvar)
+  @dprintln(2, "combined = ", combined)
+  @dprintln(2, "start_live_in = ", start_live_in)
+  @dprintln(2, "use_before_init = ", use_before_init)
+  if !isempty(use_before_init)
+     @dprintln(1, "WARNING: use of variables before initialization = ", use_before_init)
+     @dprintln(1, "LambdaVarInfo = ", live_res.li)
+#     throw(string("WARNING: use of variables before initialization = ", use_before_init))
+  end
+  res
 end
 
 function from_lambda(lambda::Union{Expr,LambdaInfo}, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
