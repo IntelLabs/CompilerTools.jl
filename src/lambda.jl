@@ -44,6 +44,7 @@ export isDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, 
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
 export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
+export getStaticParameterValue
 export mergeLambdaVarInfo, replaceExprWithDict!, countVariables
 export ISCAPTURED, ISASSIGNED, ISASSIGNEDBYINNERFUNCTION, ISCONST, ISASSIGNEDONCE 
 
@@ -101,16 +102,18 @@ type LambdaVarInfo
   escaping_vars :: Array{Symbol,1}          # escaping variables always have a name symbol
   var_defs      :: Array{VarDef}            # all variable definitions
   static_parameter_names :: Array{Any,1}
+  static_parameter_values :: Array{Any,1}
   return_type   :: Any
   orig_info     :: Union{LambdaInfo,Void}
 
   function LambdaVarInfo()
-    new(Symbol[], Symbol[], Symbol[], VarDef[], Any[], Void, nothing)
+    new(Symbol[], Symbol[], Symbol[], VarDef[], Any[], Any[], Void, nothing)
   end
 
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.vararg_params), copy(li.escaping_vars), copy(li.var_defs), 
-        copy(li.static_parameter_names), li.return_type, li.orig_info == nothing ? nothing : copy(li.orig_info))
+        copy(li.static_parameter_names), copy(li.static_parameter_values), 
+        li.return_type, li.orig_info == nothing ? nothing : copy(li.orig_info))
   end
 
 if VERSION >= v"0.5.0-dev+3875"
@@ -144,7 +147,10 @@ if VERSION >= v"0.5.0-dev+3875"
         push!(var_defs, vd)
     end
     vararg_params = lambda.isva ? Symbol[input_params[end]] : Symbol[]
-    x = new(input_params, vararg_params, Symbol[], var_defs, Any[], return_typ, lambda)
+    static_parameter_names = Any[ x for x in lambda.sparam_syms]
+    static_parameter_values = Any[ x for x in lambda.sparam_vals]
+    @dprintln(3, "LambdaVarInfo.sparam_vals = ", lambda.sparam_vals)
+    x = new(input_params, vararg_params, Symbol[], var_defs, static_parameter_names, static_parameter_values, return_typ, lambda)
     @dprintln(3, "LambdaVarInfo = ", x)
     return x
   end
@@ -216,13 +222,14 @@ else
             push!(var_defs, VarDef(typ, desc, id))
         end
     end
-    static_params = length(meta) > 3 ? meta[3] : Any[]
+    static_param_values = length(meta) > 3 ? Any[ x for x in meta[3]] : Any[]
+    static_param_names = Any[ gensym("T") for x in static_param_values]
 
     @assert (isa(lambda.args[3], Expr) && (lambda.args[3].head == :body)) "Expect a body Expr, but got " * string(lambda[3])
     return_typ = lambda.args[3].typ
     
     # we do not store original info
-    new(input_params, vararg_params, escaping_vars, var_defs, static_params, return_typ, nothing)
+    new(input_params, vararg_params, escaping_vars, var_defs, static_param_names, static_param_values, return_typ, nothing)
   end
 end
 
@@ -322,7 +329,7 @@ function show(io :: IO, li :: LambdaVarInfo)
   end
   println(io)
   if !isempty(li.static_parameter_names)
-    println(io, "Static Parameter Names = ", li.static_parameter_names)
+    println(io, "Static Parameters = ", zip(li.static_parameter_names, li.static_parameter_values))
   end
   if !isempty(li.escaping_vars)
     println(io, "Escaping Variable Names = ", li.escaping_vars)
@@ -751,6 +758,9 @@ if VERSION > v"0.5.0-dev+3260"
 function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
     throw(string("Force inference LambdaInfo in 0.5 not yet supported"))
 end
+function lambdaTypeinf(lambda :: Function, typs; optimize = true)
+  lambdaTypeinf(typeof(lambda), typs, optimize = optimize)
+end
 else
 """
 Force type inference on a LambdaStaticData object.
@@ -763,10 +773,17 @@ function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
   lambda.ast = tree
   return lambda, ty
 end
+
+function lambdaTypeinf(lambda :: Function, typs; optimize = true)
+  m = methods(lambda, (typs...))
+  assert(length(m) > 0)
+  lambdaTypeinf(m[1].func.code, typs, optimize = optimize)
+end
 end
 
 function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
-    types::Any = to_tuple_type(Tuple{ftyp, typs...})
+    typ = Tuple{ftyp, typs...}
+    types::Any = to_tuple_type(typ)
     env = Core.Inference.svec()
 #    println("lambdaTypeinf typeof(ftyp) = ", typeof(ftyp))
 #    println("lambdaTypeinf typeof(ftyp.name) = ", typeof(ftyp.name))
@@ -778,18 +795,17 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
 if VERSION > v"0.5.0-dev+3260"
 #    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
-#    meth = Base._methods(ftyp, typs, -1)
-#    if length(meth) == 1
+    meth = Base._methods_by_ftype(typ, -1)
+    if length(meth) == 1
 #        println("meth in _methods ", meth)
-#        meth = meth[1]
-        
-        lambda = Core.Inference.func_for_method_checked(ftyp.name.mt.defs.func, types)
-        (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
+        m = meth[1]
+        lambda = Core.Inference.func_for_method_checked(m[3], types)
+        (tree, ty) = Core.Inference.typeinf_uncached(lambda, m[1], m[2], optimize = optimize)
 #        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
         return tree, ty
-#    else
-#        error("Expected one method from call to Base._methods in lambdaTypeinf, but got ", meth)
-#    end
+    else
+        error("Expected one method from call to Base._methods in lambdaTypeinf, but got ", meth)
+    end
 else
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
 #    println("lambdaTypeinf typeof(lambda) = ", typeof(lambda))
@@ -1143,7 +1159,7 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
 end
 
 function isVarArgParameter(s::Symbol, linfo::LambdaVarInfo)
-    @assert(in(s, linfo.input_params))
+    @assert (in(s, linfo.input_params))
     in(s, linfo.vararg_params)
 end
 
@@ -1153,4 +1169,8 @@ function stripCaptureFlag(linfo :: LambdaVarInfo)
   end
 end
 
+function getStaticParameterValue(i :: Int, linfo :: LambdaVarInfo)
+  @assert (i >= 1 && i <= length(linfo.static_parameter_values)) string("getStaticParameterValue out-of-range: ", i, " in ", linfo.static_parameter_values)
+  linfo.static_parameter_values[i]
+end
 end
