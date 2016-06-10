@@ -31,7 +31,7 @@ module Helper
 import Base.hash
 import Base.isequal
 
-export LHSVar, RHSVar, TypedVar, LHSRealVar
+export LHSVar, RHSVar, TypedVar, LHSRealVar, toTypedVar
 export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, toLHSVarOrInt, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
 
@@ -54,6 +54,7 @@ toLHSVar(tv::TypedVar) = SlotNumber(tv.id)
 toLHSVar(tv::SlotNumber) = tv
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.id)
+toTypedVar(id::LHSRealVar, typ::DataType) = TypedSlot(id.id, typ)
 else
 typealias LHSRealVar Symbol
 typealias LHSVar     Union{Symbol, GenSym}
@@ -64,6 +65,7 @@ toLHSVar(x :: Symbol) = x
 toLHSVar(tv::TypedVar) = tv.name
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.name)
+toTypedVar(id::LHSRealVar, typ::DataType) = SymbolNode(id, typ)
 export LambdaInfo
 end
 
