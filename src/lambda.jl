@@ -644,7 +644,14 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
     elseif isa(expr, TypedVar)
       lhsVar = toLHSVar(expr)
       if haskey(dict, lhsVar)
-        return dict[lhsVar]
+        new_val = dict[lhsVar]
+        if isa(new_val, TypedVar)
+            return new_val
+        elseif isa(new_val, LHSRealVar)
+            return toTypedVar(new_val, expr.typ)
+        else
+            return toLHSVar(new_val)
+        end
       end
     end
     return CompilerTools.AstWalker.ASTWALK_RECURSE
