@@ -271,21 +271,24 @@ end
 """
 Clean up the labels in AST by renaming them, and removing duplicates.
 """
-function cleanupBodyLabels(expr::Expr)
+function cleanupBodyLabels(expr::Expr, AstWalk = nothing)
   @assert (expr.head == :body)
   state = lmstate()
-  CompilerTools.AstWalker.AstWalk(expr, create_label_map, state)
+  if AstWalk == nothing
+    AstWalk = CompilerTools.AstWalker.AstWalk
+  end
+  AstWalk(expr, create_label_map, state)
   #@dprintln(3,"label mapping = ", state.label_map)
   state.last_was_label = false
-  expr = CompilerTools.AstWalker.AstWalk(expr, update_labels, state)
+  expr = AstWalk(expr, update_labels, state)
   expr.args = removeDupLabels(expr.args)
   return expr
 end
 
-function cleanupBodyLabels(body::Array)
+function cleanupBodyLabels(body::Array, AstWalk = nothing)
   expr = Expr(:body)
   expr.args = body
-  return cleanupBodyLabels(expr).args
+  return cleanupBodyLabels(expr, AstWalk).args
 end
 
 if VERSION > v"0.5.0-dev+3260"
