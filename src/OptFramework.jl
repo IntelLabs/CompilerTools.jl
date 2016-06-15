@@ -268,22 +268,25 @@ function removeDupLabels(stmts)
   ret
 end
 
-#"""
-#Clean up the labels in AST by renaming them, and removing duplicates.
-#"""
-#function cleanupASTLabels(ast)
-#  assert(isa(ast, Expr) && ast.head == :lambda)
-#  body = ast.args[3]
-#  assert(typeof(body) == Expr && body.head == :body)
-#  state = lmstate()
-#  CompilerTools.AstWalker.AstWalk(body, create_label_map, state)
-#  #@dprintln(3,"label mapping = ", state.label_map)
-#  state.last_was_label = false
-#  body = CompilerTools.AstWalker.AstWalk(body, update_labels, state)
-#  body.args = removeDupLabels(body.args)
-#  ast.args[3] = body
-#  return ast
-#end
+"""
+Clean up the labels in AST by renaming them, and removing duplicates.
+"""
+function cleanupBodyLabels(expr::Expr)
+  @assert (expr.head == :body)
+  state = lmstate()
+  CompilerTools.AstWalker.AstWalk(expr, create_label_map, state)
+  #@dprintln(3,"label mapping = ", state.label_map)
+  state.last_was_label = false
+  expr = CompilerTools.AstWalker.AstWalk(expr, update_labels, state)
+  expr.args = removeDupLabels(expr.args)
+  return expr
+end
+
+function cleanupBodyLabels(body::Array)
+  expr = Expr(:body)
+  expr.args = body
+  return cleanupBodyLabels(expr).args
+end
 
 if VERSION > v"0.5.0-dev+3260"
 """
