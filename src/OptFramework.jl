@@ -241,6 +241,10 @@ function create_label_map(x::LabelNode, state :: lmstate, top_level_number, is_t
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
+function create_label_map(x::LineNumberNode, state :: lmstate, top_level_number, is_top_level, read)
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
 function create_label_map(x::ANY, state :: lmstate, top_level_number, is_top_level, read)
     state.last_was_label = false
     return CompilerTools.AstWalker.ASTWALK_RECURSE
@@ -258,11 +262,19 @@ function removeDupLabels(stmts)
   ret = Any[]
 
   push!(ret, stmts[1])
-
+  last_is_label = false
   for i = 2:length(stmts)
-    if !(typeof(stmts[i]) == LabelNode && typeof(stmts[i-1]) == LabelNode)
-      push!(ret, stmts[i])
+    if isa(stmts[i], LabelNode)
+      if last_is_label
+         continue
+      else
+         last_is_label = true
+      end
+    elseif isa(stmts[i], LineNumberNode)
+    else
+      last_is_label = false
     end
+    push!(ret, stmts[i])
   end
 
   ret
@@ -447,11 +459,11 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   elseif isfunctionhead(cur_ast)
     ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
     assert(isfunctionhead(ast))
-    @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(cur_ast))
+    @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(ast))
 
     # Write the modifed code back to the function.
     @dprintln(2,"Before methods at end of processFuncCall.")
-    setCode(new_func, call_sig_arg_tuple, cur_ast)
+    setCode(new_func, call_sig_arg_tuple, ast)
 #    tfuncPresent(new_func, call_sig_arg_tuple)
 #    method = methods(new_func, call_sig_arg_tuple)
 #    assert(length(method) == 1)
