@@ -113,7 +113,7 @@ type LambdaVarInfo
   function LambdaVarInfo(li::LambdaVarInfo)
     new(copy(li.input_params), copy(li.vararg_params), copy(li.escaping_vars), copy(li.var_defs), 
         copy(li.static_parameter_names), copy(li.static_parameter_values), 
-        li.return_type, li.orig_info == nothing ? nothing : copy(li.orig_info))
+        li.return_type, li.orig_info == nothing ? nothing : li.orig_info)
   end
 
 if VERSION >= v"0.5.0-dev+3875"
