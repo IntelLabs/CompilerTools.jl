@@ -610,6 +610,50 @@ function addTempVariable(typ, li :: LambdaVarInfo)
     return toRHSVar(vd)
 end
 
+function findAndFixAliasing!(expr :: ANY, fix_aliases = true, AstWalkFunc = nothing)
+  function find_alias(expr :: ANY, object_set, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
+    if isa(expr, Expr)
+        oid = object_id(expr)
+        if in(oid, object_set)
+            #@dprintln(2, "findAndFixAliasing found aliased Expr = ", expr)
+            println("findAndFixAliasing found aliased Expr = ", expr)
+            if fix_aliases
+                return deepcopy(expr)
+            else
+                return expr
+            end
+        else
+            push!(object_set, oid)
+        end
+    end
+    return CompilerTools.AstWalker.ASTWALK_RECURSE
+  end
+
+  if expr == nothing
+    return nothing
+  end
+
+  expr_set = Set()
+  @dprintln(3, "findAndFixAliasing!: ", expr, " AstWalkFunc = ", AstWalkFunc)
+  if isa(expr,Array)
+    for i = 1:length(expr)
+      if AstWalkFunc == nothing
+        expr[i] = CompilerTools.AstWalker.AstWalk(expr[i], find_alias, expr_set)
+      else
+        expr[i] = AstWalkFunc(expr[i], find_alias, expr_set)
+      end
+    end
+  else
+    if AstWalkFunc == nothing
+      expr = CompilerTools.AstWalker.AstWalk(expr, find_alias, expr_set)
+    else
+      expr = AstWalkFunc(expr, find_alias, expr_set)
+    end
+  end
+  return expr
+end
+
+
 """
 Replace the symbols in an expression "expr" with those defined in the
 dictionary "dict".  Return the result expression, which may share part of the
@@ -646,7 +690,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
         return expr
     elseif isa(expr, LHSVar)
       if haskey(dict, expr)
-        return toLHSVar(dict[expr])
+        return deepcopy(toLHSVar(dict[expr]))
       end
     elseif isa(expr, TypedVar)
       lhsVar = toLHSVar(expr)
@@ -657,7 +701,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
         elseif isa(new_val, LHSRealVar)
             return toTypedVar(new_val, expr.typ)
         else
-            return toLHSVar(new_val)
+            return deepcopy(toLHSVar(new_val))
         end
       end
     end
@@ -667,6 +711,8 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
   if expr == nothing
     return nothing
   end
+
+  findAndFixAliasing!(expr, true, AstWalkFunc)
 
   @dprintln(3, "replaceExprWithDict!: ", expr, " dict = ", dict, " AstWalkFunc = ", AstWalkFunc)
   if isa(expr,Array)
