@@ -615,8 +615,7 @@ function findAndFixAliasing!(expr :: ANY, fix_aliases = true, AstWalkFunc = noth
     if isa(expr, Expr)
         oid = object_id(expr)
         if in(oid, object_set)
-            #@dprintln(2, "findAndFixAliasing found aliased Expr = ", expr)
-            println("findAndFixAliasing found aliased Expr = ", expr)
+            @dprintln(2, "findAndFixAliasing found aliased Expr = ", expr)
             if fix_aliases
                 return deepcopy(expr)
             else
