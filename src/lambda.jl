@@ -660,6 +660,9 @@ input expression, and the input "expr" may be modified inplace and shall not be 
 after this call. 
 """
 function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFunc = nothing)
+  function update_sym(expr :: LambdaInfo, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
+    expr
+  end
   function update_sym(expr :: ANY, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     if isfunctionhead(expr) 
         linfo, body = lambdaToLambdaVarInfo(expr)

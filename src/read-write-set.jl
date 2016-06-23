@@ -216,10 +216,9 @@ end
 """
 Process :call Expr nodes to find arrayref and arrayset calls and adding the corresponding index expressions to the read and write sets respectively.
 """
-function from_call(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-  assert(length(ast) >= 1)
-  local fun  = ast[1]
-  local args = ast[2:end]
+function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+  local fun  = getCallFunction(ast)
+  local args = getCallArguments(ast)
   @dprintln(2,fun)
   for i = 1:length(args)
     @dprintln(2,"RWS from_call first arg[",i,"] = ",args[i], " type = ", typeof(args[i]))
@@ -301,11 +300,8 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         from_assignment(args, depth, rws, callback, cbdata)
     elseif head == :return
         from_exprs(args, depth, rws, callback, cbdata)
-    elseif head == :call
-        from_call(args, depth, rws, callback, cbdata)
-        # TODO: catch domain IR result here
-    elseif head == :call1
-        from_call(args, depth, rws, callback, cbdata)
+    elseif head == :invoke || head == :call || head == :call1
+        from_call(ast, depth, rws, callback, cbdata)
         # TODO?: tuple
     elseif head == Symbol("'")
         from_exprs(args, depth, rws, callback, cbdata)

@@ -166,14 +166,14 @@ function from_call(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_leve
     @dprintln(2,"first arg = ",args[1], " type = ", typeof(args[1]))
   end
   # Symbols don't need to be translated.
-  if typeof(fun) != Symbol
+  # if typeof(fun) != Symbol
       # I suppose this "if" could be wrong.  If you wanted to replace all "x" functions with "y" then you'd need this wouldn't you?
-      fun = from_expr(fun, depth, callback, cbdata, top_level_number, false, read)
-  end
+  #    fun = from_expr(fun, depth, callback, cbdata, top_level_number, false, read)
+  # end
   # Process the arguments to the function recursively.
-  args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
+  args = from_exprs(ast, depth+1, callback, cbdata, top_level_number, read)
 
-  return [fun; args]
+  return args
 end
 
 """
@@ -205,11 +205,11 @@ function AstWalk(ast :: ANY, callback, cbdata :: ANY)
   from_expr(ast, 1, callback, cbdata, 0, false, true)
 end
 
-function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
-    LambdaVarInfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
-    new_body = from_expr(body, depth, callback, cbdata, top_level_number, is_top_level, read)
-    CompilerTools.LambdaHandling.LambdaVarInfoToLambda(LambdaVarInfo, new_body)
-end
+#function from_expr(ast :: LambdaInfo, depth, callback, cbdata :: ANY, top_level_number, is_top_level, read)
+    #LambdaVarInfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+    #new_body = from_expr(body, depth, callback, cbdata, top_level_number, is_top_level, read)
+    #CompilerTools.LambdaHandling.LambdaVarInfoToLambda(LambdaVarInfo, new_body)
+#end
 
 """
 The main routine that switches on all the various AST node types.
@@ -279,6 +279,8 @@ function from_expr_helper(ast::Expr,
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :return
         args = from_exprs(args, depth, callback, cbdata, top_level_number, read)
+    elseif head == :invoke
+        args = from_call(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :call
         args = from_call(args, depth, callback, cbdata, top_level_number, read)
         # TODO: catch domain IR result here
@@ -507,6 +509,8 @@ function from_expr_helper(ast::ANY,
     elseif isdefined(:GlobalRef) && asttyp == GlobalRef
         @dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
     elseif isbits(asttyp)
+        #skip
+    elseif is(asttyp, LambdaInfo)
         #skip
     else
         println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)

@@ -32,8 +32,9 @@ import Base.hash
 import Base.isequal
 
 export LHSVar, RHSVar, TypedVar, LHSRealVar, toTypedVar
-export TypedExpr, isArrayType, isCall, isTopNode, toLHSVar, toLHSVarOrNum, toLHSVarOrInt, isbitstuple, isPtrType, isIntType
+export TypedExpr, isArrayType, isInvoke, isCall, isTopNode, toLHSVar, toLHSVarOrNum, toLHSVarOrInt, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
+export getCallFunction, getCallArguments
 
 if VERSION > v"0.5.0-dev+3260"
   if VERSION >= v"0.5.0-dev+3875"
@@ -87,6 +88,8 @@ isBitArrayType(typ::DataType) = typ<:BitArray
 isBitArrayType(x::ANY) = false
 isPtrType(typ::DataType) = typ<:Ptr
 isPtrType(typ::ANY) = false
+isInvoke(node::Expr) = node.head==:invoke
+isInvoke(node::Any) = false
 isCall(node::Expr) = node.head==:call
 isCall(node::Any) = false
 isTopNode(node::TopNode) = true
@@ -162,6 +165,26 @@ function print_by_field(obj)
     catch
       println("Failed for field ", f)
     end
+  end
+end
+
+function getCallFunction(exp::Expr)
+  if exp.head == :invoke
+    exp.args[2]
+  elseif exp.head == :call
+    exp.args[1]
+  else
+    error(string("Expect a :call or :invoke Expr, but got ", exp))
+  end
+end
+
+function getCallArguments(exp::Expr)
+  if exp.head == :invoke
+    exp.args[3:end]
+  elseif exp.head == :call
+    exp.args[2:end]
+  else
+    error(string("Expect a :call or :invoke Expr, but got ", exp))
   end
 end
 

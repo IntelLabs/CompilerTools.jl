@@ -852,11 +852,10 @@ end
 """
 Walk through a call expression.
 """
-function from_call(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
-  assert(length(ast) >= 1)
-  local fun  = ast[1]
-  local args = ast[2:end]
-  @dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun))
+function from_call(ast :: Expr , depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
+  local fun  = getCallFunction(ast)
+  local args = getCallArguments(ast)
+  @dprintln(2,"from_call fun = ", fun, " typeof fun = ", typeof(fun), " args = ", args)
    
   # Form the signature of the call in an array.
   arg_type_array = DataType[]
@@ -1105,8 +1104,8 @@ function from_expr_helper(ast::Expr,
         from_assignment(args, depth, state, callback, cbdata)
     elseif head == :return
         from_return(args, depth, state, callback, cbdata)
-    elseif head == :call || head == :call1
-        from_call(args, depth, state, callback, cbdata)
+    elseif head == :invoke || head == :call || head == :call1
+        from_call(ast, depth, state, callback, cbdata)
         # TODO: catch domain IR result here
         # TODO?: tuple
     elseif head == :gotoifnot

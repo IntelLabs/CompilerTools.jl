@@ -207,6 +207,10 @@ function from_call(state, expr :: Expr, callback, cbdata)
   local ast = expr.args
   local typ = expr.typ
   assert(length(ast) >= 1)
+  if head == :invoke
+    # skip the first argument that is LambdaInfo
+    ast = ast[2:end]
+  end
   local fun  = ast[1]
   local args = ast[2:end]
   @dprintln(2, "AA from_call: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
@@ -327,6 +331,8 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
         return from_assignment(state, ast, callback, cbdata)
     elseif is(head, :return)
         return from_return(state, ast, callback, cbdata)
+    elseif is(head, :invoke)
+        return from_call(state, ast, callback, cbdata)
     elseif is(head, :call)
         return from_call(state, ast, callback, cbdata)
         # TODO: catch domain IR result here
