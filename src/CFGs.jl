@@ -704,7 +704,9 @@ function createFunctionBody(bl :: CFG)
 
       # Add the basic block's statements to the body.
       for i = 1:length(bb.statements)
-        push!(res, bb.statements[i].expr) 
+        if bb.statements[i].expr != nothing 
+          push!(res, bb.statements[i].expr) 
+        end
       end
     end
 
