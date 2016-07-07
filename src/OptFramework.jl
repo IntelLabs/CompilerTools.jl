@@ -170,89 +170,7 @@ A global memo-table that maps both: the triple (function, signature, optPasses) 
 gOptFrameworkDict = Dict{Any,Any}()
 
 """
-The callback state variable used by create_label_map and update_labels.
-label_map is a dictionary mapping old label ID's in the old AST with new label ID's in the new AST.
-next_block_num is a monotonically increasing integer starting from 0 so label occur sequentially in the new AST.
-last_was_label keeps track of whether we see two consecutive LabelNodes in the AST.
-"""
-type lmstate
-  label_map
-  next_block_num
-  last_was_label
-
-  function lmstate()
-    new(Dict{Int64,Int64}(), 0, false)
-  end
-end
-
-"""
-An AstWalk callback that applies the label map created during create_label_map AstWalk.
-For each label in the code, replace that label with the rhs of the label map.
-"""
-function update_labels(x::LabelNode, state :: lmstate, top_level_number, is_top_level, read)
-    return LabelNode(state.label_map[x.label])
-end
-
-function update_labels(x::GotoNode, state :: lmstate, top_level_number, is_top_level, read)
-    return GotoNode(state.label_map[x.label])
-end
-
-function update_labels(x::Expr, state :: lmstate, top_level_number, is_top_level, read)
-    head = x.head
-    args = x.args
-    if head == :gotoifnot
-      else_label = args[2]
-      x.args[2] = state.label_map[else_label]
-      return x
-    end
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-
-function update_labels(x::ANY, state :: lmstate, top_level_number, is_top_level, read)
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-
-
-"""
-An AstWalk callback that collects information about labels in an AST.
-The labels in AST are generally not sequential but to feed back into a Function Expr
-correctly they need to be.  So, we keep a map from the old label in the AST to a new label
-that we monotonically increases.
-If we have code in the AST like the following:
-   1:
-   2:
-... then one of these labels is redundant.  We set "last_was_label" if the last AST node
-we saw was a label.  If we see another LabelNode right after that then we duplicate the rhs
-of the label map.  For example, if you had the code:
-   5:
-   4:
-... and the label 5 was the third label in the code then in the label map you would then have:
-   5 -> 3, 4 -> 3.
-This indicates that uses of both label 5 and label 4 in the code will become label 3 in the modified AST.
-"""
-function create_label_map(x::LabelNode, state :: lmstate, top_level_number, is_top_level, read)
-    if state.last_was_label
-      state.label_map[x.label] = state.next_block_num-1
-    else
-      state.label_map[x.label] = state.next_block_num
-      state.next_block_num += 1
-    end
-    state.last_was_label = true
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-
-function create_label_map(x::LineNumberNode, state :: lmstate, top_level_number, is_top_level, read)
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-
-function create_label_map(x::ANY, state :: lmstate, top_level_number, is_top_level, read)
-    state.last_was_label = false
-    return CompilerTools.AstWalker.ASTWALK_RECURSE
-end
-
-"""
-Sometimes update_labels creates two label nodes that are the same.
-This function removes such duplicate labels.
+This function removes duplicate labels.
 """
 function removeDupLabels(stmts)
   if length(stmts) == 0
@@ -275,32 +193,49 @@ function removeDupLabels(stmts)
       last_is_label = false
     end
     push!(ret, stmts[i])
+    #push!(ret, LineNumberNode(i))
   end
 
   ret
 end
 
 """
+Update labels with a new base, return the max label.
+"""
+function updateLabels!(body::Array{Any,1}, base=0)
+  labelMap = Dict{Int,Int}()
+  for i=1:length(body)
+    if isa(body[i], LabelNode) 
+      labelMap[body[i].label] = base + i
+    end
+  end
+  for i=1:length(body)
+    if isa(body[i], LabelNode)
+      body[i] = LabelNode(labelMap[body[i].label])
+    elseif isa(body[i], GotoNode) 
+      body[i] = GotoNode(labelMap[body[i].label])
+    elseif isa(body[i], Expr) && (body[i].head === :gotoifnot)
+        body[i].args[2] = labelMap[body[i].args[2]]
+    end
+  end
+  return base + length(body)
+end
+
+"""
 Clean up the labels in AST by renaming them, and removing duplicates.
 """
-function cleanupBodyLabels(expr::Expr, AstWalk = nothing)
+function cleanupBodyLabels(expr::Expr)
   @assert (expr.head == :body)
-  state = lmstate()
-  if AstWalk == nothing
-    AstWalk = CompilerTools.AstWalker.AstWalk
-  end
-  AstWalk(expr, create_label_map, state)
-  #@dprintln(3,"label mapping = ", state.label_map)
-  state.last_was_label = false
-  expr = AstWalk(expr, update_labels, state)
-  expr.args = removeDupLabels(expr.args)
+  body = removeDupLabels(expr.args)
+  max_label = updateLabels!(body)
+  expr.args = body
   return expr
 end
 
-function cleanupBodyLabels(body::Array, AstWalk = nothing)
+function cleanupBodyLabels(body::Array)
   expr = Expr(:body)
   expr.args = body
-  return cleanupBodyLabels(expr, AstWalk).args
+  return cleanupBodyLabels(expr).args
 end
 
 if VERSION > v"0.5.0-dev+3260"
