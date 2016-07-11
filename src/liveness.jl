@@ -660,8 +660,12 @@ function typeOfOpr(x::RHSVar, li :: LambdaVarInfo)
 end
 
 function typeOfOpr(x::GlobalRef, li :: LambdaVarInfo)
-    @dprintln(3,"starting typeOfOpr, type = GlobalRef")
-    return typeOfOpr_fixType(typeof(eval(x)))
+    @dprintln(3,"starting typeOfOpr, type = GlobalRef ", x)
+    if x.name == :end
+        return Int64
+    else
+        return typeOfOpr_fixType(typeof(eval(x)))
+    end
 end
 
 function typeOfOpr(x::SimpleVector, li :: LambdaVarInfo)
