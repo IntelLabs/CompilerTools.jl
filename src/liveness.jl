@@ -1159,7 +1159,7 @@ function from_expr_helper(ast::Union{Symbol,RHSVar},
                           cbdata::ANY)
     # addStatement(top_level, state, ast)
     @dprintln(2, "ast = ", ast, "::", typeof(ast))
-    if isDefined(ast, state.li)
+    if isVariableDefined(ast, state.li)
         v = toLHSVar(ast, state.li)
         add_access(state.cur_bb, v, state.read)
     end
