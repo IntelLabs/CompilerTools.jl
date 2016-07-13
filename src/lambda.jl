@@ -40,7 +40,7 @@ export VarDef, LambdaVarInfo, toRHSVar, lookupLHSVarByName, lookupVariableName
 export getDesc, setDesc, getType, setType, getReturnType, setReturnType 
 export isInputParameter, isVarArgParameter, getInputParameters, setInputParameters, getInputParametersAsExpr
 export isEscapingVariable, getEscapingVariables, addEscapingVariable, setEscapingVariable, unsetEscapingVariable
-export isDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
+export isVariableDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
 export getBody, getReturnType, setReturnType
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
 export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
@@ -129,9 +129,9 @@ if VERSION >= v"0.5.0-dev+3875"
         typ = lambda.slottypes[i]
         desc = lambda.slotflags[i]
         if in(name, allnames)
-            name = Symbol(string(name, "@", i))
+            name = gensym(string(name, "@", i))
         elseif startswith(string(name), digits) # numerical names are very confusing, fix them!
-            name = Symbol(string("@", name))
+            name = gensym(string("@", name))
         end
         push!(allnames, name)
         vd = VarDef(name, typ, desc, i)
@@ -446,7 +446,7 @@ end
 """
 Returns true if the given variable is either a local (including input parameters) or escaping variable.
 """
-function isDefined(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+function isVariableDefined(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     name = nothing
     for vd in li.var_defs
         if matchVarDef(x, vd)
