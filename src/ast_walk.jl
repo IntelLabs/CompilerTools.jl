@@ -350,7 +350,7 @@ function from_expr_helper(ast::Expr,
 	end
     elseif head == :meta
 	# ignore :meta for now. TODO: we might need to walk its args.
-    elseif head == :comprehension || head == :vect
+    elseif head == :comprehension || head == :vect || head == :generator
 	# args are either Expr or Symbol
 	for i = 1:length(args)
 	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
