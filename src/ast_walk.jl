@@ -118,7 +118,7 @@ end
 """
 AstWalk through an array of expressions.
 """
-function from_exprs(ast :: Array{Any,1}, depth, callback, cbdata :: ANY, top_level_number, read)
+function from_exprs(ast, depth, callback, cbdata :: ANY, top_level_number, read)
   len = length(ast)
   # We need to differentiate top-level statements from non-top level and so this function handles the 
   # non-top-level ones.

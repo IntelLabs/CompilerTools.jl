@@ -259,34 +259,38 @@ function setCode(func, arg_tuple, ast)
   def = meth_list[1]
   assert(isa(def,Method))
 
+  @dprintln(2, "ast slotnames: ", ast.slotnames)
   @dprintln(2, "setCode fields of def")
 #  CompilerTools.Helper.print_by_field(def)
-  @dprintln(2, "typeof(def.tfunc) = ", typeof(def.tfunc))
-  @dprintln(2, "setCode fields of def.tfunc")
-#  CompilerTools.Helper.print_by_field(def.tfunc)
-  assert(isa(def.tfunc.func, LambdaInfo))
-  @dprintln(2, "setCode fields of def.tfunc.func")
+  @dprintln(2, "typeof(def.specializations) = ", typeof(def.specializations))
+  @dprintln(2, "setCode fields of def.specializations")
+#  CompilerTools.Helper.print_by_field(def.specializations)
+  #assert(isa(def.specializations.func, LambdaInfo))
+  @dprintln(2, "setCode fields of def.specializations.func")
 #  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
   new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
   #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   
+  #ast.code = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+  def.specializations = nothing
+  #def.specializations.func = ast
+  #def.specializations.func.def = def
+  def.lambda_template = ast # def.specializations.func
 
-  def.tfunc.func = deepcopy(ast)
-  def.tfunc.func.def = def
-  def.lambda_template = def.tfunc.func
-#  def.tfunc = nothing
-#  def.lambda_template = deepcopy(ast)
-#  precompile(func, arg_tuple)
-
-  def.tfunc.func.code = ccall(:jl_compress_ast, Any, (Any,Any), def.tfunc.func, new_body_args)
+  ast.code = new_body_args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
+  #ast.inferred = true
+  #@dprintln(2, printExprAst(ast))
+  precompile(func, arg_tuple)
   @dprintln(2, "setCode fields of def after")
 #  CompilerTools.Helper.print_by_field(def)
-  @dprintln(2, "setCode fields of def.tfunc.func after")
+  @dprintln(2, "setCode fields of def.specializations.func after")
 #  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-  @dprintln(2, CompilerTools.LambdaHandling.getBody(def.tfunc.func))
-  #@dprintln(2, "Done precompiling.")
+  #@dprintln(2, def.specializations)
+  @dprintln(2, "code typed")
+  @dprintln(2, code_typed(func, arg_tuple))
+  @dprintln(2, "Done precompiling.")
 end
 
 else
@@ -464,6 +468,11 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
+  if VERSION >= v"0.5.0-dev+5381"
+    retexpr = Expr(:call, :func_to_call, new_call_sig_args...)
+  else
+    retexpr = Expr(:call, idtc, static_typeof_ret, Expr(:call, :func_to_call, new_call_sig_args...))
+  end
   wrapper_ast = :(function $new_fname($(new_call_sig_args_with_types...))
          #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
          call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
@@ -492,7 +501,9 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          if 1 < 0
            ret = $real_func($(new_call_sig_args...))
          end
-         $idtc($static_typeof_ret, func_to_call($(new_call_sig_args...)))
+         #$idtc($static_typeof_ret, func_to_call($(new_call_sig_args...)))
+         #func_to_call($(new_call_sig_args...))
+         $retexpr
         end)
   @dprintln(4,"wrapper_ast = ", wrapper_ast)
   gOptFrameworkDict[new_func] = real_func

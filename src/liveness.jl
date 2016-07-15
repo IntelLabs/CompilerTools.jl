@@ -584,7 +584,7 @@ end
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
-function from_exprs(ast :: Array{Any,1}, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
+function from_exprs(ast, depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
     # sequence of expressions
     # ast = [ expr, ... ]
     local len = length(ast)
