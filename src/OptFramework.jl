@@ -238,6 +238,53 @@ function cleanupBodyLabels(body::Array)
   return cleanupBodyLabels(expr).args
 end
 
+function eliminateParamAssigns(ast)
+  linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+  @dprintln(3,"eliminateParamAssigns: body = ", body)
+  # Create a set of the input parameters in LHSVar form.
+  input_lhsvars = Set{LHSVar}(CompilerTools.LambdaHandling.getInputParametersAsLHSVar(linfo))
+  @dprintln(3,"eliminateParamAssigns: input_lhsvars = ", input_lhsvars)
+  # Do liveness analysis on the body.
+  lives = CompilerTools.LivenessAnalysis.from_lambda(linfo, body)
+  assigned_params = Set{LHSVar}()
+  # For each basic block in the AST.
+  for bbentry in lives.basic_blocks
+    bb = bbentry[2]
+    # Find which input parameters are assigned in the block by the intersection of the input lhsvars and the definitions in the basic block.
+    # Add those modified parameters to the set of all modified parameters in assigned_params.
+    assigned_params = union(assigned_params, intersect(input_lhsvars, bb.def))
+    @dprintln(3,"eliminateParamAssigns: assigned_params = ", assigned_params, " bb.def = ", bb.def)
+  end  
+
+  new_body = Any[]
+
+  rdict = Dict{LHSVar, Any}()
+  for ap in assigned_params
+    vd = CompilerTools.LambdaHandling.getVarDef(ap, linfo)
+    @dprintln(3,"eliminateParamAssigns: vd = ", vd)
+    rhsvar_copy = CompilerTools.LambdaHandling.addLocalVariable(Symbol(string(vd.name, "_duplicate_to_eliminate_param_assign")), vd.typ, CompilerTools.LambdaHandling.ISASSIGNED, linfo)
+    rdict[ap] = rhsvar_copy 
+    push!(new_body, TypedExpr(vd.typ, :(=), toLHSVar(rhsvar_copy), ap))
+  end
+  @dprintln(3,"new_body = ", new_body)
+
+  if !isempty(rdict)
+      body = CompilerTools.LambdaHandling.replaceExprWithDict!(body, rdict)
+      @dprintln(3,"body after replaceExprWithDict! = ", body, " type = ", typeof(body))
+      for i = 1:3
+          push!(new_body, body.args[i])
+      end
+#      append!(new_body, body.args)
+      push!(new_body, Expr(:return, 1.0))
+      body.args = new_body
+      @dprintln(3,"eliminateParamAssigns: final body = ", body)
+      @dprintln(3,"eliminateParamAssigns: linfo = ", linfo)
+      ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(linfo, body)
+  end
+
+  return ast
+end
+
 if VERSION > v"0.5.0-dev+3260"
 """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
@@ -260,25 +307,33 @@ function setCode(func, arg_tuple, ast)
   assert(isa(def,Method))
 
   @dprintln(2, "ast slotnames: ", ast.slotnames)
-  @dprintln(2, "setCode fields of def")
+#  @dprintln(2, "setCode fields of def")
 #  CompilerTools.Helper.print_by_field(def)
   @dprintln(2, "typeof(def.specializations) = ", typeof(def.specializations))
-  @dprintln(2, "setCode fields of def.specializations")
+#  @dprintln(2, "setCode fields of def.specializations")
 #  CompilerTools.Helper.print_by_field(def.specializations)
   #assert(isa(def.specializations.func, LambdaInfo))
-  @dprintln(2, "setCode fields of def.specializations.func")
+#  @dprintln(2, "setCode fields of def.specializations.func")
 #  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-  new_body_args = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
+#  ast = eliminateParamAssigns(ast)
+  new_body = deepcopy(CompilerTools.LambdaHandling.getBody(ast))
+  @dprintln(3, "new_body = ", new_body, " type = ", typeof(new_body))
+  new_body = CompilerTools.AstWalker.AstWalk(new_body, invoke_to_call, nothing)
+  @dprintln(3, "new_body after transforming invoke back to call = ", new_body)
   #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   
   #ast.code = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
-  def.specializations = nothing
+  if isa(def.specializations, Array)
+    def.specializations = []
+  else
+    def.specializations = nothing
+  end
   #def.specializations.func = ast
   #def.specializations.func.def = def
   def.lambda_template = ast # def.specializations.func
 
-  ast.code = new_body_args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
+  ast.code = new_body.args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
   #ast.inferred = true
   #@dprintln(2, printExprAst(ast))
   precompile(func, arg_tuple)
@@ -468,6 +523,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
+#  if VERSION >= v"0.5.0-dev+5233"
   if VERSION >= v"0.5.0-dev+5381"
     retexpr = Expr(:call, :func_to_call, new_call_sig_args...)
   else
@@ -493,8 +549,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
              # We did not optimize it so we will call the original function.
              $dpln(3,"processFuncCall didn't optimize ", $real_func)
              func_to_call = $real_func
-           end
-           # Remember this optimization result for this function/type combination.
+           end # Remember this optimization result for this function/type combination.
            $gofd[fs] = func_to_call
          end
          $dpln(3,"calling ", func_to_call)
@@ -517,6 +572,15 @@ type opt_calls_insert_trampoline_state
   function opt_calls_insert_trampoline_state(opt_set)
     new(opt_set, false)
   end
+end
+
+function invoke_to_call(x, state, top_level_number, is_top_level, read)
+  if isa(x, Expr)
+    if x.head == :invoke
+      return TypedExpr(x.typ, :call, x.args[2:end]...)
+    end
+  end
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
 """
