@@ -34,7 +34,7 @@ import Base.isequal
 export LHSVar, RHSVar, TypedVar, LHSRealVar, toTypedVar
 export TypedExpr, isArrayType, isInvoke, isCall, isTopNode, toLHSVar, toLHSVarOrNum, toLHSVarOrInt, isbitstuple, isPtrType, isIntType
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
-export getCallFunction, getCallArguments
+export getCallFunction, getCallArguments, isAssignmentNode
 
 if VERSION > v"0.5.0-dev+3260"
   if VERSION >= v"0.5.0-dev+3875"
@@ -187,6 +187,12 @@ function getCallArguments(exp::Expr)
     error(string("Expect a :call or :invoke Expr, but got ", exp))
   end
 end
+
+"""
+Is a node an assignment expression node.
+"""
+isAssignmentNode(node::Expr) = node.head == :(=)
+isAssignmentNode(node::Any)  = false
 
 end # module Helper
 

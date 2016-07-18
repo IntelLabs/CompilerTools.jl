@@ -37,11 +37,11 @@ using Core.Inference: to_tuple_type
 import Base.show
 
 export VarDef, LambdaVarInfo, toRHSVar, lookupLHSVarByName, lookupVariableName
-export getDesc, setDesc, getType, setType, getReturnType, setReturnType 
+export getDesc, setDesc, getType, setType, getReturnType, setReturnType, getVarDef
 export isInputParameter, isVarArgParameter, getInputParameters, setInputParameters, getInputParametersAsExpr
 export isEscapingVariable, getEscapingVariables, addEscapingVariable, setEscapingVariable, unsetEscapingVariable
 export isVariableDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
-export getBody, getReturnType, setReturnType
+export getBody, getReturnType, setReturnType, getInputParametersAsLHSVar
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
 export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
 export getStaticParameterValue
@@ -365,6 +365,10 @@ function getInputParameters(li :: LambdaVarInfo)
   return copy(li.input_params)
 end
 
+function getInputParametersAsLHSVar(li :: LambdaVarInfo)
+  return [toLHSVar(x, li) for x in li.input_params]
+end
+
 """
 Return the (fresh copy of) input parameters as array of Any, so vararg parameters are preserved.
 """
@@ -425,6 +429,18 @@ function getDesc(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
     for vd in li.var_defs
         if matchVarDef(x, vd)
             return vd.desc
+        end
+    end
+    error("Variable ", x, " is not found in ", li)
+end
+
+"""
+Returns the descriptor for a local variable. 
+"""
+function getVarDef(x :: Union{Symbol,RHSVar}, li :: LambdaVarInfo)
+    for vd in li.var_defs
+        if matchVarDef(x, vd)
+            return vd
         end
     end
     error("Variable ", x, " is not found in ", li)
@@ -519,11 +535,11 @@ Adds a new local variable with the given Symbol "s", type "typ", descriptor "des
 Throw error if the variable has already existed. 
 Return the newly added variable (RHSVar) as result.
 """
-function addLocalVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo)
+function addLocalVariable(s :: Symbol, typ :: Type, desc, li :: LambdaVarInfo, assert_unique = true)
     @dprintln(3, "addLocalVariable s = ", s, " type = ", typ, " desc = ", desc, " li = ", li)
     max_id = 0 
     for vd in li.var_defs
-        if matchVarDef(s, vd)
+        if assert_unique && matchVarDef(s, vd)
             error("Variable ", s, " already exists in ", li)
         end
         if vd.name != emptyVarName && vd.id > max_id
