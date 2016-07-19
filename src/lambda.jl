@@ -867,16 +867,17 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 if VERSION > v"0.5.0-dev+3260"
 #    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
     meth = Base._methods_by_ftype(typ, -1)
-    if length(meth) == 1
+    for m in meth
+      if m[1] <: Tuple && m[1].parameters[2:end] == typ.parameters[2:end]
 #        println("meth in _methods ", meth)
         m = meth[1]
         lambda = Core.Inference.func_for_method_checked(m[3], types)
         (tree, ty) = Core.Inference.typeinf_uncached(lambda, m[1], m[2], optimize = optimize)
 #        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
         return tree, ty
-    else
-        error("Expected one method from call to Base._methods in lambdaTypeinf, but got ", meth)
+      end
     end
+    error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
 else
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
 #    println("lambdaTypeinf typeof(lambda) = ", typeof(lambda))
