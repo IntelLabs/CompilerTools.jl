@@ -479,12 +479,12 @@ A hack to get around Julia's type inference. This is essentially an identity con
 but forces inferred return type to be the given type.
 Characters coming from C should have Cchar type (which is single byte); Julia can convert them to Char (multi byte).
 """
-function identical(t::Type{Char}, x::Cchar)
+function identical(::Type{Char}, x::Cchar)
     y::Char = x
     return y
 end
 
-identical{T}(t::Type{T}, x::T)=x
+identical{T}(::Type{T}, x::T)=x
 
 function createWrapperFuncArgWithType(i, arg::Symbol)
     return Symbol(string("makeWrapperFuncArgument",i))
@@ -518,21 +518,19 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   @dprintln(3, "new_call_sig_args_with_types = ", new_call_sig_args_with_types)
   @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
-  static_typeof_ret = Expr(:static_typeof, :ret)
   gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
 #  if VERSION >= v"0.5.0-dev+5233"
   if VERSION >= v"0.5.0-dev+5381"
-    retexpr = Expr(:call, :func_to_call, new_call_sig_args...)
+    retexpr = Expr(:call, idtc, Expr(:call, GlobalRef(Base, :typeof), :ret), Expr(:call, :func_to_call, new_call_sig_args...))
   else
-    retexpr = Expr(:call, idtc, static_typeof_ret, Expr(:call, :func_to_call, new_call_sig_args...))
+    retexpr = Expr(:call, idtc, Expr(:static_typeof, :ret), Expr(:call, :func_to_call, new_call_sig_args...))
   end
   wrapper_ast = :(function $new_fname($(new_call_sig_args_with_types...))
          #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
-         call_sig_arg_typs = Any[ typeof(x) for x in tuple($(new_call_sig_args...)) ]
-         call_sig_arg_tuple = tuple(call_sig_arg_typs...)
+         call_sig_arg_tuple = map(typeof, tuple($(new_call_sig_args...)))
          opt_set = $per_site_opt_set
          fs = ($real_func, call_sig_arg_tuple, opt_set)
          func_to_call = get($gofd, fs, nothing)
