@@ -985,7 +985,8 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     lambda.rettype = li.return_type
     body = replaceExprWithDict!(body, dict, AstWalkFunc)
     @dprintln(3, "body = ", body)
-    lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
+    #lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
+    lambda.code =  body
     @dprintln(3, "lambda.slotnames = ", lambda.slotnames)
     @dprintln(3, "lambda.slottypes = ", lambda.slottypes)
     @dprintln(3, "lambda.slotflags = ", lambda.slotflags)
