@@ -238,8 +238,7 @@ function cleanupBodyLabels(body::Array)
   return cleanupBodyLabels(expr).args
 end
 
-function eliminateParamAssigns(ast)
-  linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+function eliminateParamAssigns(linfo, body)
   @dprintln(3,"eliminateParamAssigns: body = ", body)
   # Create a set of the input parameters in LHSVar form.
   input_lhsvars = Set{LHSVar}(CompilerTools.LambdaHandling.getInputParametersAsLHSVar(linfo))
@@ -271,18 +270,17 @@ function eliminateParamAssigns(ast)
   if !isempty(rdict)
       body = CompilerTools.LambdaHandling.replaceExprWithDict!(body, rdict)
       @dprintln(3,"body after replaceExprWithDict! = ", body, " type = ", typeof(body))
-      for i = 1:3
-          push!(new_body, body.args[i])
-      end
-#      append!(new_body, body.args)
-      push!(new_body, Expr(:return, 1.0))
+#      for i = 1:3
+#          push!(new_body, body.args[i])
+#      end
+#      push!(new_body, Expr(:return, 1.0))
+      append!(new_body, body.args)
       body.args = new_body
       @dprintln(3,"eliminateParamAssigns: final body = ", body)
       @dprintln(3,"eliminateParamAssigns: linfo = ", linfo)
-      ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(linfo, body)
   end
 
-  return ast
+  return linfo, body
 end
 
 if VERSION > v"0.5.0-dev+3260"
@@ -316,24 +314,24 @@ function setCode(func, arg_tuple, ast)
 #  @dprintln(2, "setCode fields of def.specializations.func")
 #  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-#  ast = eliminateParamAssigns(ast)
-  new_body = deepcopy(CompilerTools.LambdaHandling.getBody(ast))
+  linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+  new_body = deepcopy(body)
+  linfo, new_body = eliminateParamAssigns(linfo, new_body)
   @dprintln(3, "new_body = ", new_body, " type = ", typeof(new_body))
   new_body = CompilerTools.AstWalker.AstWalk(new_body, invoke_to_call, nothing)
   @dprintln(3, "new_body after transforming invoke back to call = ", new_body)
   #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   
   #ast.code = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
-  if isa(def.specializations, Array)
-    def.specializations = []
-  else
-    def.specializations = nothing
-  end
+  def.specializations = nothing
   #def.specializations.func = ast
   #def.specializations.func.def = def
+  ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(linfo, new_body)
+#  ast.code = new_body.args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
   def.lambda_template = ast # def.specializations.func
+  @dprintln(2, ast)
 
-  ast.code = new_body.args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
+  #throw(string("stop here"))
   #ast.inferred = true
   #@dprintln(2, printExprAst(ast))
   precompile(func, arg_tuple)
