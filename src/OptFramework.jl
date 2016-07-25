@@ -283,22 +283,30 @@ function eliminateParamAssigns(linfo, body)
   return linfo, body
 end
 
+function cleanupFunction(linfo, body)
+  linfo, new_body = eliminateParamAssigns(linfo, body)
+  @dprintln(3, "new_body = ", new_body, " type = ", typeof(new_body))
+  new_body = CompilerTools.AstWalker.AstWalk(new_body, invoke_to_call, nothing)
+  @dprintln(3, "new_body after transforming invoke back to call = ", new_body)
+  new_body = cleanupBodyLabels(new_body)
+  @dprintln(3, "new_body after label cleanup = ", new_body)
+  #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
+  return linfo, new_body
+end
+
 if VERSION > v"0.5.0-dev+3260"
 """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
 """
-function tfuncPresent(func, tt)
-  code_typed(func, tt)
-end
-
 function setCode(func, arg_tuple, ast)
   assert(isfunctionhead(ast))
-  tfuncPresent(func, arg_tuple)
+  #tfuncPresent(func, arg_tuple)
   @dprintln(2, "setCode fields of ast")
 #  CompilerTools.Helper.print_by_field(ast)
   @dprintln(2, "setCode fields of ast.def")
 #  CompilerTools.Helper.print_by_field(ast.def)
 
+  info = code_typed(func, arg_tuple)[1]
   meth_list = methods(func, arg_tuple).ms
   @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list), " len = ", length(meth_list))
   def = meth_list[1]
@@ -314,21 +322,15 @@ function setCode(func, arg_tuple, ast)
 #  @dprintln(2, "setCode fields of def.specializations.func")
 #  CompilerTools.Helper.print_by_field(def.tfunc.func)
 
-  linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
-  new_body = deepcopy(body)
-  linfo, new_body = eliminateParamAssigns(linfo, new_body)
-  @dprintln(3, "new_body = ", new_body, " type = ", typeof(new_body))
-  new_body = CompilerTools.AstWalker.AstWalk(new_body, invoke_to_call, nothing)
-  @dprintln(3, "new_body after transforming invoke back to call = ", new_body)
-  #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
-  
   #ast.code = deepcopy(CompilerTools.LambdaHandling.getBody(ast).args)
   def.specializations = nothing
   #def.specializations.func = ast
   #def.specializations.func.def = def
-  ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(linfo, new_body)
 #  ast.code = new_body.args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
   def.lambda_template = ast # def.specializations.func
+  ast.slotnames[1] = info.slotnames[1]
+  ast.slottypes[1] = info.slottypes[1]
+  ast.slotflags[1] = info.slotflags[1]
   @dprintln(2, ast)
 
   #throw(string("stop here"))
@@ -440,8 +442,9 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
     lvi = cur_ast[1]
     body = cur_ast[2]
     @dprintln(3,"After last optimization pass, got Tuple of LambdaVarInfo and Expr with head = ", body.head)
-    ast = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
-    ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(ast[1], ast[2])
+    linfo, body = convertCodeToLevel(cur_ast, call_sig_arg_tuple, cur_level, PASS_TYPED, new_func)
+    linfo, body = cleanupFunction(linfo, body)
+    ast = CompilerTools.LambdaHandling.LambdaVarInfoToLambda(linfo, body)
     assert(isfunctionhead(ast))
     @dprintln(3,"Last opt pass after converting to typed AST.\n", CompilerTools.LambdaHandling.getBody(ast))
     setCode(new_func, call_sig_arg_tuple, ast)
