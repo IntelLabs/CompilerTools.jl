@@ -181,12 +181,18 @@ function removeDupLabels(stmts)
 
   push!(ret, stmts[1])
   last_is_label = false
+  last_label = -1
+  labelMap = Dict{Int,Int}()
+  
   for i = 2:length(stmts)
     if isa(stmts[i], LabelNode)
       if last_is_label
+         labelMap[stmts[i].label] = last_label
          continue
       else
          last_is_label = true
+         last_label = stmts[i].label
+         labelMap[last_label] = last_label
       end
     elseif isa(stmts[i], LineNumberNode)
     else
@@ -196,7 +202,21 @@ function removeDupLabels(stmts)
     #push!(ret, LineNumberNode(i))
   end
 
+  updateBodyWithLabelMap!(ret, labelMap)
+
   ret
+end
+
+function updateBodyWithLabelMap!(body::Array{Any,1}, labelMap :: Dict{Int,Int})
+  for i=1:length(body)
+    if isa(body[i], LabelNode)
+      body[i] = LabelNode(labelMap[body[i].label])
+    elseif isa(body[i], GotoNode) 
+      body[i] = GotoNode(labelMap[body[i].label])
+    elseif isa(body[i], Expr) && (body[i].head === :gotoifnot)
+      body[i].args[2] = labelMap[body[i].args[2]]
+    end
+  end
 end
 
 """
@@ -209,15 +229,7 @@ function updateLabels!(body::Array{Any,1}, base=0)
       labelMap[body[i].label] = base + i
     end
   end
-  for i=1:length(body)
-    if isa(body[i], LabelNode)
-      body[i] = LabelNode(labelMap[body[i].label])
-    elseif isa(body[i], GotoNode) 
-      body[i] = GotoNode(labelMap[body[i].label])
-    elseif isa(body[i], Expr) && (body[i].head === :gotoifnot)
-        body[i].args[2] = labelMap[body[i].args[2]]
-    end
-  end
+  updateBodyWithLabelMap!(body, labelMap)
   return base + length(body)
 end
 
@@ -226,8 +238,13 @@ Clean up the labels in AST by renaming them, and removing duplicates.
 """
 function cleanupBodyLabels(expr::Expr)
   @assert (expr.head == :body)
+  @dprintln(3, "cleanupBodyLabels ", expr)
   body = removeDupLabels(expr.args)
+  expr.args = body
+  @dprintln(3, "cleanupBodyLabels after remove dup labels ", expr)
   max_label = updateLabels!(body)
+  expr.args = body
+  @dprintln(3, "cleanupBodyLabels after updateLabels! ", expr)
   expr.args = body
   return expr
 end
@@ -559,7 +576,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          #func_to_call($(new_call_sig_args...))
          $retexpr
         end)
-  @dprintln(4,"wrapper_ast = ", wrapper_ast)
+  @dprintln(4,"wrapper_ast = ", wrapper_ast, " type = ", typeof(wrapper_ast))
   gOptFrameworkDict[new_func] = real_func
   return wrapper_ast
 end
