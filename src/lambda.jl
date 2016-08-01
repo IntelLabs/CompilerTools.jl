@@ -966,7 +966,8 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     end
     @dprintln(3, "lambda.nargs = ", lambda.nargs, " nparams = ", nparams)
     lambda.nargs = nparams + 1
-    lambda.ssavaluetypes = Array(Type, nssas)
+    # Julia may try to add a Const to this array during an optimization pass and so this can't be Array of Type.
+    lambda.ssavaluetypes = Array(Any, nssas)
     j = 1
     for i = 1:nssas
       if ssas[i] == nothing
