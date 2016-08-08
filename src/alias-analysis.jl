@@ -57,9 +57,10 @@ type State
   nest_level :: Int
   top_level_idx :: Int
   liveness :: CompilerTools.LivenessAnalysis.BlockLiveness
+  noReAssign :: Bool
 end
 
-init_state(linfo, liveness) = State(linfo, 0, Dict{LHSVar,Int}(), Dict{Int, Set{LHSVar}}(), 0, 0, liveness)
+init_state(linfo, liveness, noReAssign) = State(linfo, 0, Dict{LHSVar,Int}(), Dict{Int, Set{LHSVar}}(), 0, 0, liveness, noReAssign)
 
 function increaseNestLevel(state)
 state.nest_level = state.nest_level + 1
@@ -170,7 +171,8 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
     # if all vars that have rhs are not alive afterwards
     # then we can safely give v a fresh ID.
     @dprintln(3, "from_assignment rhs after from_expr = ", rhs)
-    if state.nest_level == 0
+    # Optionally allow re-assignment to be considered as non-aliasing when RHS is dead.
+    if state.noReAssign == false && state.nest_level == 0
       tls = CompilerTools.LivenessAnalysis.find_top_number(state.top_level_idx, state.liveness)
       if tls == nothing
         @dprintln(0, "state.liveness = ", state.liveness)
@@ -410,8 +412,8 @@ function iselementarytype(typ::Any)
   return false
 end
 
-function from_lambda(LambdaVarInfo :: LambdaVarInfo, body, liveness, callback=not_handled, cbdata :: ANY = nothing)
-  local state = init_state(LambdaVarInfo, liveness)
+function from_lambda(LambdaVarInfo :: LambdaVarInfo, body, liveness, callback=not_handled, cbdata :: ANY = nothing; noReAssign = false)
+  local state = init_state(LambdaVarInfo, liveness, noReAssign)
   #@dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
   for v in getLocalVariables(LambdaVarInfo)
     vtyp = getType(v, LambdaVarInfo)
@@ -445,9 +447,9 @@ function from_lambda(LambdaVarInfo :: LambdaVarInfo, body, liveness, callback=no
   return unique
 end
 
-function from_lambda(expr, liveness, callback=not_handled, cbdata :: ANY = nothing)
+function from_lambda(expr, liveness, callback=not_handled, cbdata :: ANY = nothing; noReAssign = false)
   LambdaVarInfo, body = lambdaToLambdaVarInfo(expr)
-  from_lambda(LambdaVarInfo, body, liveness, callback, cbdata)
+  from_lambda(LambdaVarInfo, body, liveness, callback, cbdata; noReAssign = noReAssign)
 end
 
 end
