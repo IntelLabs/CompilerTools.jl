@@ -270,7 +270,7 @@ function from_expr_helper(ast::Expr,
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
     elseif head == :(.)
         args = from_exprs(args, depth+1, callback, cbdata, top_level_number, read)
-    elseif head == :(=)
+    elseif head == :(=) || head == :(.=)
         args = from_assignment(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :(::)
         assert(length(args) == 2)
