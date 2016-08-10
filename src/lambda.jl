@@ -840,7 +840,11 @@ and the inferred return type of the input method.
 """
 function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
   types::Any = to_tuple_type(Tuple{typs...})
-  (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
+  if optimize
+    (tree, ty) = Core.Inference.typeinf(lambda, types, Core.svec(), lambda, true, true)
+  else
+    (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = false)
+  end
   lambda.ast = tree
   return lambda, ty
 end
