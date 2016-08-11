@@ -53,15 +53,9 @@ ast_lv_1 = code_typed(test_liveness_1, (Int64,Int64,Int64))[1]
 #CompilerTools.LambdaHandling.set_debug_level(3)
 lives_1 = CompilerTools.LivenessAnalysis.from_lambda(ast_lv_1)
 
-
+# The AST changes too frequently to be testing anything but perhaps the starting block and even that is suspect.
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].live_in) == 3
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].live_out) == 7
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].def) == 7
 @test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-1]].use) == 3
 
-#@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_in) == 7
-#@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].live_out) == 7
-#@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].def) == 5
-#@test length(lives_1.basic_blocks[lives_1.cfg.basic_blocks[-4]].use) == 7
-
-@test length(lives_1.cfg.basic_blocks) == 10
