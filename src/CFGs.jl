@@ -653,29 +653,64 @@ end
 """
 Determine a valid and reasonable order of basic blocks in which to reconstruct a :body Expr.
 Also useful for printing in a reasonable order.
+-1 (the starting block should always be first)
+-2 (the exit block should always come last)
+If there is a block that fallsthrough to return then that block should come next to last.
 """
 function getBbBodyOrder(bl :: CFG)
-    res = Int64[]
+    res  = Int64[]
+    rev  = Int64[CFG_EXIT_BLOCK]
+    used = Set{Int64}(CFG_EXIT_BLOCK)
+
+    found = true
+    while found == true
+        found = false
+        last = rev[end]
+        last_bb = bl.basic_blocks[last]
+
+        @dprintln(3, "getBbBodyOrder reverse fallthrough ", last, " ", last_bb, " ", rev, " ", used)
+        for pred in last_bb.preds
+            @dprintln(3, "pred = ", pred)
+            if pred.fallthrough_succ != nothing
+                @dprintln(3, "fallthrough")
+                if pred.fallthrough_succ.label == last
+                    @dprintln(3, "will add")
+                    push!(rev, pred.label)
+                    push!(used, pred.label)
+                    found = true
+                end
+            end
+        end
+    end
+
+    total_blocks = length(bl.depth_first_numbering)
 
     # A reasonable order is just the depth first numbering but just using this can result in fallthrough nodes
     # not coming right after their predecessor.
-    for i = 1:length(bl.depth_first_numbering)
+    for i = 1:total_blocks
       cur = bl.depth_first_numbering[i]
+      @dprintln(3, "getBbBodyOrder forward ", cur, " ", rev, " ", used, " ", res)
       # If the next block via the depth_first_number is not already in the body order do the following.
       # This can happen if a fallthrough successor is added before its normal place in depth first numbering.
-      if !in(cur, res)
-        push!(res, cur)                # Add this basic block to the body order.
+      if !in(cur, used)
         cur_bb = bl.basic_blocks[cur]  # Get the BasicBlock given the current block's index.
+        @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
+        push!(res, cur)                # Add this basic block to the body order.
+        push!(used, cur)
         # If the cur basic block has a fallthrough successor then make sure it comes next
         # by adding it to the body order here.
         while cur_bb.fallthrough_succ != nothing
           fallthrough_id = cur_bb.fallthrough_succ.label
           assert(!in(fallthrough_id, res))
           push!(res, fallthrough_id) 
+          push!(used, fallthrough_id)
           cur_bb = cur_bb.fallthrough_succ
+          @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
         end
       end
     end
+
+    append!(res, reverse(rev))
 
     return res
 end
@@ -709,6 +744,8 @@ function createFunctionBody(bl :: CFG)
         end
       end
     end
+
+    @dprintln(3,"createFunctionBody res = ", res)
 
     return res
 end
@@ -902,8 +939,9 @@ One such simplification that is necessary for depth first numbering not to fail 
 Other simplifications can be seen commented out below and while they may make the graph nicer to look at they
 don't really add anything in terms of functionality.
 """
-function removeUselessBlocks(bbs :: Dict{Int,BasicBlock})
-  found_change = true
+function removeUselessBlocks(bbs :: Dict{Int,BasicBlock}, opt)
+  @dprintln(3, "removeUselessBlocks bbs = ", bbs, " opt = ", opt)
+  found_change = opt
 
   # Eliminate dead blocks by finding the set of reachable blocks and eliminating the others.
   reachable = Set([-1])
@@ -1013,22 +1051,22 @@ end
 """
 The main entry point to construct a control-flow graph.
 """
-function from_lambda(lambda::LambdaInfo)
+function from_lambda(lambda::LambdaInfo; opt=true)
   @dprintln(3,"from_lambda for LambdaInfo")
   body = CompilerTools.LambdaHandling.getBody(lambda)
-  from_expr(body, not_handled, nothing)
+  from_expr(body, not_handled, nothing, opt)
 end
 
-function from_lambda(body::Expr)
+function from_lambda(body::Expr; opt=true)
   @dprintln(3,"from_lambda for LambdaVarInfo and body")
-  from_expr(body, not_handled, nothing)
+  from_expr(body, not_handled, nothing, opt)
 end
 
 """
 Another entry point to construct a control-flow graph but one that allows you to pass a callback and some opaque object
 so that non-standard node types can be processed.
 """
-function from_expr(ast::Any, callback, cbdata)
+function from_expr(ast::Any, callback, cbdata, opt)
   @dprintln(2,"from_expr Body")
   @dprintln(3,ast)
   live_res = expr_state()
@@ -1038,7 +1076,7 @@ function from_expr(ast::Any, callback, cbdata)
   connect_finish(live_res)
 # I simplifed removeUselessBlocks to just get rid of dead blocks (i.e., no predecessor)
   @dprintln(3,"before removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
-  removeUselessBlocks(live_res.basic_blocks)
+  removeUselessBlocks(live_res.basic_blocks, opt)
   @dprintln(3,"after removeUselessBlocks ", length(live_res.basic_blocks), " ", live_res.basic_blocks)
 
   dfn = compute_dfn(live_res.basic_blocks)   # Compute the block depth first numbering.
