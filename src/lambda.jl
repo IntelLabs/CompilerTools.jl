@@ -758,8 +758,11 @@ not change, other fields are merged. The GenSyms in "inner" will need to adjust
 their indices as a result of this merge. We return a dictionary that maps from
 old GenSym to new GenSym for "inner", which can be used to adjust the body Expr
 of "inner" lambda using "replaceExprWithDict" or "replaceExprWithDict!".
+
+The "extraDesc" can be used to add extra desc flag to all local variables to
+the inner lambda.
 """
-function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
+function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo, extra_desc = 0)
     dict = Dict{LHSVar, Any}()
     @dprintln(3,"outer = ", outer)
     @dprintln(3,"inner = ", inner)
@@ -788,7 +791,7 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo)
                     if isLocalVariable(name, outer) || isEscapingVariable(name, outer)
                         name = gensym(string(name)) 
                     end
-                    dict[toLHSVar(vd)] = addLocalVariable(name, typ, desc, outer)
+                    dict[toLHSVar(vd)] = addLocalVariable(name, typ, desc | extra_desc, outer)
                 end
             end
         end
