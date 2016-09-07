@@ -296,6 +296,8 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         from_lambda(ast, depth, rws, callback, cbdata)
     elseif head == :body
         from_exprs(args, depth+1, rws, callback, cbdata)
+    elseif head == :block || head == :(.)
+        from_exprs(args, depth+1, rws, callback, cbdata)
     elseif head == :(=)
         from_assignment(args, depth, rws, callback, cbdata)
     elseif head == :return
@@ -306,6 +308,9 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     elseif head == Symbol("'")
         from_exprs(args, depth, rws, callback, cbdata)
     elseif head == :line
+        # skip
+    elseif head == :copy
+        @dprintln(3,"RWS copyast type")
         # skip
     elseif head == :copyast
         @dprintln(3,"RWS copyast type")
@@ -325,11 +330,18 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     elseif head == :(::)
         @dprintln(2,"RWS ::")
         from_coloncolon(args, depth, rws, callback, cbdata)
-    elseif head == :new
+    elseif head == :getindex || head == :new || head == :type_goto || head == :ccall 
         from_exprs(args, depth+1, rws, callback, cbdata)
     elseif head == :gotoifnot
         from_expr(args[1], depth, rws, callback, cbdata)
-    elseif head == :meta || head == :inbounds || head == :static_parameter
+    elseif head == :meta || head == :inbounds || head == :static_parameter || 
+           head == :enter || head == :leave || head == :curly || head == :the_exception ||
+           head == :& || head == :static_typeof || head == :(->) || head == :(&&) ||
+           head == :(||) || head == :break || head == :continue || head == Symbol("'") ||
+           head == :(...) || head == :parameters || head == :kw || head == :macrocall ||
+           head == :simdloop || head == :quote || head == :local || head == :let || 
+           head == :while || head == :comparison || head == :if || 
+           head in Set([:(+=), :(/=), :(*=), :(-=)]) || head == :for || head == :const
         # skip
     else
         #println("from_expr: unknown Expr head :", head)
