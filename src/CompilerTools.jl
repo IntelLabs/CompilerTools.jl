@@ -39,6 +39,7 @@ include("OptFramework.jl")
 include("udchains.jl")
 include("loops.jl")
 include("alias-analysis.jl")
+include("tdependence.jl")
 
 importall .OptFramework
 export @acc, @noacc

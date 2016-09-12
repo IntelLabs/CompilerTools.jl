@@ -46,6 +46,8 @@ end
 
 ast_lv_2 = code_typed(test_liveness_2, (Int64,Int64,Int64))[1]
 
+linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast_lv_2)
+
 #CompilerTools.CFGs.set_debug_level(4)
 #CompilerTools.LivenessAnalysis.set_debug_level(3)
 #CompilerTools.LambdaHandling.set_debug_level(3)
@@ -73,3 +75,11 @@ println( length(lives_2.basic_blocks[lives_2.cfg.basic_blocks[14]].use))
 #@test length(lives_2.basic_blocks[lives_2.cfg.basic_blocks[14]].use) == 6
 
 #@test length(lives_2.cfg.basic_blocks) == 26
+
+deps = CompilerTools.TransitiveDependence.computeDependencies(lives_2)
+
+#for entry in deps
+#    vd = CompilerTools.LambdaHandling.getVarDef(entry[1], linfo)
+#    println(entry[1], " ", entry[2], " ", vd.name)
+#end
+
