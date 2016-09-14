@@ -25,12 +25,17 @@ THE POSSIBILITY OF SUCH DAMAGE.
 
 module TransitiveDependence
 
+import ..DebugMsg
+DebugMsg.init()
+
 using CompilerTools
 using CompilerTools.LivenessAnalysis
 using CompilerTools.Helper
 
 function computeDependencies(bl :: CompilerTools.LivenessAnalysis.BlockLiveness)
     change = true
+
+    @dprintln(3,"computeDependencies bl = ", bl)
 
     ret = Dict{LHSVar, Set{LHSVar}}()
 
