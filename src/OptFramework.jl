@@ -307,11 +307,16 @@ function cleanupFunction(linfo, body)
   @dprintln(3, "new_body after transforming invoke back to call = ", new_body)
   new_body = cleanupBodyLabels(new_body)
   @dprintln(3, "new_body after label cleanup = ", new_body)
+  new_body = CompilerTools.AstWalker.AstWalk(new_body, eliminate_typing, nothing)
+  @dprintln(3, "new_body after eliminating typing = ", new_body)
   #new_body_args = CompilerTools.LambdaHandling.getBody(ast).args
   return linfo, new_body
 end
 
 if VERSION > v"0.5.0-dev+3260"
+
+serialize_ast = false
+
 """
 Makes sure that a newly created function is correctly present in the internal Julia method table.
 """
@@ -345,15 +350,31 @@ function setCode(func, arg_tuple, ast)
   #def.specializations.func.def = def
 #  ast.code = new_body.args # ccall(:jl_compress_ast, Any, (Any,Any), ast, new_body_args)
   def.lambda_template = ast # def.specializations.func
-  ast.slotnames[1] = info.slotnames[1]
-  ast.slottypes[1] = info.slottypes[1]
-  ast.slotflags[1] = info.slotflags[1]
-  @dprintln(2, ast)
+#  ast.slotnames[1] = info.slotnames[1]
+#  ast.slottypes[1] = info.slottypes[1]
+#  ast.slotflags[1] = info.slotflags[1]
+
+  if serialize_ast
+    (tn, sfile) = mktemp()
+    serialize(sfile, ast)
+    close(sfile)
+    println("setCode for ", func, " is ", tn)
+  end
+
+  for i = 1:length(ast.slottypes)
+    ast.slottypes[i] = Any
+  end
+  @dprintln(2, "setCode ast before precompile = ", ast)
 
   #throw(string("stop here"))
+  ast.inferred = false
   #ast.inferred = true
   #@dprintln(2, printExprAst(ast))
   precompile(func, arg_tuple)
+
+#  info = code_typed(func, arg_tuple)[1]
+#  CompilerTools.Helper.print_by_field(info)
+  
   @dprintln(2, "setCode fields of def after")
 #  CompilerTools.Helper.print_by_field(def)
   @dprintln(2, "setCode fields of def.specializations.func after")
@@ -590,12 +611,42 @@ type opt_calls_insert_trampoline_state
   end
 end
 
-function invoke_to_call(x, state, top_level_number, is_top_level, read)
-  if isa(x, Expr)
-    if x.head == :invoke
-      return TypedExpr(x.typ, :call, x.args[2:end]...)
+function invoke_to_call(x :: Expr, state, top_level_number, is_top_level, read)
+  if x.head == :invoke || x.head == :call
+    local fun  = getCallFunction(x)
+    local args = getCallArguments(x)
+
+    if isa(fun, GlobalRef)
+      if is(fun.mod, Core.Intrinsics)
+        return TypedExpr(x.typ, :call, GlobalRef(Base, fun.name), args...)
+      end
     end
   end
+
+  if x.head == :invoke
+    return TypedExpr(x.typ, :call, x.args[2:end]...)
+  end
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function invoke_to_call(x, state, top_level_number, is_top_level, read)
+  return CompilerTools.AstWalker.ASTWALK_RECURSE
+end
+
+function eliminate_typing(x :: TypedVar, state, top_level_number, is_top_level, read)
+  return toLHSVar(x)
+end
+
+function eliminate_typing(x :: Expr, state, top_level_number, is_top_level, read)
+  for i = 1:length(x.args)
+    x.args[i] = CompilerTools.AstWalker.AstWalk(x.args[i], eliminate_typing, nothing)
+  end
+
+  x.typ = Any
+  return x
+end
+
+function eliminate_typing(x, state, top_level_number, is_top_level, read)
   return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 

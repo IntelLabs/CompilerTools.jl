@@ -991,6 +991,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
       lambda.ssavaluetypes[i] = vd.typ
     end
     lambda.rettype = li.return_type
+    lambda.inferred = true
     body = replaceExprWithDict!(body, dict, AstWalkFunc)
     @dprintln(3, "body = ", body)
     #lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
@@ -1187,6 +1188,7 @@ function count_variables(x::RHSVar,
                        top_level_number,
                        is_top_level,
                        read)
+    @dprintln(3,"count_variables for RHSVar: ", x)
     push!(state.used, toLHSVar(x))
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
@@ -1196,6 +1198,7 @@ function count_variables(x::ANY,
                        top_level_number,
                        is_top_level,
                        read)
+    @dprintln(3,"count_variables for: ", x)
     return CompilerTools.AstWalker.ASTWALK_RECURSE
 end
 
