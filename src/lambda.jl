@@ -41,7 +41,7 @@ export getDesc, setDesc, getType, setType, getReturnType, setReturnType, getVarD
 export isInputParameter, isVarArgParameter, getInputParameters, setInputParameters, getInputParametersAsExpr
 export isEscapingVariable, getEscapingVariables, addEscapingVariable, setEscapingVariable, unsetEscapingVariable
 export isVariableDefined, isLocalVariable, getLocalVariables, getLocalVariablesNoParam, addLocalVariable, addTempVariable
-export getBody, getReturnType, setReturnType, getInputParametersAsLHSVar
+export getBody, getInputParametersAsLHSVar
 export lambdaToLambdaVarInfo, LambdaVarInfoToLambda, lambdaTypeinf, prependStatements
 export getRefParams, getArrayParams, updateAssignedDesc, getEscapingVariablesAsLHSVar
 export getStaticParameterValue
@@ -818,6 +818,11 @@ Returns the type of the lambda as stored in LambdaVarInfo "li" and as extracted 
 """
 function getReturnType(li :: LambdaVarInfo)
   return li.return_type
+end
+
+function getReturnType(lambda)
+  (linfo, body) = lambdaToLambdaVarInfo(lambda)
+  return linfo.return_type
 end
 
 """
