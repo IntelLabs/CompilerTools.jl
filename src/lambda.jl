@@ -1103,10 +1103,12 @@ function getBody(lambda :: Expr, rettype = nothing)
   return body
 end
 
-function getBody(lambda :: Array{Any,1}, rettype)
+function getBody(lambda :: Array{Any,1}, rettype = nothing)
   body = Expr(:body)
   body.args = lambda
-  body.typ = rettype
+  if rettype != nothing
+    body.typ = rettype
+  end
   return body
 end
 
