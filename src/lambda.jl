@@ -685,6 +685,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
         new_dict = Dict{LHSVar,Any}()
         for (k,v) in dict
             if !isLocalVariable(k, linfo) && isEscapingVariable(k, linfo)
+              if isa(v, RHSVar) 
                 new_v = toLHSVar(v,linfo)
                 if isa(new_v, Symbol)
                     if !isLocalVariable(new_v, linfo)
@@ -700,6 +701,11 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
                     push!(new_dict, k, v)
                     @dprintln(3, "replaceExprWithDict! nested lambda replace ", k, " with ", v)
                 end
+              elseif isa(v, Number)
+                push!(new_dict, k, v)
+              else
+                error("replaceExprWithDict! is not set up to replace ecaping variables with value ", v, " of type ", typeof(v))
+              end
             else
                 @dprintln(3, "replaceExprWithDict! nested lambda skip replacing ", k, " because it is not escaping")
             end
