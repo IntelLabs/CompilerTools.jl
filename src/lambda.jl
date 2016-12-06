@@ -692,15 +692,16 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, outer_linf
           for (k,v) in dict
             kname = lookupVariableName(k, outer_linfo)
             if kname != emptyVarName && !isLocalVariable(kname, linfo) && isEscapingVariable(kname, linfo)
-              if isa(v, RHSVar) 
+              new_k = toLHSVar(kname, linfo)
+              if isa(v, RHSVar)
                 vname = lookupVariableName(v, outer_linfo)
                 if isa(vname, Symbol) && vname != emptyVarName
                     if !isLocalVariable(vname, linfo)
                         @dprintln(3, "replaceExprWithDict! nested lambda replace ", kname, " with ", vname)
-                        new_k = toLHSVar(kname, linfo)
                         typ = getType(new_k, linfo)
                         desc = getDesc(new_k, linfo)
-                        new_dict[new_k] = addEscapingVariable(new_v, typ, desc, linfo)
+                        new_v = isEscapingVariable(vname, linfo) ? toLHSVar(vname,linfo) : addEscapingVariable(vname, typ, desc, linfo)
+                        new_dict[new_k] = new_v
                     else
                         error("replaceExprWithDict! nested lambda cannot replace ", kname, " with ", vname, " which already exists as an inner local variable")
                     end
@@ -708,7 +709,7 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, outer_linf
                     error("replaceExprWithDict! nested lambda cannot replace ", kname, " with ", v, " which cannot be made an escaping variable")
                 end
               elseif isa(v, Number)
-                push!(new_dict, k, v)
+                new_dict[new_k] = v
               else
                 error("replaceExprWithDict! is not set up to replace ecaping variables with value ", v, " of type ", typeof(v))
               end
