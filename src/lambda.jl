@@ -673,9 +673,11 @@ end
 Replace the symbols in an expression "expr" with those defined in the
 dictionary "dict".  Return the result expression, which may share part of the
 input expression, and the input "expr" may be modified inplace and shall not be used
-after this call.
+after this call. "outer_linfo" is used to lookup variable names in case they are
+used by inner lambdas as escaping variables, and can be nothing if doing a blind
+replacement.
 """
-function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFunc = nothing)
+function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, outer_linfo :: LambdaVarInfo = nothing, AstWalkFunc = nothing)
   function update_sym(expr :: LambdaInfo, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     expr
   end
@@ -683,23 +685,27 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
     if isfunctionhead(expr)
         linfo, body = lambdaToLambdaVarInfo(expr)
         new_dict = Dict{LHSVar,Any}()
-        for (k,v) in dict
-            if !isLocalVariable(k, linfo) && isEscapingVariable(k, linfo)
+        if outer_linfo == nothing
+          # skip replacing inner lambda when we cannot lookup variable names in outer_linfo
+          return expr
+        else
+          for (k,v) in dict
+            kname = lookupVariableName(k, outer_linfo)
+            if kname != emptyVarName && !isLocalVariable(kname, linfo) && isEscapingVariable(kname, linfo)
               if isa(v, RHSVar) 
-                new_v = toLHSVar(v,linfo)
-                if isa(new_v, Symbol)
-                    if !isLocalVariable(new_v, linfo)
-                        @dprintln(3, "replaceExprWithDict! nested lambda replace ", k, " with ", v)
-                        new_dict[k] = v
-                        typ = getType(k, linfo)
-                        desc = getDesc(k, linfo)
-                        addEscapingVariable(new_v, typ, desc, linfo)
+                vname = lookupVariableName(v, outer_linfo)
+                if isa(vname, Symbol) && vname != emptyVarName
+                    if !isLocalVariable(vname, linfo)
+                        @dprintln(3, "replaceExprWithDict! nested lambda replace ", kname, " with ", vname)
+                        new_k = toLHSVar(kname, linfo)
+                        typ = getType(new_k, linfo)
+                        desc = getDesc(new_k, linfo)
+                        new_dict[new_k] = addEscapingVariable(new_v, typ, desc, linfo)
                     else
-                        @dprintln(3, "replaceExprWithDict! nested lambda cannot replace ", k, " with ", v, " which is not Symbol")
+                        error("replaceExprWithDict! nested lambda cannot replace ", kname, " with ", vname, " which already exists as an inner local variable")
                     end
                 else
-                    push!(new_dict, k, v)
-                    @dprintln(3, "replaceExprWithDict! nested lambda replace ", k, " with ", v)
+                    error("replaceExprWithDict! nested lambda cannot replace ", kname, " with ", v, " which cannot be made an escaping variable")
                 end
               elseif isa(v, Number)
                 push!(new_dict, k, v)
@@ -709,8 +715,9 @@ function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, AstWalkFun
             else
                 @dprintln(3, "replaceExprWithDict! nested lambda skip replacing ", k, " because it is not escaping")
             end
+          end
         end
-        replaceExprWithDict!(body, new_dict, AstWalkFunc)
+        replaceExprWithDict!(body, new_dict, linfo, AstWalkFunc)
         return expr
     elseif isa(expr, LHSVar)
       if haskey(dict, expr)
@@ -1003,7 +1010,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     end
     lambda.rettype = li.return_type
     lambda.inferred = true
-    body = replaceExprWithDict!(body, dict, AstWalkFunc)
+    body = replaceExprWithDict!(body, dict, nothing, AstWalkFunc)
     @dprintln(3, "body = ", body)
     #lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
     lambda.code =  body
@@ -1250,7 +1257,7 @@ function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing
   li.var_defs = var_defs
   dict = consolidateLambdaVarInfo!(li)
   @dprintln(3,"dict = ", dict)
-  body = replaceExprWithDict!(body, dict, AstWalkFunc)
+  body = replaceExprWithDict!(body, dict, li, AstWalkFunc)
   @dprintln(3,"updated body = ", body)
   return body
 end

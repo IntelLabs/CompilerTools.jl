@@ -285,7 +285,7 @@ function eliminateParamAssigns(linfo, body)
   @dprintln(3,"new_body = ", new_body)
 
   if !isempty(rdict)
-      body = CompilerTools.LambdaHandling.replaceExprWithDict!(body, rdict)
+      body = CompilerTools.LambdaHandling.replaceExprWithDict!(body, rdict, linfo)
       @dprintln(3,"body after replaceExprWithDict! = ", body, " type = ", typeof(body))
 #      for i = 1:3
 #          push!(new_body, body.args[i])
