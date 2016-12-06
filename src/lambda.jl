@@ -677,7 +677,7 @@ after this call. "outer_linfo" is used to lookup variable names in case they are
 used by inner lambdas as escaping variables, and can be nothing if doing a blind
 replacement.
 """
-function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, outer_linfo :: LambdaVarInfo = nothing, AstWalkFunc = nothing)
+function replaceExprWithDict!(expr :: ANY, dict :: Dict{LHSVar, Any}, outer_linfo::Union{LambdaVarInfo,Void} = nothing, AstWalkFunc = nothing)
   function update_sym(expr :: LambdaInfo, dict, top_level_number :: Int64, is_top_level :: Bool, read :: Bool)
     expr
   end
