@@ -292,6 +292,11 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     local args = ast.args
     local typ  = ast.typ
     @dprintln(2,head, " ", args)
+
+    if !tryCallback(ast, callback, cbdata, depth, rws)
+        return rws
+    end
+
     if head == :lambda
         from_lambda(ast, depth, rws, callback, cbdata)
     elseif head == :body
@@ -345,9 +350,9 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         # skip
     else
         #println("from_expr: unknown Expr head :", head)
-        if tryCallback(ast, callback, cbdata, depth, rws)
+#        if tryCallback(ast, callback, cbdata, depth, rws)
             throw(string("from_expr: unknown Expr head :", head))
-        end
+#        end
     end
 
     return rws
