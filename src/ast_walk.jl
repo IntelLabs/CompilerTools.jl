@@ -448,7 +448,17 @@ function from_expr_helper(ast::Union{RHSVar,TopNode,LHSVar,Symbol},
     return ast
 end
 
-function from_expr_helper(ast::Union{LineNumberNode,LabelNode,GotoNode,DataType,AbstractString,NewvarNode,Void,Function,Module},
+function from_expr_helper(ast::NewvarNode,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+    return NewvarNode(from_expr(ast.slot, depth, callback, cbdata, top_level_number, false, read))
+end
+
+function from_expr_helper(ast::Union{LineNumberNode,LabelNode,GotoNode,DataType,AbstractString,Void,Function,Module},
                           depth,
                           callback,
                           cbdata::ANY,
