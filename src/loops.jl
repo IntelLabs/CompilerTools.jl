@@ -39,12 +39,14 @@ A loop has a back_edge which is a block that has "head" as one of its successors
 It also contains "members" which is a set of basic block labels of all the basic blocks that are a part of this loop.
 """
 type Loop
-    head :: Int
-    back_edge :: Int
-    members :: Set{Int}
+    head :: Int           # The head basic block ID of the loop.
+    back_edge :: Int      # The end of the loop that branches back to the head.
+    members :: Set{Int}   # All the basic blocks that are part of the loop.
+    exits :: Set{Int}     # Blocks outside the loop that are successors to some blocks inside the loop.
+    blocks_that_exit :: Set{Int} # The blocks inside the loop that have succesors outside the loop.
 
-    function Loop(h :: Int, b :: Int, m :: Set{Int})
-        new(h, b, m)
+    function Loop(h :: Int, b :: Int, m :: Set{Int}, ex :: Set{Int}, be :: Set{Int})
+        new(h, b, m, ex, be)
     end
 end
 
@@ -230,6 +232,27 @@ function findLoopMembers(head, back_edge, bbs)
 end
 
 """
+Scans all loop members to find their successors which themselves are not loop members.
+This computes the set of exit blocks.
+"""
+function findExitBlocks(members, bl)
+    blocks_that_exit = Set{Int}()
+    exits = Set{Int}()
+
+    for lm in members
+        mbb = bl.basic_blocks[lm]
+        for s in mbb.succs
+            if !in(s.label, members)
+                push!(exits, s.label)
+                push!(blocks_that_exit, lm)
+            end
+        end
+    end
+
+    return (exits, blocks_that_exit)
+end
+
+"""
 Find the loops in a CFGs.CFG in "bl".
 """
 function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)
@@ -256,7 +279,7 @@ function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)
                 # Identify the members of the loop.
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 @dprintln(3,"loop members = ", members, " type = ", typeof(members))
-                new_loop = Loop(succ_id, bb_index, members)
+                new_loop = Loop(succ_id, bb_index, members, findExitBlocks(members, bl)...)
                 @dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 # Store the Loop information in the array of loops to be returned.
                 push!(loops, new_loop)
