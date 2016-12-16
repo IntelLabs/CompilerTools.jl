@@ -974,6 +974,7 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock}, opt)
     # For each basic block.
     for i in bbs
       bb = i[2]
+      @dprintln(4, "Processing block ", i[1], " ", i[2], " len preds = ", length(bb.preds), " len succs = ", length(bb.succs))
       # If a basic block has only one successor then either it is from a fallthrough or
       # from a GotoNode.  If there is no fallthrough then it has to be a goto.
       # If there is no other "goto N" in the code, in other words, block N has only one predecessor
@@ -996,6 +997,27 @@ function removeUselessBlocks(bbs :: Dict{Int,BasicBlock}, opt)
               delete!(bbs, succ.label)
 
               found_change = true
+              break
+          end
+      end
+      if length(bb.preds) == 1 && length(bb.succs) == 1
+          pred = first(bb.preds)
+          succ = first(bb.succs)
+          @dprintln(4, "pred ", pred, " len preds = ", length(pred.preds), " len succs = ", length(pred.succs))
+          @dprintln(4, "succ ", succ, " len preds = ", length(succ.preds), " len succs = ", length(succ.succs))
+          if length(pred.succs) == 1 && pred.fallthrough_succ == bb && succ.label != CFG_EXIT_BLOCK
+              delete!(pred.succs, bb)   # delete the original successor from the set of successors
+              push!(pred.succs, succ)   # add the new successor to the set of successors
+              pred.fallthrough_succ = bb.fallthrough_succ
+              delete!(succ.preds, bb)
+              push!(succ.preds, pred)
+              append!(pred.statements, bb.statements)
+              @dprintln(3,"Removing block with only one predecessor and successor. ", bb)
+              delete!(bbs, bb.label)
+              found_change = true
+
+              @dprintln(4, "post pred ", pred, " len preds = ", length(pred.preds), " len succs = ", length(pred.succs))
+              @dprintln(4, "post succ ", succ, " len preds = ", length(succ.preds), " len succs = ", length(succ.succs))
               break
           end
       end
@@ -1263,7 +1285,7 @@ function compute_dominators(bl :: CFG)
   count = 0;
   change_found = true
   while(change_found)
-      @dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+      @dprintln(3,"compute_dominators: dom_dict = ", dom_dict)
 
       count = count + 1
       if count > 1000
@@ -1327,7 +1349,7 @@ function compute_inverse_dominators(bl :: CFG)
   count = 0;
   change_found = true
   while(change_found)
-      @dprintln(3,"compute_dom_loops: dom_dict = ", dom_dict)
+      @dprintln(3,"compute_inverse_dominators: dom_dict = ", dom_dict)
 
       count = count + 1
       if count > 1000
