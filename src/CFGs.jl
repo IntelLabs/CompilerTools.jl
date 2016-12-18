@@ -87,6 +87,16 @@ type BasicBlock
     BasicBlock(label) = new(label, Set{BasicBlock}(), Set{BasicBlock}(), nothing, nothing, TopLevelStatement[])
 end
 
+function getNonFallthroughSucc(bb :: BasicBlock)
+    assert(length(bb.succs) <= 2)
+    for s in bb.succs
+        if s != bb.fallthrough_succ
+            return s
+        end
+    end
+    throw(string("Should never get here."))
+end
+
 """
 Adds a top-level statement just encountered during a partial walk of the AST.
 First argument indicates if this statement is a top-level statement.
@@ -302,6 +312,34 @@ function changeEndingLabel(bb, after :: BasicBlock, new_bb :: BasicBlock)
     new_last_stmt = AstWalker.AstWalk(bb.statements[end].expr, update_label, state)
     assert(state.changed)
     bb.statements[end].expr = new_last_stmt
+end
+
+BLOCK_GOTO = 1
+BLOCK_GOTOIFNOT = 2
+BLOCK_FALLTHROUGH = 3
+
+function classifyBlock(bb :: BasicBlock)
+    @dprintln(4,"classifyBlock = ", bb)
+    if isempty(bb.statements)
+        @dprintln(4,"classifyBlock block is empty so returning BLOCK_FALLTHROUGH")
+        return BLOCK_FALLTHROUGH
+    end
+
+    last_stmt = bb.statements[end].expr
+    @dprintln(4,"classifyBlock last = ", last_stmt, " ", typeof(last_stmt))
+    if isa(last_stmt, GotoNode) 
+        @dprintln(4,"classifyBlock BLOCK_GOTO")
+        return BLOCK_GOTO
+    elseif isa(last_stmt, Expr) && last_stmt.head == :gotoifnot
+        @dprintln(4,"classifyBlock BLOCK_GOTOIFNOT")
+        return BLOCK_GOTOIFNOT
+    elseif isa(last_stmt, Expr) && last_stmt.head == :return
+        @dprintln(4,"classifyBlock BLOCK_GOTO for return")
+        return BLOCK_GOTO
+    else
+        @dprintln(4,"classifyBlock BLOCK_FALLTHROUGH")
+        return BLOCK_FALLTHROUGH
+    end
 end
 
 """
@@ -684,6 +722,7 @@ function getBbBodyOrder(bl :: CFG)
     end
 
     total_blocks = length(bl.depth_first_numbering)
+    should_go_next = Int64[]   # A stack of blocks that should be processed next.
 
     # A reasonable order is just the depth first numbering but just using this can result in fallthrough nodes
     # not coming right after their predecessor.
@@ -693,19 +732,44 @@ function getBbBodyOrder(bl :: CFG)
       # If the next block via the depth_first_number is not already in the body order do the following.
       # This can happen if a fallthrough successor is added before its normal place in depth first numbering.
       if !in(cur, used)
-        cur_bb = bl.basic_blocks[cur]  # Get the BasicBlock given the current block's index.
-        @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
-        push!(res, cur)                # Add this basic block to the body order.
-        push!(used, cur)
-        # If the cur basic block has a fallthrough successor then make sure it comes next
-        # by adding it to the body order here.
-        while cur_bb.fallthrough_succ != nothing
-          fallthrough_id = cur_bb.fallthrough_succ.label
-          assert(!in(fallthrough_id, res))
-          push!(res, fallthrough_id) 
-          push!(used, fallthrough_id)
-          cur_bb = cur_bb.fallthrough_succ
-          @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
+        push!(should_go_next, cur)
+
+        while !isempty(should_go_next)
+            cur = pop!(should_go_next)
+
+            if in(cur, used)
+                continue
+            end
+
+            cur_bb = bl.basic_blocks[cur]  # Get the BasicBlock given the current block's index.
+            @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
+            push!(res, cur)                # Add this basic block to the body order.
+            push!(used, cur)
+
+            # Block's can be of 3 types: 1) strictly fallthrough, 2) conditional (gotoifnot)
+            # or 3) goto.  If all a block has is a fallthrough then that has to come next
+            # in the basic block order so we add the fallthrough to the should_go_next stack.
+            # If the block is a conditional then the fallthrough must be pushed to the stack
+            # last since it must go next.  The jump target is also pushed to the stack before
+            # that so it will go after the fallthrough sub-tree is completely done.
+            # A goto block does not impose any ordering restraints on the ordering so we don't
+            # add it to the stack but let the outer depth first ordering loop find it.
+            block_class = classifyBlock(cur_bb)
+            if block_class == BLOCK_FALLTHROUGH
+              assert(cur_bb.fallthrough_succ != nothing)
+              fallthrough_id = cur_bb.fallthrough_succ.label
+              push!(should_go_next, fallthrough_id)
+              assert(!in(fallthrough_id, res))
+            elseif block_class == BLOCK_GOTOIFNOT
+              non_fallthrough_id = getNonFallthroughSucc(cur_bb).label
+              push!(should_go_next, non_fallthrough_id)
+              assert(!in(non_fallthrough_id, res))
+
+              assert(cur_bb.fallthrough_succ != nothing)
+              fallthrough_id = cur_bb.fallthrough_succ.label
+              push!(should_go_next, fallthrough_id)
+              assert(!in(fallthrough_id, res))
+            end
         end
       end
     end
@@ -1254,6 +1318,35 @@ function from_expr_helper(ast::ANY, depth, state, top_level, callback, cbdata)
     addStatement(top_level, state, ast)
 end
 
+function compute_immediate_dominators(dom_dict :: Dict{Int,Set})
+    res = Dict{Int,Int}()
+
+    # For each block, we compute the immediate dominators.
+    for x in dom_dict
+        bbindex    = x[1]                   # First get index of current block.
+        dominators = setdiff(x[2],bbindex)  # Then get the dominators of the current block.
+
+        if bbindex == CFG_ENTRY_BLOCK
+            continue
+        end
+
+        im_dom = first(dominators)   # Assume the first dominator is the immediate dominator until proven otherwise.
+        for d in dominators          # For each dominators of the current block.
+            # If the current best guess at the immediate dominator (im_dom) is a dominator of a different dominator
+            # of the current block then it can't be the immediate dominator.  The other dominator d then becomes
+            # the current best guess at the immediate dominator.
+            # Once all such dominators have been considered then it is known to be the immediate dominator.
+            if in(im_dom, dom_dict[d])
+                im_dom = d
+            end
+        end
+
+        res[bbindex] = im_dom
+    end
+
+    return res
+end
+
 """
 Compute the dominators of the CFG.
 """
@@ -1285,7 +1378,7 @@ function compute_dominators(bl :: CFG)
   count = 0;
   change_found = true
   while(change_found)
-      @dprintln(3,"compute_dominators: dom_dict = ", dom_dict)
+      @dprintln(3,"compute_dominators: while loop dom_dict = ", dom_dict)
 
       count = count + 1
       if count > 1000
@@ -1314,6 +1407,8 @@ function compute_dominators(bl :: CFG)
           end
       end
   end
+
+  @dprintln(3,"compute_dominators: Final dom_dict = ", dom_dict)
 
   return dom_dict
 end
@@ -1382,5 +1477,65 @@ function compute_inverse_dominators(bl :: CFG)
   return dom_dict
 end
 
+function addToInterval(interval, bbindex, bb, isuccs)
+  push!(interval, bbindex)
+  union!(isuccs, Set{Int}([x.label for x in bb.succs]))
+  @dprintln(3, "Added ", bbindex, " to interval ", interval, " new isuccs = ", isuccs)
 end
 
+function computeIntervals(bl :: CFG)
+  to_be_processed = Set{Int}([-1])  # Add entry block to be processed.
+
+  intervals = Dict{Int,Set{Int}}()
+
+  while !isempty(to_be_processed) 
+      bbindex = first(to_be_processed)
+      delete!(to_be_processed, bbindex)
+      bb = bl.basic_blocks[bbindex]
+      @dprintln(3, "computeIntervals processing ", bbindex)
+
+      interval = Set{Int}()
+      isuccs = Set{Int}()
+      addToInterval(interval, bbindex, bb, isuccs)
+
+      next_headers = Set{Int}()
+
+      made_change = true
+      while made_change
+          made_change = false
+          empty!(next_headers)
+
+          @dprintln(3, "isuccs = ", isuccs, " interval = ", interval)
+          # Find the successors of all blocks in the interval that themselves are not already part of the interval.
+          succs_not_in_interval = setdiff(isuccs, interval)
+          @dprintln(3, "while made_change succs_not_in_interval = ", succs_not_in_interval)
+          # This set are potential members of the interval if all their predecessors are also in the interval.
+          for potential_member in succs_not_in_interval
+              pm_bb = bl.basic_blocks[potential_member]
+              # Get the predecessors for the potential interval member as a set.
+              pm_preds = Set{Int}([x.label for x in pm_bb.preds])
+              # If the intersection of the potential members predecessors with the blocks in the interval is the same length as the block's
+              # predecessors then all the predecessors are in the interval and we should add the block to the interval here.
+              pmi = intersect(pm_preds, interval)
+              @dprintln(3,"potential_member = ", potential_member, " pm_preds = ", pm_preds, " intersection with interval = ", pmi)
+              if length(pm_preds) == length(pmi)
+                  @dprintln(3,"Added to interval ", potential_member)
+                  addToInterval(interval, potential_member, pm_bb, isuccs)
+                  made_change = true
+              else
+                  @dprintln(3,"Added to next_headers ", potential_member)
+                  # Those blocks that are successors to blocks in the interval but themselves are not added to the interval
+                  # because some predecessor of theirs is not in the interval become the next interval heads.
+                  push!(next_headers, potential_member)
+              end
+          end
+      end
+
+      intervals[bbindex] = interval
+      to_be_processed = union(to_be_processed, next_headers)
+  end
+
+  return intervals
+end
+
+end
