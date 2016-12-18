@@ -32,6 +32,20 @@ using CompilerTools
 import Base.show
 export DomLoops, Loop
 
+PRETEST = 1
+POSTTEST = 2
+INFINITE = 3
+
+function classify(head, back_edge, bbs)
+    if CompilerTools.CFGs.classifyBlock(bbs[head]) == CompilerTools.CFGs.BLOCK_GOTOIFNOT
+        return PRETEST
+    elseif CompilerTools.CFGs.classifyBlock(bbs[back_edge]) == CompilerTools.CFGs.BLOCK_GOTOIFNOT
+        return POSTTEST
+    else
+        return INFINITE
+    end 
+end
+
 """
 A type to hold information about a loop.
 A loop has a "head" that dominates all the other blocks in the loop.
@@ -44,9 +58,10 @@ type Loop
     members :: Set{Int}   # All the basic blocks that are part of the loop.
     exits :: Set{Int}     # Blocks outside the loop that are successors to some blocks inside the loop.
     blocks_that_exit :: Set{Int} # The blocks inside the loop that have succesors outside the loop.
+    ltype :: Int
 
-    function Loop(h :: Int, b :: Int, m :: Set{Int}, ex :: Set{Int}, be :: Set{Int})
-        new(h, b, m, ex, be)
+    function Loop(h :: Int, b :: Int, m :: Set{Int}, ex :: Set{Int}, be :: Set{Int}, lt :: Int)
+        new(h, b, m, ex, be, lt)
     end
 end
 
@@ -245,6 +260,7 @@ function findExitBlocks(members, bl)
             if !in(s.label, members)
                 push!(exits, s.label)
                 push!(blocks_that_exit, lm)
+                assert(CompilerTools.CFGs.classifyBlock(mbb) == CompilerTools.CFGs.BLOCK_GOTOIFNOT)
             end
         end
     end
@@ -279,7 +295,7 @@ function compute_dom_loops(bl :: CompilerTools.CFGs.CFG)
                 # Identify the members of the loop.
                 members = findLoopMembers(succ_id, bb_index, bl.basic_blocks)
                 @dprintln(3,"loop members = ", members, " type = ", typeof(members))
-                new_loop = Loop(succ_id, bb_index, members, findExitBlocks(members, bl)...)
+                new_loop = Loop(succ_id, bb_index, members, findExitBlocks(members, bl)..., classify(succ_id, bb_index, bl.basic_blocks))
                 @dprintln(3,"new_loop = ", new_loop, " type = ", typeof(new_loop))
                 # Store the Loop information in the array of loops to be returned.
                 push!(loops, new_loop)
