@@ -261,7 +261,7 @@ function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
 end
 
 """
-If an AST node is not recognized then we try the passing the node to the callback to see if 
+If an AST node is not recognized then we try the passing the node to the callback to see if
 it was able to process it.  If so, then we process the regular Julia statement returned by
 the callback.
 """
@@ -335,17 +335,17 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     elseif head == :(::)
         @dprintln(2,"RWS ::")
         from_coloncolon(args, depth, rws, callback, cbdata)
-    elseif head == :getindex || head == :new || head == :type_goto || head == :ccall 
+    elseif head == :getindex || head == :new || head == :type_goto || head == :ccall
         from_exprs(args, depth+1, rws, callback, cbdata)
     elseif head == :gotoifnot
         from_expr(args[1], depth, rws, callback, cbdata)
-    elseif head == :meta || head == :inbounds || head == :static_parameter || 
+    elseif head == :meta || head == :inbounds || head == :static_parameter ||
            head == :enter || head == :leave || head == :curly || head == :the_exception ||
            head == :& || head == :static_typeof || head == :(->) || head == :(&&) ||
            head == :(||) || head == :break || head == :continue || head == Symbol("'") ||
            head == :(...) || head == :parameters || head == :kw || head == :macrocall ||
-           head == :simdloop || head == :quote || head == :local || head == :let || 
-           head == :while || head == :comparison || head == :if || 
+           head == :simdloop || head == :quote || head == :local || head == :let ||
+           head == :while || head == :comparison || head == :if ||
            head in Set([:(+=), :(/=), :(*=), :(-=)]) || head == :for || head == :const
         # skip
     else
@@ -444,5 +444,20 @@ function from_expr(ast::ReadWriteSetType,
     return rws
 end
 
+function show(io::IO, pnode::ReadWriteSetType)
+    println(io,"read set: ")
+    print(io, pnode.readSet)
+    println(io,"write set: ")
+    print(io, pnode.writeSet)
 end
 
+function show(io::IO, pnode::AccessSet)
+    println(io, "  scalars: ", pnode.scalars)
+    print(io, "  arrays: ")
+    for (k,v) in pnode.arrays
+        print(io, k," => ", v,", ")
+    end
+    println(io)
+end
+
+end
