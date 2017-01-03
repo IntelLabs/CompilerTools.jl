@@ -112,8 +112,8 @@ We just need to recurse through the lambda body and can ignore the rest.
 """
 function from_lambda(ast :: Expr, depth, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
   # :lambda expression
-  body = CompilerTools.LambdaHandling.getBody(ast)
-  from_expr(body, depth, rws, callback, cbdata)
+  (linfo, body) = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+  from_expr(body, depth, rws, callback, cbdata, linfo)
   return ast
 end
 
@@ -121,8 +121,8 @@ end
 Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 """
-function from_exprs(ast::Array)
-  from_exprs(ast, 1, ReadWriteSetType(), nothing, nothing)
+function from_exprs(ast::Array, linfo :: LambdaVarInfo)
+  from_exprs(ast, 1, ReadWriteSetType(), nothing, nothing, linfo)
 end
 
 """
@@ -130,16 +130,16 @@ Walk through an array of expressions.
 Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 """
-function from_exprs(ast :: Array, callback :: CallbackType, cbdata :: ANY)
-  from_exprs(ast, 1, ReadWriteSetType(), callback, cbdata)
+function from_exprs(ast :: Array, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
+  from_exprs(ast, 1, ReadWriteSetType(), callback, cbdata, linfo)
 end
 
 """
 Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 """
-function from_expr(ast :: ANY)
-  from_expr(ast, 1, ReadWriteSetType(), nothing, nothing)
+function from_expr(ast :: ANY, linfo :: LambdaVarInfo)
+  from_expr(ast, 1, ReadWriteSetType(), nothing, nothing, linfo)
 end
 
 """
@@ -147,8 +147,8 @@ Walk through one AST node.
 Calls the main internal walking function after initializing an empty ReadWriteSetType.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 """
-function from_expr(ast :: ANY, callback :: CallbackType, cbdata :: ANY)
-  from_expr(ast, 1, ReadWriteSetType(), callback, cbdata)
+function from_expr(ast :: ANY, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
+  from_expr(ast, 1, ReadWriteSetType(), callback, cbdata, linfo)
 end
 
 """
@@ -157,14 +157,14 @@ Just recursively call from_expr for each expression in the array.
 Takes a callback and an opaque object so that non-standard Julia AST nodes can be processed via the callback.
 Takes a ReadWriteSetType in "rws" into which information will be stored.
 """
-function from_exprs(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: Union{Function,Void}, cbdata :: ANY)
+function from_exprs(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: Union{Function,Void}, cbdata :: ANY, linfo :: LambdaVarInfo)
   # sequence of expressions
   # ast = [ expr, ... ]
   local len  = length(ast)
   @dprintln(3, "RWS starting with ", ast)
   for i = 1:len
     @dprintln(2,"RWS Processing ast #",i," depth=", depth, " ", ast[i])
-    from_expr(ast[i], depth, rws, callback, cbdata)
+    from_expr(ast[i], depth, rws, callback, cbdata, linfo)
   end
   rws
 end
@@ -173,30 +173,30 @@ end
 Walk through a tuple.
 Just recursively call from_exprs on the internal tuple array to process each part of the tuple.
 """
-function from_tuple(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-  from_exprs(ast, depth+1, rws, callback, cbdata)
+function from_tuple(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
+  from_exprs(ast, depth+1, rws, callback, cbdata, linfo)
 end
 
 """
 Process a :(::) AST node.
 Just process the symbol part of the :(::) node in ast[1] (which is args of the node passed in).
 """
-function from_coloncolon(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+function from_coloncolon(ast :: Array, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
   assert(length(ast) == 2)
-  from_expr(ast[1], depth+1, rws, callback, cbdata)
+  from_expr(ast[1], depth+1, rws, callback, cbdata, linfo)
 end
 
 """
 Process an assignment AST node.
 The left-hand side of the assignment is added to the writeSet.
 """
-function from_assignment(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+function from_assignment(ast :: Array{Any,1}, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
   assert(length(ast) == 2)
   local lhs = ast[1]
   local rhs = ast[2]
   # lhs_type = typeof(lhs)
   push!(rws.writeSet.scalars, toLHSVar(lhs))
-  from_expr(rhs, depth, rws, callback, cbdata)
+  from_expr(rhs, depth, rws, callback, cbdata, linfo)
 end
 
 """
@@ -216,7 +216,7 @@ end
 """
 Process :call Expr nodes to find arrayref and arrayset calls and adding the corresponding index expressions to the read and write sets respectively.
 """
-function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
   local fun  = getCallFunction(ast)
   local args = getCallArguments(ast)
   @dprintln(2,fun)
@@ -232,7 +232,7 @@ function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     @dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
     addIndexExpr!(rws.readSet.arrays, args[1], indices)
     for j = 1:length(indices)
-      from_expr(indices[j], depth, rws, callback, cbdata)
+      from_expr(indices[j], depth, rws, callback, cbdata, linfo)
     end
   elseif (isBaseFunc(fun, :arrayset) || isBaseFunc(fun, :unsafe_arrayset))
     @dprintln(2,"Handling arrayset in from_call, length(args) = ",length(args))
@@ -243,9 +243,9 @@ function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     indices = args[3:end]
     @dprintln(3, "indices = ", indices, " typeof(indices) = ", typeof(indices))
     addIndexExpr!(rws.writeSet.arrays, args[1], indices)
-    from_expr(args[2], depth, rws, callback, cbdata)
+    from_expr(args[2], depth, rws, callback, cbdata, linfo)
     for j = 1:length(indices)
-      from_expr(indices[j], depth, rws, callback, cbdata)
+      from_expr(indices[j], depth, rws, callback, cbdata, linfo)
     end
   elseif isBaseFunc(fun, :setfield!)
     @dprintln(2,"Handling setfield! in from_call")
@@ -253,10 +253,10 @@ function from_call(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     if isa(obj,LHSVar)
       push!(rws.writeSet.scalars, obj)
     end
-    from_exprs(args[2:end], depth+1, rws, callback, cbdata)
+    from_exprs(args[2:end], depth+1, rws, callback, cbdata, linfo)
   else
     @dprintln(2,"Unhandled function ", fun, " in from_call")
-    from_exprs(args, depth+1, rws, callback, cbdata)
+    from_exprs(args, depth+1, rws, callback, cbdata, linfo)
   end
 end
 
@@ -265,26 +265,26 @@ If an AST node is not recognized then we try the passing the node to the callbac
 it was able to process it.  If so, then we process the regular Julia statement returned by
 the callback.
 """
-function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth :: Integer, rws :: ReadWriteSetType)
+function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth :: Integer, rws :: ReadWriteSetType, linfo :: LambdaVarInfo)
   if callback != nothing
     res = callback(ast, cbdata)
   else
     res = nothing
   end
   if res != nothing
-    from_exprs(res, depth+1, rws, callback, cbdata)
+    from_exprs(res, depth+1, rws, callback, cbdata, linfo)
     return false
   end
   return true
 end
 
 function from_expr(ast :: LambdaInfo, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
-    ast = CompilerTools.LambdaHandling.getBody(ast)
-    from_expr(ast, depth, rws, callback, cbdata)
+    (linfo, body) = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
+    from_expr(body, depth, rws, callback, cbdata, linfo)
     return rws
 end
 
-function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
+function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY, linfo :: LambdaVarInfo)
     @dprintln(2,"RWS from_expr depth=", depth," ")
 
     @dprint(2,"RWS Expr ")
@@ -293,25 +293,25 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
     local typ  = ast.typ
     @dprintln(2,head, " ", args)
 
-    if !tryCallback(ast, callback, cbdata, depth, rws)
+    if !tryCallback(ast, callback, cbdata, depth, rws, linfo)
         return rws
     end
 
     if head == :lambda
-        from_lambda(ast, depth, rws, callback, cbdata)
+        from_lambda(ast, depth, rws, callback, cbdata, linfo)
     elseif head == :body
-        from_exprs(args, depth+1, rws, callback, cbdata)
+        from_exprs(args, depth+1, rws, callback, cbdata, linfo)
     elseif head == :block || head == :(.)
-        from_exprs(args, depth+1, rws, callback, cbdata)
+        from_exprs(args, depth+1, rws, callback, cbdata, linfo)
     elseif head == :(=)
-        from_assignment(args, depth, rws, callback, cbdata)
+        from_assignment(args, depth, rws, callback, cbdata, linfo)
     elseif head == :return
-        from_exprs(args, depth, rws, callback, cbdata)
+        from_exprs(args, depth, rws, callback, cbdata, linfo)
     elseif head == :invoke || head == :call || head == :call1
-        from_call(ast, depth, rws, callback, cbdata)
+        from_call(ast, depth, rws, callback, cbdata, linfo)
         # TODO?: tuple
     elseif head == Symbol("'")
-        from_exprs(args, depth, rws, callback, cbdata)
+        from_exprs(args, depth, rws, callback, cbdata, linfo)
     elseif head == :line
         # skip
     elseif head == :copy
@@ -327,18 +327,18 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         @dprintln(3,"RWS assertEqShape")
         # skip
     elseif head == :alloc
-        from_expr(args[2], depth, rws, callback, cbdata)
+        from_expr(args[2], depth, rws, callback, cbdata, linfo)
     elseif head == :tuple
         @dprintln(2,"RWS tuple")
-        from_tuple(args, depth, rws, callback, cbdata)
+        from_tuple(args, depth, rws, callback, cbdata, linfo)
         # skip
     elseif head == :(::)
         @dprintln(2,"RWS ::")
-        from_coloncolon(args, depth, rws, callback, cbdata)
+        from_coloncolon(args, depth, rws, callback, cbdata, linfo)
     elseif head == :getindex || head == :new || head == :type_goto || head == :ccall
-        from_exprs(args, depth+1, rws, callback, cbdata)
+        from_exprs(args, depth+1, rws, callback, cbdata, linfo)
     elseif head == :gotoifnot
-        from_expr(args[1], depth, rws, callback, cbdata)
+        from_expr(args[1], depth, rws, callback, cbdata, linfo)
     elseif head == :meta || head == :inbounds || head == :static_parameter ||
            head == :enter || head == :leave || head == :curly || head == :the_exception ||
            head == :& || head == :static_typeof || head == :(->) || head == :(&&) ||
@@ -362,7 +362,8 @@ function from_expr(ast::Union{LabelNode,GotoNode,LineNumberNode,DataType,Module,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     return rws
 end
 
@@ -370,9 +371,19 @@ function from_expr(ast::RHSVar,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
-    push!(rws.readSet.scalars, toLHSVar(ast))
-    @dprintln(3,"RWS ", typeof(ast), " type")
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
+    vtyp = CompilerTools.LambdaHandling.getType(ast, linfo)
+    @dprintln(3,"RWS ", ast, " type = ", typeof(ast), " vtyp = ", vtyp)
+    if isArrayType(vtyp)
+        # If a RHSVar is an array type and accessed in this way then it could potentially be read in its entirety.
+        # We put zeros in the indices to indicate this and this should trigger all code to realize that this array
+        # is accessed outside any loop indices.
+        @dprintln(3,"Adding array to readSet with all zero indices.")
+        addIndexExpr!(rws.readSet.arrays, toLHSVar(ast), zeros(Int, ndims(vtyp)))
+    else 
+        push!(rws.readSet.scalars, toLHSVar(ast))
+    end
 
     return rws
 end
@@ -381,7 +392,8 @@ function from_expr(ast::Union{TopNode,AbstractString},
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     # skip
     @dprintln(3,"RWS ", typeof(ast), " type")
 
@@ -392,7 +404,8 @@ function from_expr(ast::GlobalRef,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     local mod  = ast.mod
     local name = ast.name
     @dprintln(3,"RWS GlobalRef type ",typeof(mod))
@@ -405,7 +418,8 @@ function from_expr(ast::QuoteNode,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     local value = ast.value
     # TODO: fields: value
     @dprintln(3,"RWS QuoteNode type ",typeof(value))
@@ -418,7 +432,8 @@ function from_expr(ast::Any,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     asttyp = typeof(ast)
 
     # For Julia 0.5, Symbol won't be in RHSVar and so will come here.
@@ -426,7 +441,7 @@ function from_expr(ast::Any,
     if isbits(asttyp) || asttyp == Symbol
         #skip
     else
-        if tryCallback(ast, callback, cbdata, depth, rws)
+        if tryCallback(ast, callback, cbdata, depth, rws, linfo)
             throw(string("from_expr: unknown ast :", asttyp))
         end
         #@dprintln(2,"RWS from_expr: unknown AST (", typeof(ast), ",", ast, ")")
@@ -439,7 +454,8 @@ function from_expr(ast::ReadWriteSetType,
                    depth :: Integer,
                    rws :: ReadWriteSetType,
                    callback :: CallbackType,
-                   cbdata::ANY)
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
     merge!(rws, ast)
     return rws
 end
