@@ -535,6 +535,24 @@ function createWrapperFuncArgWithType(i, arg::Expr)
     return Expr(:(::), Symbol(string("makeWrapperFuncArgument",i)), typ)
 end
 
+if VERSION >= v"0.5"
+  gOptFrameworkDictLock = ReentrantLock()
+
+  function lock_check(dict, fs, n)
+     lock(gOptFrameworkDictLock)
+     func_to_call = get(dict, fs, nothing)
+     return func_to_call
+  end
+
+else
+
+  function lock_check(dict, fs, n)
+     func_to_call = get(dict, fs, nothing)
+     return func_to_call
+  end
+
+end
+
 """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
@@ -557,6 +575,8 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   @dprintln(3, "new_call_sig_args_with_types = ", new_call_sig_args_with_types)
   @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
+  lc = GlobalRef(CompilerTools.OptFramework, :lock_check)
+  gofdl = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDictLock)
   gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
   proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
   dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
@@ -572,7 +592,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          call_sig_arg_tuple = map(typeof, tuple($(new_call_sig_args...)))
          opt_set = $per_site_opt_set
          fs = ($real_func, call_sig_arg_tuple, opt_set)
-         func_to_call = get($gofd, fs, nothing)
+         func_to_call = $lc($gofd, fs, nothing)
          if func_to_call == nothing
            tic()
            process_res = $proc($real_func, call_sig_arg_tuple, opt_set)
@@ -589,6 +609,11 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
            end # Remember this optimization result for this function/type combination.
            $gofd[fs] = func_to_call
          end
+
+         if VERSION >= v"0.5"
+           unlock($gofdl)
+         end
+
          $dpln(3,"calling ", func_to_call)
          if 1 < 0
            ret = $real_func($(new_call_sig_args...))
