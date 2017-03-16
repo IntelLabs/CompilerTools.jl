@@ -506,6 +506,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
     @dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
   elseif isa(cur_ast, Function)
+    @dprintln(3,"AST after optimization passes is of type Function.")
     return cur_ast
   else
     @dprintln(1,"typeof(cur_ast) = ", typeof(cur_ast))
