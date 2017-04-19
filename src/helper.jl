@@ -36,6 +36,22 @@ export TypedExpr, isArrayType, isInvoke, isCall, isTopNode, toLHSVar, toLHSVarOr
 export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfunctionhead, isBaseFunc
 export getCallFunction, getCallArguments, isAssignmentNode
 
+if VERSION >= v"0.6.0-pre"
+println("v0.6")
+type LambdaInfo
+  func
+  sig
+  code # :: Pair{CodeInfo}
+end
+export LambdaInfo
+elseif VERSION > v"0.5.0-dev+3260"
+println("v0.5")
+else
+println("v0.4")
+typealias LambdaInfo LambdaStaticData
+export LambdaInfo
+end
+
 if VERSION > v"0.5.0-dev+3260"
   if VERSION >= v"0.5.0-dev+3875"
     typealias GenSym     SSAValue
@@ -61,13 +77,11 @@ typealias LHSRealVar Symbol
 typealias LHSVar     Union{Symbol, GenSym}
 typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
 typealias TypedVar   SymbolNode
-typealias LambdaInfo LambdaStaticData
 toLHSVar(x :: Symbol) = x
 toLHSVar(tv::TypedVar) = tv.name
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.name)
 toTypedVar(id::LHSRealVar, typ::DataType) = SymbolNode(id, typ)
-export LambdaInfo
 end
 
 """
@@ -151,7 +165,10 @@ hasSymbol(ssn :: TypedVar) = true
 hasSymbol(ssn :: Expr) = ssn.head == :(::)
 hasSymbol(ssn) = false
 
-if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.6.0-pre"
+isfunctionhead(x :: LambdaInfo) = true
+isfunctionhead(x) = false
+elseif VERSION > v"0.5.0-dev+3260"
 isfunctionhead(x) = isa(x, LambdaInfo)
 else
 isfunctionhead(x) = isa(x, Expr) && x.head == :lambda && isa(x.args[3], Expr) && x.args[3].head == :body
@@ -173,8 +190,10 @@ function getCallFunction(exp::Expr)
     exp.args[2]
   elseif exp.head == :call
     exp.args[1]
+  elseif exp.head == :foreigncall
+    exp.args[1]
   else
-    error(string("Expect a :call or :invoke Expr, but got ", exp))
+    error(string("Expect a :call or :invoke or :foreigncall Expr, but got ", exp))
   end
 end
 
@@ -183,8 +202,10 @@ function getCallArguments(exp::Expr)
     exp.args[3:end]
   elseif exp.head == :call
     exp.args[2:end]
+  elseif exp.head == :foreigncall
+    exp.args[2:end]
   else
-    error(string("Expect a :call or :invoke Expr, but got ", exp))
+    error(string("Expect a :call or :invoke or :foreigncall Expr, but got ", exp))
   end
 end
 

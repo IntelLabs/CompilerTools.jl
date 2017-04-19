@@ -116,7 +116,55 @@ type LambdaVarInfo
         li.return_type, li.orig_info == nothing ? nothing : li.orig_info)
   end
 
-if VERSION >= v"0.5.0-dev+3875"
+if VERSION >= v"0.6.0-pre"
+  function LambdaVarInfo(lambda::LambdaInfo)
+    @dprintln(3, "lambda = ", lambda, " ", typeof(lambda.func), " ", typeof(lambda.sig), " ", typeof(lambda.code))
+    return_typ = lambda.code.second
+    code_info = lambda.code.first
+    meth_list = methods(lambda.func, lambda.sig)
+    assert(length(meth_list.ms) == 1)
+    meth = meth_list.ms[1]
+
+    input_params = Symbol[]
+    var_defs = VarDef[]
+    escaping_vars = Symbol[]
+    allnames = Set{Symbol}()
+    for i = 1:length(code_info.slotnames)
+        name = code_info.slotnames[i]
+        typ = code_info.slottypes[i]
+        desc = code_info.slotflags[i]
+        if in(name, allnames)
+            name = gensym(string(name, "@", i))
+        elseif startswith(string(name), digits) # numerical names are very confusing, fix them!
+            name = gensym(string("@", name))
+        end
+        push!(allnames, name)
+        vd = VarDef(name, typ, desc, i)
+        push!(var_defs, vd)
+        # skip #self# in parameters
+        if i > 1 && i <= meth.nargs
+            push!(input_params, name)
+        end
+    end
+
+    for i = 1:length(code_info.ssavaluetypes)
+        vd = VarDef(emptyVarName, code_info.ssavaluetypes[i], convert(DescType, ISASSIGNED | ISASSIGNEDONCE), i-1)
+        push!(var_defs, vd)
+    end
+    vararg_params = meth.isva ? Symbol[input_params[end]] : Symbol[]
+    static_parameter_names = Any[ x for x in meth.sparam_syms]
+
+    @dprintln(3, "lambda.sig = ", lambda.sig, " meth.sig = ", meth.sig)
+    recomputed = ccall(:jl_env_from_type_intersection, Ref{SimpleVector}, (Any, Any), lambda.sig, meth.sig)
+    static_parameter_values = [x for x in recomputed[2]::SimpleVector]
+
+    #static_parameter_values = Any[ x for x in lambda.sparam_vals]
+    @dprintln(3, "LambdaVarInfo.sparam_vals = ", static_parameter_values)
+    x = new(input_params, vararg_params, Symbol[], var_defs, static_parameter_names, static_parameter_values, return_typ, lambda)
+    @dprintln(3, "LambdaVarInfo = ", x)
+    return x
+  end
+elseif VERSION >= v"0.5.0-dev+3875"
   function LambdaVarInfo(lambda::LambdaInfo, body)
     @dprintln(3, "lambda = ", lambda)
     return_typ = lambda.rettype
@@ -813,11 +861,20 @@ function mergeLambdaVarInfo(outer :: LambdaVarInfo, inner :: LambdaVarInfo, extr
     return dict
 end
 
+if VERSION >= v"0.6.0-pre"
+function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
+    @dprintln(3,"lambdaToLambdaVarInfo")
+    linfo = LambdaVarInfo(lambda)
+    body = getBody(lambda.code.first.code, lambda.code.second)
+    return linfo, body
+end
+else
 function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
     ast = Base.uncompressed_ast(lambda)
     linfo = LambdaVarInfo(lambda, ast)
     body = getBody(ast, linfo.return_type)
     return linfo, body
+end
 end
 
 function lambdaToLambdaVarInfo(lambda :: Expr)
@@ -890,25 +947,34 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name = ", ftyp.name)
 #    println("ftyp.name.mt = ", ftyp.name.mt)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
-if VERSION > v"0.5.0-dev+3260"
-#    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+if VERSION >= v"0.6.0-pre"
+    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+    meth = Base._methods_by_ftype(typ, -1, typemax(UInt))
+    for m in meth
+      if m[1] <: Tuple && m[1].parameters[2:end] == typ.parameters[2:end]
+        println("meth in _methods ", meth)
+        m = meth[1]
+        lambda = Core.Inference.func_for_method_checked(m[3], types)
+        (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
+        println("lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
+        return CompilerTools.Helper.LambdaInfo(ftyp, typs, Pair(ci,ty)), ty
+      end
+    end
+    error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
+elseif VERSION > v"0.5.0-dev+3260"
     meth = Base._methods_by_ftype(typ, -1)
     for m in meth
       if m[1] <: Tuple && m[1].parameters[2:end] == typ.parameters[2:end]
-#        println("meth in _methods ", meth)
         m = meth[1]
         lambda = Core.Inference.func_for_method_checked(m[3], types)
         (tree, ty) = Core.Inference.typeinf_uncached(lambda, m[1], m[2], optimize = optimize)
-#        println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
         return tree, ty
       end
     end
     error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
 else
     lambda = Core.Inference.func_for_method(ftyp.name.mt.defs, typs, env)
-#    println("lambdaTypeinf typeof(lambda) = ", typeof(lambda))
     (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = optimize)
-#    println("lambdaTypeinf typeof(tree) = ", typeof(tree), " typeof(ty) = ", typeof(ty))
     lambda.ast = tree
     return lambda, ty
 end
@@ -1098,7 +1164,11 @@ function updateAssignedDesc(li :: LambdaVarInfo, symbol_assigns :: Dict{Symbol,I
   end
 end
 
-if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.6.0-pre"
+function getBody(lambda :: LambdaInfo)
+  return getBody(lambda.first.code, lambda.second)
+end
+elseif VERSION > v"0.5.0-dev+3260"
 function getBody(lambda :: LambdaInfo)
   return getBody(Base.uncompressed_ast(lambda), lambda.rettype)
 end

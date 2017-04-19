@@ -106,10 +106,17 @@ function addOptPass(func, level)
   addOptPass(OptPass(func, level))
 end
 
+#type FullFuncInfo
+#  func
+#  sig
+#  code
+#end
+
 """
 Retrieve the AST of the given function "func" and signature "sig" for at the given pass "level".
 """
 function getCodeAtLevel(func, sig::Tuple, level)
+  @dprintln(3, "getCodeAtLevel ", level)
   if level == PASS_MACRO 
     error("AST at macro level must be passed in, and cannot be obtained from inspecting the function itself")
   elseif level == PASS_LOWERED 
@@ -121,13 +128,20 @@ function getCodeAtLevel(func, sig::Tuple, level)
   else 
     error("Unknown AST level: ", level)
   end
+
   @dprintln(3, "getCodeAtLevel ", dumpLevel(level), " ast = ", ast)
   @assert (length(ast) > 0) ("Failed to retrieve AST for function " * dump(func) * " with signature " * dump(sig))
   @assert (length(ast) == 1) ("Expect one AST but got many for function " * dump(func) * " with signature " * dump(sig) * ": " * dump(ast))
   @dprintln(3, "typeof(ast[1]) ", typeof(ast[1]))
-  @assert (isfunctionhead(ast[1])) ("Expected function head but got " * dump(ast[1]))
-  @dprintln(3, "getCodeAtLevel returns")
-  return ast[1]
+  ast = ast[1]
+  if VERSION >= v"0.6.0-pre"
+    t1 = ast
+    ast = LambdaInfo(func, sig, t1)
+  end
+
+  @assert (isfunctionhead(ast)) #("Expected function head but got " * typeof(ast[1]))
+  @dprintln(3, "getCodeAtLevel returns ", ast)
+  return ast
 end
 
 """
@@ -160,7 +174,12 @@ function convertCodeToLevel(ast :: ANY, sig :: ANY, old_level, new_level, func)
       #(new_ast, rty) = CompilerTools.LambdaHandling.lambdaTypeinf(lambda, sig, optimize=true)
     end
     @assert (isa(new_ast, Expr) && new_ast.head == :lambda) ("Expect Expr with :lambda head, but got " * new_ast)
-    return new_ast
+    if VERSION >= v"0.6.0-pre"
+        ast.code = new_ast
+        return ast
+    else
+        return new_ast
+    end
   end 
 end
 
@@ -448,7 +467,7 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
   cur_level = per_site_opt_set[1].level
   cur_ast = func
 
-  @dprintln(3,"Initial code to optimize = ", cur_ast)
+  @dprintln(3,"Initial code to optimize = ", cur_ast, " ", typeof(cur_ast))
 
   # For each optimization pass in the optimization set.
   for i = 1:length(per_site_opt_set)
@@ -506,7 +525,8 @@ function processFuncCall(func :: ANY, call_sig_arg_tuple :: ANY, per_site_opt_se
     @dprintln(3,"Final processFuncCall = ", code_typed(new_func, call_sig_arg_tuple)[1])
     return new_func
   elseif isa(cur_ast, Function)
-    @dprintln(3,"AST after optimization passes is of type Function.")
+  #elseif isa(cur_ast, FullFuncInfo)
+  #  @dprintln(3,"AST after optimization passes is of type ", typeof(cur_ast.code), ".")
     return cur_ast
   else
     @dprintln(1,"typeof(cur_ast) = ", typeof(cur_ast))
@@ -596,6 +616,7 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          func_to_call = $lc($gofd, fs, nothing)
          if func_to_call == nothing
            tic()
+           $dpln(1,"wrapper real_func = ", $real_func, " type = ", typeof($real_func))
            process_res = $proc($real_func, call_sig_arg_tuple, opt_set)
            t = toq()
            $dpln(1,$real_func," optimization time = ", t)
@@ -753,6 +774,10 @@ end
 When @acc is used at a function definition, it creates a trampoline function, when called with a specific set of signature types, will try to optimize the original function, and call it with the real arguments.  The input "ast" should be an AST of the original function at macro level, which will be   replaced by the trampoline. 
 """
 function convert_function(per_site_opt_set, opt_set, macros, ast)
+    @dprintln(3,"convert_function ast = ", ast, " typeof(ast) = ", typeof(ast))
+    if isa(ast, Expr)
+       @dprintln(3,"ast.head = ", ast.head)
+    end
     fname = ast.args[1].args[1]
     assert(isa(fname, Symbol))
     mod = current_module()
@@ -819,6 +844,7 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
     end
 
     @dprintln(3, "@acc converting function done = ", ast)
+
     ast
 end
 

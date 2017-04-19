@@ -202,6 +202,41 @@ function from_assignment(state, expr :: Expr, callback, cbdata :: ANY)
   end
 end
 
+function from_foreigncall(state, expr :: Expr, callback, cbdata)
+  # The assumption here is that the program has already been translated
+  # by DomainIR, and all args are either SymbolNode or Constant.
+  local head = expr.head
+  local ast = expr.args
+  local typ = expr.typ
+  assert(length(ast) >= 1)
+  local fun  = ast[1]
+  local args = ast[2:end]
+  @dprintln(2, "AA from_foreigncall: fun=", fun, " typeof(fun)=", typeof(fun), " args=",args, " typ=", typ)
+
+  if isa(fun, RHSVar) 
+    ftyp = getType(fun, state.linfo) 
+    @dprintln(2, "AA from_foreigncall: ftyp=", ftyp)
+    if ftyp <: Function 
+       fun = ftyp.name.name
+    end
+  end 
+
+  if fun == QuoteNode(:jl_new_array) || fun == QuoteNode(:jl_alloc_array_1d) || 
+     fun == QuoteNode(:jl_alloc_array_2d) || fun == QuoteNode(:jl_alloc_array_3d)
+    return next_node(state)
+  else
+    @dprintln(2, "AA: unknown call ", fun)
+    # For unknown calls, conservative assumption is that the result
+    # might alias one of (or an element of) the non-leaf-type inputs.
+    for exp in args
+        if isa(exp, RHSVar)
+            update_unknown(state, toLHSVar(exp))
+        end
+    end
+    return Unknown
+  end
+end
+
 function from_call(state, expr :: Expr, callback, cbdata)
   # The assumption here is that the program has already been translated
   # by DomainIR, and all args are either SymbolNode or Constant.
@@ -337,9 +372,10 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
         return from_call(state, ast, callback, cbdata)
     elseif is(head, :call)
         return from_call(state, ast, callback, cbdata)
-        # TODO: catch domain IR result here
     elseif is(head, :call1)
       return from_call(state, ast, callback, cbdata)
+    elseif is(head, :foreigncall)
+        return from_foreigncall(state, ast, callback, cbdata)
     elseif is(head, :method)
         # skip
     elseif is(head, :line)
@@ -379,6 +415,10 @@ end
 
 function not_handled(a,b,c)
   nothing
+end
+
+if VERSION >= v"0.6.0-pre"
+import ..LambdaHandling.LambdaInfo
 end
 
 function from_expr(state, ast::LambdaInfo, callback=not_handled, cbdata :: ANY = nothing)

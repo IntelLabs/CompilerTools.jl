@@ -683,6 +683,12 @@ function typeOfOpr_fixType(ret::DataType)
     return ret
 end
 
+if VERSION >= v"0.6.0-pre"
+function typeOfOpr_fixType(ret::Core.BottomType)
+    return ret
+end
+end
+
 function typeOfOpr_fixType(ret::Union)
     return Tuple{ret.types...}
 end
@@ -857,6 +863,58 @@ end
 """
 Walk through a call expression.
 """
+function from_foreigncall(ast :: Expr , depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
+  local fun  = getCallFunction(ast)
+  local args = getCallArguments(ast)
+  @dprintln(2,"from_foreigncall fun = ", fun, " typeof fun = ", typeof(fun), " args = ", args)
+   
+  # Form the signature of the call in an array.
+  arg_type_array = DataType[]
+  # For each argument to the call.
+  for i = 1:length(args)
+    @dprintln(3, "arg ", i, " = ", args[i], " typeof arg = ", typeof(args[i]))
+    # Make sure the type of the argument resolves to a DataType.
+    too = typeOfOpr(args[i], state.li)
+    if !isa(too, DataType)
+      @dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
+    end
+    push!(arg_type_array, typeOfOpr(args[i], state.li)) 
+  end
+  @dprintln(3, "arg_type_array = ", arg_type_array)
+  #arg_type_tuple = Tuple{arg_type_array...}
+  # See which arguments to the function can be modified by the function.
+
+  # We can do better/tighter analysis if we know which arguments to some call are modified.
+  # bits type arguments are never modified.
+  # non-bits types argument may be modified unless we know otherwise.
+  # We prime a dictionary with some common, well-known functions and record that their non-bits type
+  # arguments are not modified.
+  # getUnmodifiedArgs returns an array to indicate which args to the call may be modified.
+  unmodified_args = getUnmodifiedArgs(fun, args, arg_type_array, state)
+  assert(length(unmodified_args) == length(args))
+  @dprintln(3,"unmodified_args = ", unmodified_args)
+  
+  # For each argument.
+  for i = 1:length(args)
+    argtyp = typeOfOpr(args[i], state.li)
+    @dprintln(2,"cur arg = ", args[i], " type = ", argtyp, " state.read = ", state.read)
+    read_cache = state.read
+
+    state.read = true
+    # We can always potentially read first.
+    from_expr(args[i], depth+1, state, callback, cbdata)
+    if unmodified_args[i] == 0
+      # The argument could be modified so treat it as a "def".
+      state.read = false
+      from_expr(args[i], depth+1, state, callback, cbdata)
+    end
+    state.read = read_cache
+  end
+end
+
+"""
+Walk through a call expression.
+"""
 function from_call(ast :: Expr , depth :: Int64, state :: expr_state, callback :: Function, cbdata :: ANY)
   local fun  = getCallFunction(ast)
   local args = getCallArguments(ast)
@@ -906,7 +964,6 @@ function from_call(ast :: Expr , depth :: Int64, state :: expr_state, callback :
       # The argument could be modified so treat it as a "def".
       state.read = false
       from_expr(args[i], depth+1, state, callback, cbdata)
-#      state.read = true
     end
     state.read = read_cache
   end
@@ -973,6 +1030,10 @@ function from_lambda(LambdaVarInfo :: LambdaVarInfo, body::ANY, callback=not_han
 #     throw(string("WARNING: use of variables before initialization = ", use_before_init))
   end
   res
+end
+
+if VERSION >= v"0.6.0-pre"
+import ..LambdaHandling.LambdaInfo
 end
 
 function from_lambda(lambda::Union{Expr,LambdaInfo}, callback=not_handled, cbdata :: ANY = nothing, no_mod=Dict{Tuple{Any,Array{DataType,1}}, Array{Int64,1}}(); no_mod_cb = nothing, array_params_live_out=true)
@@ -1071,7 +1132,7 @@ function from_expr(ast::ANY,
     from_expr_helper(ast, depth, state, callback, cbdata)
 end
 
-function from_expr_helper(ast::Tuple,
+function from_expr_helper(ast::Union{Tuple,SimpleVector},
                           depth::Int64,
                           state::expr_state,
                           callback::Function,
@@ -1111,8 +1172,8 @@ function from_expr_helper(ast::Expr,
         from_return(args, depth, state, callback, cbdata)
     elseif head == :invoke || head == :call || head == :call1
         from_call(ast, depth, state, callback, cbdata)
-        # TODO: catch domain IR result here
-        # TODO?: tuple
+    elseif head == :foreigncall
+        from_foreigncall(ast, depth, state, callback, cbdata)
     elseif head == :gotoifnot
         from_if(args,depth,state, callback, cbdata)
     elseif head == :line || head == :inbounds || head == :boundscheck || head == :meta || head == :type_goto || head == :static_parameter
@@ -1130,6 +1191,8 @@ function from_expr_helper(ast::Expr,
     elseif head == :(.)
         # skip handling fields of a type
         # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
+    elseif head == :llvmcall
+        # Intentionally do nothing.
     else
         throw(string("from_expr: unknown Expr head :", head))
     end

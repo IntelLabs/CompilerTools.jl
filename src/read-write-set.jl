@@ -278,6 +278,10 @@ function tryCallback(ast :: ANY, callback :: CallbackType, cbdata :: ANY, depth 
   return true
 end
 
+if VERSION >= v"0.6.0-pre"
+import ..LambdaHandling.LambdaInfo
+end
+
 function from_expr(ast :: LambdaInfo, depth :: Integer, rws :: ReadWriteSetType, callback :: CallbackType, cbdata :: ANY)
     (linfo, body) = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast)
     from_expr(body, depth, rws, callback, cbdata, linfo)
@@ -307,7 +311,7 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
         from_assignment(args, depth, rws, callback, cbdata, linfo)
     elseif head == :return
         from_exprs(args, depth, rws, callback, cbdata, linfo)
-    elseif head == :invoke || head == :call || head == :call1
+    elseif head == :invoke || head == :call || head == :call1 || head == :foreigncall
         from_call(ast, depth, rws, callback, cbdata, linfo)
         # TODO?: tuple
     elseif head == Symbol("'")
@@ -346,7 +350,8 @@ function from_expr(ast :: Expr, depth :: Integer, rws :: ReadWriteSetType, callb
            head == :(...) || head == :parameters || head == :kw || head == :macrocall ||
            head == :simdloop || head == :quote || head == :local || head == :let ||
            head == :while || head == :comparison || head == :if ||
-           head in Set([:(+=), :(/=), :(*=), :(-=)]) || head == :for || head == :const
+           head in Set([:(+=), :(/=), :(*=), :(-=)]) || head == :for || head == :const ||
+           head == :llvmcall
         # skip
     else
         #println("from_expr: unknown Expr head :", head)
@@ -424,6 +429,21 @@ function from_expr(ast::QuoteNode,
     # TODO: fields: value
     @dprintln(3,"RWS QuoteNode type ",typeof(value))
     # warn(string("from_expr: QuoteNode typeof(value)=", typeof(value)))
+
+    return rws
+end
+
+function from_expr(ast::SimpleVector,
+                   depth :: Integer,
+                   rws :: ReadWriteSetType,
+                   callback :: CallbackType,
+                   cbdata::ANY,
+                   linfo :: LambdaVarInfo)
+    @dprintln(3,"RWS SimpleVector ast = ", ast)
+    for i = 1:length(ast)
+        @dprintln(2,"RWS Processing ast #",i," depth=", depth, " ", ast[i])
+        from_expr(ast[i], depth, rws, callback, cbdata, linfo)
+    end
 
     return rws
 end

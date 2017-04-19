@@ -194,9 +194,10 @@ The depth_first_numbering is an array of length the number of basic blocks.
 type CFG
     basic_blocks :: Dict{Int,BasicBlock}
     depth_first_numbering
+    block_order
 
-    function CFG(bb, dfn)
-      new(bb, dfn)
+    function CFG(bb, dfn, bo)
+      new(bb, dfn, bo)
     end
 end
 
@@ -696,6 +697,10 @@ Also useful for printing in a reasonable order.
 If there is a block that fallsthrough to return then that block should come next to last.
 """
 function getBbBodyOrder(bl :: CFG)
+    getBbBodyOrder(bl.basic_blocks, bl.depth_first_numbering)
+end
+
+function getBbBodyOrder(basic_blocks, depth_first_numbering)
     res  = Int64[]
     rev  = Int64[CFG_EXIT_BLOCK]
     used = Set{Int64}(CFG_EXIT_BLOCK)
@@ -704,7 +709,7 @@ function getBbBodyOrder(bl :: CFG)
     while found == true
         found = false
         last = rev[end]
-        last_bb = bl.basic_blocks[last]
+        last_bb = basic_blocks[last]
 
         @dprintln(3, "getBbBodyOrder reverse fallthrough ", last, " ", last_bb, " ", rev, " ", used)
         for pred in last_bb.preds
@@ -721,13 +726,13 @@ function getBbBodyOrder(bl :: CFG)
         end
     end
 
-    total_blocks = length(bl.depth_first_numbering)
+    total_blocks = length(depth_first_numbering)
     should_go_next = Int64[]   # A stack of blocks that should be processed next.
 
     # A reasonable order is just the depth first numbering but just using this can result in fallthrough nodes
     # not coming right after their predecessor.
     for i = 1:total_blocks
-      cur = bl.depth_first_numbering[i]
+      cur = depth_first_numbering[i]
       @dprintln(3, "getBbBodyOrder forward ", cur, " ", rev, " ", used, " ", res)
       # If the next block via the depth_first_number is not already in the body order do the following.
       # This can happen if a fallthrough successor is added before its normal place in depth first numbering.
@@ -735,13 +740,14 @@ function getBbBodyOrder(bl :: CFG)
         push!(should_go_next, cur)
 
         while !isempty(should_go_next)
+            @dprintln(3, "should_go_next = ", should_go_next, " used = ", used, " res = ", res)
             cur = pop!(should_go_next)
 
             if in(cur, used)
                 continue
             end
 
-            cur_bb = bl.basic_blocks[cur]  # Get the BasicBlock given the current block's index.
+            cur_bb = basic_blocks[cur]  # Get the BasicBlock given the current block's index.
             @dprintln(3, "cur_bb = ", cur_bb, " ", used, " ", res)
             push!(res, cur)                # Add this basic block to the body order.
             push!(used, cur)
@@ -760,6 +766,7 @@ function getBbBodyOrder(bl :: CFG)
               fallthrough_id = cur_bb.fallthrough_succ.label
               push!(should_go_next, fallthrough_id)
               assert(!in(fallthrough_id, res))
+              @dprintln(3, "fallthrough block, should_go_next = ", should_go_next)
             elseif block_class == BLOCK_GOTOIFNOT
               non_fallthrough_id = getNonFallthroughSucc(cur_bb).label
               push!(should_go_next, non_fallthrough_id)
@@ -769,6 +776,7 @@ function getBbBodyOrder(bl :: CFG)
               fallthrough_id = cur_bb.fallthrough_succ.label
               push!(should_go_next, fallthrough_id)
               assert(!in(fallthrough_id, res))
+              @dprintln(3, "gotoifnot block, should_go_next = ", should_go_next)
             end
         end
       end
@@ -1134,6 +1142,10 @@ function not_handled(a,b)
   nothing
 end
 
+if VERSION >= v"0.6.0-pre"
+import ..LambdaHandling.LambdaInfo
+end
+
 """
 The main entry point to construct a control-flow graph.
 """
@@ -1167,7 +1179,8 @@ function from_expr(ast::Any, callback, cbdata, opt)
 
   dfn = compute_dfn(live_res.basic_blocks)   # Compute the block depth first numbering.
   @dprintln(3,"dfn = ", dfn)
-  ret = CFG(live_res.basic_blocks, dfn)      # Create the CFG object to be returned as the dictionary of label to basic blocks and the depth first numbering.
+  bo = getBbBodyOrder(live_res.basic_blocks, dfn)
+  ret = CFG(live_res.basic_blocks, dfn, bo)  # Create the CFG object to be returned as the dictionary of label to basic blocks and the depth first numbering.
   @dprintln(2,"Dumping basic block info from_expr.")
   dump_bb(ret)
   return ret
@@ -1357,7 +1370,8 @@ function compute_dominators(bl :: CFG)
   # Their data-flow equations inspired the following concrete implementation.
 
   # Get the depth-first numering for the CFG.
-  bbs_df_order = bl.depth_first_numbering
+  #bbs_df_order = bl.depth_first_numbering
+  bbs_df_order = bl.block_order
   # Get the number of basic blocks.
   num_bb = length(bl.basic_blocks)
   assert(num_bb == length(bbs_df_order))
@@ -1423,7 +1437,8 @@ function compute_inverse_dominators(bl :: CFG)
   # Their data-flow equations inspired the following concrete implementation.
 
   # Get the depth-first numering for the CFG.
-  bbs_df_order = bl.depth_first_numbering
+  #bbs_df_order = bl.depth_first_numbering
+  bbs_df_order = bl.block_order
   # Get the number of basic blocks.
   num_bb = length(bl.basic_blocks)
   assert(num_bb == length(bbs_df_order))
@@ -1457,15 +1472,23 @@ function compute_inverse_dominators(bl :: CFG)
           bb_index = bbs_df_order[i]
           bb = bl.basic_blocks[bb_index]
 
+          @dprintln(3,"compute_inverse_dominators processing ", bb_index)
+
           if bb_index != CFG_EXIT_BLOCK
               if length(bb.succs) != 0
                   succ_array = collect(bb.succs)
+                  @dprintln(3,"succ_array = ", succ_array)
                   vb = deepcopy(dom_dict[succ_array[1].label])
+                  @dprintln(3,"First successor vb = ", vb)
                   for j = 2:length(succ_array)
+                      @dprintln(3,j, " successor vb = ", dom_dict[succ_array[j].label])
                       vb = intersect(vb, dom_dict[succ_array[j].label])
+                      @dprintln(3,"Intersect = ", vb)
                   end
                   push!(vb, bb_index)
+                  @dprintln(3,"Adding self = ", vb)
                   if vb != dom_dict[bb_index]
+                      @dprintln(3,"Difference detected so updating")
                       dom_dict[bb_index] = vb
                       change_found = true
                   end

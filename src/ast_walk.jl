@@ -283,10 +283,10 @@ function from_expr_helper(ast::Expr,
         args = from_call(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :call
         args = from_call(args, depth, callback, cbdata, top_level_number, read)
-        # TODO: catch domain IR result here
     elseif head == :call1
         args = from_call(args, depth, callback, cbdata, top_level_number, read)
-        # TODO?: tuple
+    elseif head == :foreigncall
+        args = from_call(args, depth, callback, cbdata, top_level_number, read)
     elseif head == :line
         # skip
     elseif head == :copy
@@ -339,71 +339,71 @@ function from_expr_helper(ast::Expr,
             args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
         end
     elseif head == :function
-	@dprintln(3,"in function head")
-	args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
+        @dprintln(3,"in function head")
+        args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :vcat || head == :typed_vcat || head == :hcat || head == :typed_hcat
-	@dprintln(3,"in vcat head")
-	#skip
+        @dprintln(3,"in vcat head")
+        #skip
     elseif head == :ref
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :meta
-	# ignore :meta for now. TODO: we might need to walk its args.
+        # ignore :meta for now. TODO: we might need to walk its args.
     elseif head == :comprehension || head == :vect || head == :generator
-	# args are either Expr or Symbol
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        # args are either Expr or Symbol
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :typed_comprehension
-	# args are either Expr or Symbol
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        # args are either Expr or Symbol
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :(->) || head == :(&&) || head == :(||)
-	# args are either Expr or Symbol
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        # args are either Expr or Symbol
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :(:)
-	# args are either Expr or Symbol
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        # args are either Expr or Symbol
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :const
-	dump(ast,1000)
-	# ignore :const for now.
+        dump(ast,1000)
+        # ignore :const for now.
     elseif head == :for
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head in Set([:(+=), :(/=), :(*=), :(-=)])
         args[1] = from_expr(args[1], depth, callback, cbdata, top_level_number, false, false)
         args[2] = from_expr(args[2], depth, callback, cbdata, top_level_number, false, read)
     elseif head == :if
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :comparison
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :while
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :let
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :local
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :quote
-	for i = 1:length(args)
-	    args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
-	end
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     elseif head == :simdloop
         # skip
     elseif head == :static_parameter
@@ -422,6 +422,10 @@ function from_expr_helper(ast::Expr,
         # skip
     elseif head==:continue
         # skip
+    elseif head == :llvmcall
+        for i = 1:length(args)
+            args[i] = from_expr(args[i], depth, callback, cbdata, top_level_number, false, read)
+        end
     else
         throw(string("CompilerTools.AstWalker.from_expr: unknown Expr head :", head, " in ", ast))
     end
@@ -483,7 +487,7 @@ function from_expr_helper(ast::Tuple,
     for i = 1:length(ast)
         push!(new_tt.args, from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read))
     end
-    new_tt.typ = asttyp
+    new_tt.typ = typeof(ast)
     ast = eval(new_tt)
 
     return ast
@@ -500,6 +504,18 @@ function from_expr_helper(ast::QuoteNode, depth,
     @dprintln(2,"QuoteNode type ",typeof(value))
 
     return ast
+end
+
+function from_expr_helper(ast::SimpleVector,
+                          depth,
+                          callback,
+                          cbdata::ANY,
+                          top_level_number,
+                          is_top_level,
+                          read)
+
+    new_values = [from_expr(ast[i], depth, callback, cbdata, top_level_number, false, read) for i = 1:length(ast)]
+    return Core.svec(new_values...)
 end
 
 """
@@ -523,7 +539,7 @@ function from_expr_helper(ast::ANY,
     elseif is(asttyp, LambdaInfo)
         #skip
     else
-        println(ast, " type = ", typeof(ast), " asttyp = ", asttyp)
+        println(ast, "ast = ", ast, " type = ", typeof(ast))
         throw(string("from_expr: unknown AST (", typeof(ast), ",", ast, ")"))
     end
 
