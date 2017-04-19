@@ -122,6 +122,7 @@ if VERSION >= v"0.6.0-pre"
     return_typ = lambda.code.second
     code_info = lambda.code.first
     meth_list = methods(lambda.func, lambda.sig)
+    @dprintln(3, "meth_list = ", meth_list, " ", length(meth_list.ms))
     assert(length(meth_list.ms) == 1)
     meth = meth_list.ms[1]
 
@@ -863,7 +864,7 @@ end
 
 if VERSION >= v"0.6.0-pre"
 function lambdaToLambdaVarInfo(lambda :: LambdaInfo)
-    @dprintln(3,"lambdaToLambdaVarInfo")
+    @dprintln(3,"lambdaToLambdaVarInfo = ", lambda)
     linfo = LambdaVarInfo(lambda)
     body = getBody(lambda.code.first.code, lambda.code.second)
     return linfo, body
@@ -953,11 +954,11 @@ if VERSION >= v"0.6.0-pre"
     for m in meth
       if m[1] <: Tuple && m[1].parameters[2:end] == typ.parameters[2:end]
         println("meth in _methods ", meth)
-        m = meth[1]
+        # m = meth[1]   What was this for?
         lambda = Core.Inference.func_for_method_checked(m[3], types)
         (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
         println("lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
-        return CompilerTools.Helper.LambdaInfo(ftyp, typs, Pair(ci,ty)), ty
+        return CompilerTools.Helper.LambdaInfo(eval(GlobalRef(lambda.module, lambda.name)), typs, Pair(ci,ty)), ty
       end
     end
     error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
