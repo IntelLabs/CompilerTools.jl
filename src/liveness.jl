@@ -684,7 +684,7 @@ function typeOfOpr_fixType(ret::DataType)
 end
 
 if VERSION >= v"0.6.0-pre"
-function typeOfOpr_fixType(ret::Core.BottomType)
+function typeOfOpr_fixType(ret::Core.TypeofBottom)
     return ret
 end
 end
