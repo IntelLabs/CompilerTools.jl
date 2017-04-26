@@ -116,7 +116,7 @@ end
 Retrieve the AST of the given function "func" and signature "sig" for at the given pass "level".
 """
 function getCodeAtLevel(func, sig::Tuple, level)
-  @dprintln(3, "getCodeAtLevel ", level)
+  @dprintln(3, "getCodeAtLevel ", func, " ", sig, " ", level)
   if level == PASS_MACRO 
     error("AST at macro level must be passed in, and cannot be obtained from inspecting the function itself")
   elseif level == PASS_LOWERED 
@@ -135,6 +135,7 @@ function getCodeAtLevel(func, sig::Tuple, level)
   @dprintln(3, "typeof(ast[1]) ", typeof(ast[1]))
   ast = ast[1]
   if VERSION >= v"0.6.0-pre"
+    @dprintln(3, "Return type = ", ast.second)
     t1 = ast
     ast = LambdaInfo(func, sig, t1)
   end
@@ -574,79 +575,6 @@ else
 
 end
 
-if VERSION >= v"0.6.0-pre"
-
-"""
-Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
-"""
-function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::Array{Any, 1}, per_site_opt_set)
-  mod = current_module()
-  new_func = GlobalRef(mod, new_fname)
-  real_func = GlobalRef(mod, real_fname)
-  @dprintln(3, "Create wrapper function ", new_func, " for actual function ", real_func)
-
-  #bt = backtrace() ;
-  #s = sprint(io->Base.show_backtrace(io, bt))
-  #@dprintln(3, "makeWrapperFunc backtrace ")
-  #@dprintln(3, s)
-
-  @dprintln(3, "call_sig_args = ", call_sig_args)
-  temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
-  temp_tuple = tuple(temp_typs...)
-  new_call_sig_args = Symbol[ Symbol(string("makeWrapperFuncArgument",i)) for i = 1:length(call_sig_args)]
-  new_call_sig_args_with_types = Any[ createWrapperFuncArgWithType(i, call_sig_args[i]) for i = 1:length(call_sig_args)]
-  @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
-  @dprintln(3, "new_call_sig_args_with_types = ", new_call_sig_args_with_types)
-  @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
-  lc = GlobalRef(CompilerTools.OptFramework, :lock_check)
-  gofdl = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDictLock)
-  gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
-  proc = GlobalRef(CompilerTools.OptFramework, :processFuncCall)
-  dpln = GlobalRef(CompilerTools.OptFramework, :dprintln)
-  idtc = GlobalRef(CompilerTools.OptFramework, :identical)
-  ffc = GlobalRef(CompilerTools.OptFramework, :for_false_check)
-
-  wrapper_ast = :(function $new_fname($(new_call_sig_args_with_types...))
-         #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
-         call_sig_arg_tuple = map(typeof, tuple($(new_call_sig_args...)))
-         $dpln(3,"call_sig_arg_tuple = ", call_sig_arg_tuple)
-         opt_set = $per_site_opt_set
-         fs = ($real_func, call_sig_arg_tuple, opt_set)
-         func_to_call = $lc($gofd, fs, nothing)
-         if func_to_call == nothing
-           tic()
-           $dpln(1,"wrapper real_func = ", $real_func, " type = ", typeof($real_func))
-           process_res = $proc($real_func, call_sig_arg_tuple, opt_set)
-           t = toq()
-           $dpln(1,$real_func," optimization time = ", t)
-           if process_res != nothing
-             # We did optimize it in some way we will call the optimized version.
-             $dpln(3,"processFuncCall DID optimize ", $real_func)
-             func_to_call = process_res
-           else
-             # We did not optimize it so we will call the original function.
-             $dpln(3,"processFuncCall didn't optimize ", $real_func)
-             func_to_call = $real_func
-           end # Remember this optimization result for this function/type combination.
-           $gofd[fs] = func_to_call
-         end
-
-         if VERSION >= v"0.5"
-           unlock($gofdl)
-         end
-
-         $dpln(3,"calling ", func_to_call)
-         ret = code_typed($real_func, call_sig_arg_tuple)[1].second
-         $dpln(3,"ret = ", ret)
-         eval(Expr(:call, $idtc, ret, Expr(:call, func_to_call, $(new_call_sig_args...))))
-        end)
-  @dprintln(4,"wrapper_ast = ", wrapper_ast, " type = ", typeof(wrapper_ast))
-  gOptFrameworkDict[new_func] = real_func
-  return wrapper_ast
-end
-
-else
-
 """
 Define a wrapper function with the name given by "new_func" that when called will try to optimize the "real_func" function, and run it with given parameters in "call_sig_args". The input "per_site_opt_set" can be either nothing, or a quoted Expr that refers to an array of OptPass.
 """
@@ -677,9 +605,9 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
     rettype = Expr(:call, GlobalRef(Core.Inference, :return_type), real_func, 
                 Expr(:call, GlobalRef(Core, :_apply), GlobalRef(Core, :apply_type), 
                     Expr(:call, GlobalRef(Core, :tuple), GlobalRef(Main, :Tuple)), :call_sig_arg_tuple))
-    retexpr = Expr(:call, idtc, rettype, Expr(:call, :func_to_call, new_call_sig_args...))
+    retexpr = Expr(:call, idtc, rettype, :res)
   else
-    retexpr = Expr(:call, idtc, Expr(:static_typeof, :ret), Expr(:call, :func_to_call, new_call_sig_args...))
+    retexpr = Expr(:call, idtc, Expr(:static_typeof, :ret), :res)
   end
   wrapper_ast = :(function $new_fname($(new_call_sig_args_with_types...))
          #CompilerTools.OptFramework.@dprintln(3,"new_func running ", $(new_call_sig_args...))
@@ -713,13 +641,13 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
          if 1 < 0
            ret = $real_func($(new_call_sig_args...))
          end
+         # This eval is necessary to get around the world-age issue with Julia 0.6.
+         res = eval(Expr(:call, func_to_call, $(new_call_sig_args...)))
          $retexpr
         end)
   @dprintln(4,"wrapper_ast = ", wrapper_ast, " type = ", typeof(wrapper_ast))
   gOptFrameworkDict[new_func] = real_func
   return wrapper_ast
-end
-
 end
 
 type opt_calls_insert_trampoline_state
