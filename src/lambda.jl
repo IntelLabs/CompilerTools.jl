@@ -117,14 +117,20 @@ type LambdaVarInfo
   end
 
 if VERSION >= v"0.6.0-pre"
+  function getStaticParameterValues(lambda, meth)
+    recomputed = ccall(:jl_env_from_type_intersection, Ref{SimpleVector}, (Any, Any), lambda, meth)
+    [x for x in recomputed[2]::SimpleVector]
+  end
   function LambdaVarInfo(lambda::LambdaInfo)
     @dprintln(3, "lambda = ", lambda, " ", typeof(lambda.func), " ", typeof(lambda.sig), " ", typeof(lambda.code))
     return_typ = lambda.code.second
     code_info = lambda.code.first
-    meth_list = methods(lambda.func, lambda.sig)
-    @dprintln(3, "meth_list = ", meth_list, " ", length(meth_list.ms))
-    assert(length(meth_list.ms) == 1)
-    meth = meth_list.ms[1]
+    #meth_list = methods(lambda.func, lambda.sig)
+    meth = which(lambda.func, lambda.sig)
+    #meth_list = which(lambda.func, lambda.sig)
+    #@dprintln(3, "meth_list = ", meth_list, " ", length(meth_list.ms))
+    #assert(length(meth_list.ms) == 1)
+    #meth = meth_list.ms[1]
 
     input_params = Symbol[]
     var_defs = VarDef[]
@@ -156,10 +162,8 @@ if VERSION >= v"0.6.0-pre"
     static_parameter_names = Any[ x for x in meth.sparam_syms]
 
     @dprintln(3, "lambda.sig = ", lambda.sig, " meth.sig = ", meth.sig)
-    recomputed = ccall(:jl_env_from_type_intersection, Ref{SimpleVector}, (Any, Any), lambda.sig, meth.sig)
-    static_parameter_values = [x for x in recomputed[2]::SimpleVector]
+    static_parameter_values = getStaticParameterValues(lambda.sig, meth.sig)
 
-    #static_parameter_values = Any[ x for x in lambda.sparam_vals]
     @dprintln(3, "LambdaVarInfo.sparam_vals = ", static_parameter_values)
     x = new(input_params, vararg_params, Symbol[], var_defs, static_parameter_names, static_parameter_values, return_typ, lambda)
     @dprintln(3, "LambdaVarInfo = ", x)
@@ -905,7 +909,30 @@ function setReturnType(ret_typ, li :: LambdaVarInfo)
   li.return_type = ret_typ
 end
 
-if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.6.0-pre"
+function getStaticParameterValues(lambda, meth)
+  recomputed = ccall(:jl_env_from_type_intersection, Ref{SimpleVector}, (Any, Any), lambda, meth)
+  [x for x in recomputed[2]::SimpleVector]
+end
+function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
+    throw(string("Force inference LambdaInfo in 0.6 not yet supported"))
+end
+function lambdaTypeinf(lambda :: Function, typs; optimize = true)
+#    lambdaTypeinf(typeof(lambda), typs, optimize = optimize)
+    ftyp = Tuple{typeof(lambda), typs...}
+    @dprintln(3, "lambdaTypeinf ftyp = ", ftyp, " type = ", typeof(ftyp))
+    meth = which(lambda, typs)
+    @dprintln(3, "lambdaTypeinf meth = ", meth, " type = ", typeof(meth))
+    lambda2 = Core.Inference.func_for_method_checked(meth, typs)
+    @dprintln(3, "lambdaTypeinf lambda2 = ", lambda2, " type = ", typeof(lambda2))
+    sparams = Core.svec(getStaticParameterValues(typs, lambda2.sig)...)
+    @dprintln(3, "lambdaTypeinf sparams = ", sparams, " type = ", typeof(sparams))
+    (_, ci, ty) = Core.Inference.typeinf_code(lambda2, ftyp, sparams, optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
+    @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
+    return CompilerTools.Helper.LambdaInfo(lambda, typs, Pair(ci,ty)), ty
+end
+elseif VERSION > v"0.5.0-dev+3260"
+#if VERSION > v"0.5.0-dev+3260"
 function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
     throw(string("Force inference LambdaInfo in 0.5 not yet supported"))
 end
@@ -949,16 +976,24 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name.mt = ", ftyp.name.mt)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
 if VERSION >= v"0.6.0-pre"
-    println("ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+    @dprintln(2, "ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
     meth = Base._methods_by_ftype(typ, -1, typemax(UInt))
+    @dprintln(2, "meth = ", meth)
     for m in meth
-      if m[1] <: Tuple && m[1].parameters[2:end] == typ.parameters[2:end]
-        println("meth in _methods ", meth)
-        # m = meth[1]   What was this for?
-        lambda = Core.Inference.func_for_method_checked(m[3], types)
-        (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
-        println("lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
-        return CompilerTools.Helper.LambdaInfo(eval(GlobalRef(lambda.module, lambda.name)), typs, Pair(ci,ty)), ty
+      @dprintln(3, "m = ", m, " type = ", typeof(m))
+      if m[1] <: Tuple 
+        @dprintln(3, "m[1] = ", m[1], " type = ", typeof(m[1]))
+        @dprintln(3, "m[2] = ", m[2], " type = ", typeof(m[2]))
+        @dprintln(3, "m[3] = ", m[3], " type = ", typeof(m[3]))
+        @dprintln(3, "typ = ", typ, " type = ", typeof(typ))
+        if m[1].parameters[2:end] == typ.parameters[2:end]
+          @dprintln(3, "meth in _methods ", meth)
+          # m = meth[1]   What was this for?
+          lambda = Core.Inference.func_for_method_checked(m[3], types)
+          (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
+          @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
+          return CompilerTools.Helper.LambdaInfo(eval(GlobalRef(lambda.module, lambda.name)), typs, Pair(ci,ty)), ty
+        end
       end
     end
     error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
