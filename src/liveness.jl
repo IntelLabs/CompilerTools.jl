@@ -930,7 +930,7 @@ function from_call(ast :: Expr , depth :: Int64, state :: expr_state, callback :
     if !isa(too, DataType)
       @dprintln(0, "arg type = ", too, " tootype = ", typeof(too))
     end
-    push!(arg_type_array, typeOfOpr(args[i], state.li)) 
+    push!(arg_type_array, too) 
   end
   @dprintln(3, "arg_type_array = ", arg_type_array)
   #arg_type_tuple = Tuple{arg_type_array...}
