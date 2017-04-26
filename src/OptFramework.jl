@@ -662,13 +662,10 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   #@dprintln(3, s)
 
   @dprintln(3, "call_sig_args = ", call_sig_args)
-  temp_typs = Any[ typeof(x) for x in tuple(call_sig_args...)]
-  temp_tuple = tuple(temp_typs...)
   new_call_sig_args = Symbol[ Symbol(string("makeWrapperFuncArgument",i)) for i = 1:length(call_sig_args)]
   new_call_sig_args_with_types = Any[ createWrapperFuncArgWithType(i, call_sig_args[i]) for i = 1:length(call_sig_args)]
   @dprintln(3, "new_call_sig_args = ", new_call_sig_args)
   @dprintln(3, "new_call_sig_args_with_types = ", new_call_sig_args_with_types)
-  @dprintln(3, "call_sig_arg_typs = ", temp_tuple)
   lc = GlobalRef(CompilerTools.OptFramework, :lock_check)
   gofdl = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDictLock)
   gofd = GlobalRef(CompilerTools.OptFramework, :gOptFrameworkDict)
@@ -677,7 +674,10 @@ function makeWrapperFunc(new_fname::Symbol, real_fname::Symbol, call_sig_args::A
   idtc = GlobalRef(CompilerTools.OptFramework, :identical)
 
   if VERSION >= v"0.5.0-dev+5381"
-    retexpr = Expr(:call, idtc, Expr(:call, GlobalRef(Base, :typeof), :ret), Expr(:call, :func_to_call, new_call_sig_args...))
+    rettype = Expr(:call, GlobalRef(Core.Inference, :return_type), real_func, 
+                Expr(:call, GlobalRef(Core, :_apply), GlobalRef(Core, :apply_type), 
+                    Expr(:call, GlobalRef(Core, :tuple), GlobalRef(Main, :Tuple)), :call_sig_arg_tuple))
+    retexpr = Expr(:call, idtc, rettype, Expr(:call, :func_to_call, new_call_sig_args...))
   else
     retexpr = Expr(:call, idtc, Expr(:static_typeof, :ret), Expr(:call, :func_to_call, new_call_sig_args...))
   end
