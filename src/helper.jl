@@ -37,7 +37,6 @@ export isBitArrayType, isTupleType, isStringType, isequal, hasSymbol, hash, isfu
 export getCallFunction, getCallArguments, isAssignmentNode
 
 if VERSION >= v"0.6.0-pre"
-println("v0.6")
 type LambdaInfo
   func
   sig
@@ -45,9 +44,7 @@ type LambdaInfo
 end
 export LambdaInfo
 elseif VERSION > v"0.5.0-dev+3260"
-println("v0.5")
 else
-println("v0.4")
 typealias LambdaInfo LambdaStaticData
 export LambdaInfo
 end
