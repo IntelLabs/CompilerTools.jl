@@ -38,9 +38,17 @@ export getCallFunction, getCallArguments, isAssignmentNode
 
 if VERSION >= v"0.6.0-pre"
 type LambdaInfo
-  func
+  meth :: Method
   sig
   code # :: Pair{CodeInfo}
+
+  function LambdaInfo(m :: Method, s, c)
+    new(m,s,c)
+  end
+
+  function LambdaInfo(func :: Function, s, c)
+    new(which(func,s),s,c)
+  end
 end
 export LambdaInfo
 elseif VERSION > v"0.5.0-dev+3260"

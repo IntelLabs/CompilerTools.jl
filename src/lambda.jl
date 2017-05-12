@@ -122,11 +122,13 @@ if VERSION >= v"0.6.0-pre"
     [x for x in recomputed[2]::SimpleVector]
   end
   function LambdaVarInfo(lambda::LambdaInfo)
-    @dprintln(3, "lambda = ", lambda, " ", typeof(lambda.func), " ", typeof(lambda.sig), " ", typeof(lambda.code))
+    #@dprintln(3, "lambda = ", lambda, " ", typeof(lambda.func), " ", typeof(lambda.sig), " ", typeof(lambda.code))
+    @dprintln(3, "lambda = ", lambda, " ", typeof(lambda.meth), " ", typeof(lambda.sig), " ", typeof(lambda.code))
     return_typ = lambda.code.second
     code_info = lambda.code.first
     #meth_list = methods(lambda.func, lambda.sig)
-    meth = which(lambda.func, lambda.sig)
+    meth = lambda.meth
+    #meth = which(lambda.func, lambda.sig)
     #meth_list = which(lambda.func, lambda.sig)
     #@dprintln(3, "meth_list = ", meth_list, " ", length(meth_list.ms))
     #assert(length(meth_list.ms) == 1)
@@ -910,6 +912,7 @@ function setReturnType(ret_typ, li :: LambdaVarInfo)
 end
 
 if VERSION >= v"0.6.0-pre"
+
 function getStaticParameterValues(lambda, meth)
   recomputed = ccall(:jl_env_from_type_intersection, Ref{SimpleVector}, (Any, Any), lambda, meth)
   [x for x in recomputed[2]::SimpleVector]
@@ -929,38 +932,57 @@ function lambdaTypeinf(lambda :: Function, typs; optimize = true)
     @dprintln(3, "lambdaTypeinf sparams = ", sparams, " type = ", typeof(sparams))
     (_, ci, ty) = Core.Inference.typeinf_code(lambda2, ftyp, sparams, optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
     @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
-    return CompilerTools.Helper.LambdaInfo(lambda, typs, Pair(ci,ty)), ty
+    return CompilerTools.Helper.LambdaInfo(meth, typs, Pair(ci,ty)), ty
+    #return CompilerTools.Helper.LambdaInfo(lambda, typs, Pair(ci,ty)), ty
 end
+function lambdaTypeinf(meth :: Method, typs; optimize = true)
+    @dprintln(3, "lambdaTypeinf meth = ", meth, " type = ", typeof(meth))
+    lambda = Core.Inference.func_for_method_checked(meth, typs)
+    @dprintln(3, "lambdaTypeinf lambda = ", lambda, " type = ", typeof(lambda))
+    ftyp = Tuple{getfield(lambda.sig,3)[1], typs...}
+    @dprintln(3, "lambdaTypeinf ftyp = ", ftyp, " type = ", typeof(ftyp))
+    sparams = Core.svec(getStaticParameterValues(typs, ftyp)...)
+    #sparams = Core.svec(getStaticParameterValues(typs, lambda.sig)...)
+    @dprintln(3, "lambdaTypeinf sparams = ", sparams, " type = ", typeof(sparams))
+    (_, ci, ty) = Core.Inference.typeinf_code(lambda, ftyp, sparams, optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
+    @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
+    return CompilerTools.Helper.LambdaInfo(meth, typs, Pair(ci,ty)), ty
+    #return CompilerTools.Helper.LambdaInfo(lambda, typs, Pair(ci,ty)), ty
+end
+
 elseif VERSION > v"0.5.0-dev+3260"
-#if VERSION > v"0.5.0-dev+3260"
+
 function lambdaTypeinf(lambda :: LambdaInfo, typs; optimize = true)
     throw(string("Force inference LambdaInfo in 0.5 not yet supported"))
 end
 function lambdaTypeinf(lambda :: Function, typs; optimize = true)
   lambdaTypeinf(typeof(lambda), typs, optimize = optimize)
 end
+
 else
+
 """
 Force type inference on a LambdaStaticData object.
 Return both the inferred AST that is to a "code_typed(Function, (type,...))" call,
 and the inferred return type of the input method.
 """
-function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
-  types::Any = to_tuple_type(Tuple{typs...})
-  if optimize
-    (tree, ty) = Core.Inference.typeinf(lambda, types, Core.svec(), lambda, true, true)
-  else
-    (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = false)
-  end
-  lambda.ast = tree
-  return lambda, ty
-end
+#function lambdaTypeinf(lambda :: LambdaStaticData, typs; optimize = true)
+#  types::Any = to_tuple_type(Tuple{typs...})
+#  if optimize
+#    (tree, ty) = Core.Inference.typeinf(lambda, types, Core.svec(), lambda, true, true)
+#  else
+#    (tree, ty) = Core.Inference.typeinf_uncached(lambda, types, Core.svec(), optimize = false)
+#  end
+#  lambda.ast = tree
+#  return lambda, ty
+#end
+#
+#function lambdaTypeinf(lambda :: Function, typs; optimize = true)
+#  m = methods(lambda, (typs...))
+#  assert(length(m) > 0)
+#  lambdaTypeinf(m[1].func.code, typs, optimize = optimize)
+#end
 
-function lambdaTypeinf(lambda :: Function, typs; optimize = true)
-  m = methods(lambda, (typs...))
-  assert(length(m) > 0)
-  lambdaTypeinf(m[1].func.code, typs, optimize = optimize)
-end
 end
 
 function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
@@ -976,27 +998,32 @@ function lambdaTypeinf(ftyp :: Type, typs; optimize = true)
 #    println("ftyp.name.mt = ", ftyp.name.mt)
 #    println("ftyp.name.mt.defs = ", ftyp.name.mt.defs)
 if VERSION >= v"0.6.0-pre"
-    @dprintln(2, "ftyp = ", ftyp, " typs = ", typs, " methods = ", Base.methods(ftyp))
+    @dprintln(2, "ftyp = ", ftyp, " typeof(ftyp) = ", typeof(ftyp), " typs = ", typs, " methods = ", Base.methods(ftyp))
     meth = Base._methods_by_ftype(typ, -1, typemax(UInt))
     @dprintln(2, "meth = ", meth)
-    for m in meth
-      @dprintln(3, "m = ", m, " type = ", typeof(m))
-      if m[1] <: Tuple 
-        @dprintln(3, "m[1] = ", m[1], " type = ", typeof(m[1]))
-        @dprintln(3, "m[2] = ", m[2], " type = ", typeof(m[2]))
-        @dprintln(3, "m[3] = ", m[3], " type = ", typeof(m[3]))
-        @dprintln(3, "typ = ", typ, " type = ", typeof(typ))
-        if m[1].parameters[2:end] == typ.parameters[2:end]
-          @dprintln(3, "meth in _methods ", meth)
-          # m = meth[1]   What was this for?
-          lambda = Core.Inference.func_for_method_checked(m[3], types)
-          (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
-          @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
-          return CompilerTools.Helper.LambdaInfo(eval(GlobalRef(lambda.module, lambda.name)), typs, Pair(ci,ty)), ty
-        end
-      end
-    end
-    error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
+    assert(length(meth) >= 1)
+    meth = meth[1][3]
+    return lambdaTypeinf(meth, typs, optimize=optimize)
+
+#    for m in meth
+#      @dprintln(3, "m = ", m, " type = ", typeof(m))
+#      if m[1] <: Tuple 
+#        @dprintln(3, "m[1] = ", m[1], " type = ", typeof(m[1]))
+#        @dprintln(3, "m[2] = ", m[2], " type = ", typeof(m[2]))
+#        @dprintln(3, "m[3] = ", m[3], " type = ", typeof(m[3]))
+#        @dprintln(3, "typ = ", typ, " type = ", typeof(typ))
+#        if m[1].parameters[2:end] == typ.parameters[2:end]
+#          @dprintln(3, "meth in _methods ", meth)
+#          # m = meth[1]   What was this for?
+#          lambda = Core.Inference.func_for_method_checked(m[3], types)
+#          (_, ci, ty) = Core.Inference.typeinf_code(lambda, m[1], m[2], optimize, false, Core.Inference.InferenceParams(typemax(UInt)))
+#          @dprintln(3, "lambdaTypeinf typeof(ci) = ", typeof(ci), " typeof(ty) = ", typeof(ty), " ", ty)
+#          return CompilerTools.Helper.LambdaInfo(eval(GlobalRef(lambda.module, lambda.name)), typs, Pair(ci,ty)), ty
+#        end
+#      end
+#    end
+#    error("Expected one method from call to Base._methods in lambdaTypeinf to match type ", typ, ", but none: ", meth)
+
 elseif VERSION > v"0.5.0-dev+3260"
     meth = Base._methods_by_ftype(typ, -1)
     for m in meth
