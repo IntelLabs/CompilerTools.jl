@@ -1199,6 +1199,8 @@ function from_expr_helper(ast::Expr,
         # ISSUE: will this cause precision issue, or correctness issue? I guess it is precision?
     elseif head == :llvmcall
         # Intentionally do nothing.
+    elseif head == :simdloop
+        # Intentionally do nothing.
     else
         throw(string("from_expr: unknown Expr head :", head))
     end
