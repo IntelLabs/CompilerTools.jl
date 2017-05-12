@@ -1284,7 +1284,8 @@ function from_expr_helper(ast::ANY,
     elseif isbits(asttyp)
         # addStatement(top_level, state, ast)
         # skip
-    elseif asttyp.name == Array.name
+    #elseif asttyp.name == Array.name
+    elseif asttyp <: Array
         # addStatement(top_level, state, ast)
         @dprintln(3,"Handling case of AST node that is an array. ast = ", ast, " typeof(ast) = ", asttyp)
         for i = 1:length(ast)
