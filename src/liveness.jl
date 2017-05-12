@@ -644,6 +644,7 @@ end
 function typeOfOpr(x::RHSVar, li :: LambdaVarInfo)
     @dprintln(3,"starting typeOfOpr, x = ", x)
     typ1 = getType(toLHSVar(x), li)
+    @dprintln(3,"typ1 = ", typ1)
     if isa(x, TypedVar) && x.typ != typ1
         @dprintln(2, "typeOfOpr x.typ and lambda type different")
         @dprintln(2, "x = ", x, " typ1 = ", typ1)
@@ -680,6 +681,10 @@ function typeOfOpr(x::Any, li :: LambdaVarInfo)
 end
 
 function typeOfOpr_fixType(ret::DataType)
+    return ret
+end
+
+function typeOfOpr_fixType(ret::Type)
     return ret
 end
 
@@ -1004,6 +1009,7 @@ function from_lambda(LambdaVarInfo :: LambdaVarInfo, body::ANY, callback=not_han
     body = CompilerTools.LambdaHandling.getBody(body, getReturnType(LambdaVarInfo))
   end
   @assert (isa(body, Expr)) "Expect body to be Expr, but got " * string(typeof(body))
+  @dprintln(3, "from_lambda body = ", body)
   #@dprintln(3,"liveness from_expr no_mod = ", no_mod)
   cfg = CFGs.from_lambda(body)      # Create the CFG from this lambda Expr.
   live_res = expr_state(cfg, no_mod, no_mod_cb)
