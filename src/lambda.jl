@@ -935,11 +935,12 @@ function lambdaTypeinf(lambda :: Function, typs; optimize = true)
     return CompilerTools.Helper.LambdaInfo(meth, typs, Pair(ci,ty)), ty
     #return CompilerTools.Helper.LambdaInfo(lambda, typs, Pair(ci,ty)), ty
 end
-function lambdaTypeinf(meth :: Method, typs; optimize = true)
-    @dprintln(3, "lambdaTypeinf meth = ", meth, " type = ", typeof(meth))
+function lambdaTypeinf(meth :: Method, selfftyp, typs; optimize = true)
+    @dprintln(3, "lambdaTypeinf meth = ", meth, " ftyp = ", selfftyp, " type = ", typeof(meth))
     lambda = Core.Inference.func_for_method_checked(meth, typs)
     @dprintln(3, "lambdaTypeinf lambda = ", lambda, " type = ", typeof(lambda))
-    ftyp = Tuple{getfield(lambda.sig,3)[1], typs...}
+    #ftyp = Tuple{getfield(lambda.sig,3)[1], typs...}
+    ftyp = Tuple{selfftyp, typs...}
     @dprintln(3, "lambdaTypeinf ftyp = ", ftyp, " type = ", typeof(ftyp))
     sparams = Core.svec(getStaticParameterValues(typs, ftyp)...)
     #sparams = Core.svec(getStaticParameterValues(typs, lambda.sig)...)
@@ -1003,7 +1004,7 @@ if VERSION >= v"0.6.0-pre"
     @dprintln(2, "meth = ", meth)
     assert(length(meth) >= 1)
     meth = meth[1][3]
-    return lambdaTypeinf(meth, typs, optimize=optimize)
+    return lambdaTypeinf(meth, ftyp, typs, optimize=optimize)
 
 #    for m in meth
 #      @dprintln(3, "m = ", m, " type = ", typeof(m))
