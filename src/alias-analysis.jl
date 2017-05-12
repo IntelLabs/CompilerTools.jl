@@ -445,7 +445,7 @@ function isFromBase(state, x::ANY)
 end
 
 function iselementarytype(typ::DataType)
-  (typ.name == Type.name || eltype(typ) == typ)
+  (typ <: Type || eltype(typ) == typ)
 end
 
 function iselementarytype(typ::Any)
