@@ -477,6 +477,10 @@ function setType(x :: Union{Symbol,RHSVar}, typ :: Type, li :: LambdaVarInfo)
     error("Variable ", x, " is not found in ", li)
 end
 
+function setType(x :: Expr, typ :: Type, li :: LambdaVarInfo)
+    x.typ = typ
+end
+
 """
 Returns the descriptor for a local variable.
 """
