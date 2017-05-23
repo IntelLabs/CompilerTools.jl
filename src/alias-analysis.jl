@@ -406,7 +406,7 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
 end
 
 function from_expr_inner(state, ast::RHSVar, callback, cbdata)
-    @dprintln(2, "RHSVar", ast, " :: ", typeof(ast))
+    @dprintln(2, "RHSVar ", ast, " :: ", typeof(ast))
     return lookup(state, toLHSVar(ast))
 end
 
