@@ -156,6 +156,21 @@ if VERSION >= v"0.6.0-pre"
         end
     end
 
+    @dprintln(3,"input_params = ", input_params, " input sig = ", lambda.sig)
+    @dprintln(3,"var_defs = ", var_defs)
+    for ipi = 1:length(lambda.sig)
+        ipi_typ = lambda.sig[ipi]
+        input_arg = input_params[ipi]
+        for iavd in var_defs
+            if matchVarDef(input_arg, iavd)
+                if iavd.typ != ipi_typ
+                    @dprintln(3, "Lambda input argument type for argument ", input_arg, " does not match that in the signature.  Expected ", ipi_typ, " got ", iavd.typ)
+                    iavd.typ = ipi_typ
+                end
+            end
+        end
+    end
+
     for i = 1:length(code_info.ssavaluetypes)
         vd = VarDef(emptyVarName, code_info.ssavaluetypes[i], convert(DescType, ISASSIGNED | ISASSIGNEDONCE), i-1)
         push!(var_defs, vd)
@@ -1380,6 +1395,7 @@ Eliminates unused symbols from the LambdaVarInfo var_defs.
 Takes a LambdaVarInfo to modify, the body to scan using AstWalk and an optional callback to AstWalk for custom AST types.
 """
 function eliminateUnusedLocals!(li :: LambdaVarInfo, body, AstWalkFunc = nothing)
+  @dprintln(3,"eliminateUnusedLocals! li = ", li)
   used = countVariables(body, AstWalkFunc)
   @dprintln(3,"used = ", used)
   var_defs = VarDef[]
