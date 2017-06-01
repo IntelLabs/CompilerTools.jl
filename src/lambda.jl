@@ -158,7 +158,11 @@ if VERSION >= v"0.6.0-pre"
 
     @dprintln(3,"input_params = ", input_params, " input sig = ", lambda.sig)
     @dprintln(3,"var_defs = ", var_defs)
-    for ipi = 1:length(lambda.sig)
+    arg_correction_length = length(lambda.sig)
+    if meth.isva
+        arg_correction_length = length(input_params) - 1
+    end
+    for ipi = 1:arg_correction_length
         ipi_typ = lambda.sig[ipi]
         input_arg = input_params[ipi]
         for iavd in var_defs
