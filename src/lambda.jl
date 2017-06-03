@@ -1071,7 +1071,116 @@ else
 end
 end
 
-if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.6.0-pre"
+function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkFunc = nothing)
+    @assert (length(li.escaping_vars)==0) "LambdaVarInfo has escaping variables, and cannot be converted back to LambdaInfo " * string(li)
+    lambda = li.orig_info
+    @assert (lambda != nothing) "li.orig_info is not found " * string(li)
+    @dprintln(3, "LambdaVarInfoToLambda, LambdaVarInfo = ", li, " body = ", body)
+    nparams = length(li.input_params)
+    dict = Dict{LHSVar,Any}()
+    vars = Any[nothing for i = 1:length(li.var_defs)]
+    ssas = Any[nothing for i = 1:length(li.var_defs)]
+    vars_pending = VarDef[]
+    ssas_pending = VarDef[]
+    # parameters come first
+    nvars = 0
+    nssas = 0
+    for vd in li.var_defs
+      dprintln(3, "Processing ", vd)
+      if vd.name == Symbol("#self#")
+        dprintln(3, "Found self, putting in vars[1]")
+        assert(vars[1] == nothing)
+        vars[1] = vd
+        nvars += 1
+      elseif vd.name != emptyVarName
+        dprintln(3, "Found non-empty varname")
+        nvars += 1
+        j = findfirst(li.input_params, vd.name)
+        if j > 0
+          # parameter
+          assert(vars[j + 1] == nothing)
+          vars[j+1] = vd
+          dprintln(3, "is a param, putting in slot ", j+1)
+        else
+          dprintln(3, "is NOT a param ", vd.id, " ", nparams+1)
+          # non-parameter variable
+          if vd.id > nparams+1 && vd.id <= length(vars) && [vd.id] == nothing
+            vars[vd.id] = vd
+          else # place already taken
+            push!(vars_pending, vd)
+          end
+        end
+      else # ssavalues
+        dprintln(3, "Found ssavalue")
+        nssas += 1
+        if ssas[vd.id+1] == nothing
+          ssas[vd.id+1] = vd
+        else
+          push!(ssas_pending, vd)
+        end
+      end
+    end
+    lambda.code.first.slotnames = Array(Any, nvars)
+    lambda.code.first.slottypes = Array(Any, nvars)
+    lambda.code.first.slotflags = Array(DescType, nvars)
+    @dprintln(3, "nvars = ", nvars)
+    @dprintln(3, "vars = ", vars)
+    @dprintln(3, "vars_pending = ", vars_pending)
+    @dprintln(3, "ssas = ", ssas)
+    @dprintln(3, "ssas_pending = ", ssas_pending)
+    j = 1
+    for i = 1:nvars
+      if vars[i] == nothing
+        assert(j <= length(vars_pending))
+        vars[i] = vars_pending[j]
+        j += 1
+      end
+      vd = vars[i]
+      if vd.id != i
+        # id mismatch, must replace
+        dict[toLHSVar(vd)] = TypedSlot(i, vd.typ)
+        vd.id = i
+      end
+      li.var_defs[i] = vd
+      lambda.code.first.slotnames[i] = vd.name
+      lambda.code.first.slottypes[i] = vd.typ
+      lambda.code.first.slotflags[i] = vd.desc
+    end
+    @dprintln(3, "lambda.meth.nargs = ", lambda.meth.nargs, " nparams = ", nparams)
+    lambda.meth.nargs = nparams + 1
+    # Julia may try to add a Const to this array during an optimization pass and so this can't be Array of Type.
+    #lambda.code.first.ssavaluetypes = Array(Any, nssas)
+    lambda.code.first.ssavaluetypes = nssas
+    j = 1
+    for i = 1:nssas
+      if ssas[i] == nothing
+        assert(j <= length(ssas_pending))
+        ssas[i] = ssas_pending[j]
+        j += 1
+      end
+      vd = ssas[i]
+      if vd.id != i - 1
+        dict[toLHSVar(vd)] = GenSym(i - 1)
+        vd.id = i - 1
+      end
+      li.var_defs[nvars + i] = vd
+      #lambda.code.first.ssavaluetypes[i] = vd.typ
+    end
+    lambda.code.first.inferred = true
+    body = replaceExprWithDict!(body, dict, nothing, AstWalkFunc)
+    @dprintln(3, "body = ", body)
+    #lambda.code =  ccall(:jl_compress_ast, Any, (Any,Any), lambda, body)
+    lambda.code.first.code =  body
+    lambda.code = Pair(lambda.code.first, li.return_type)
+    @dprintln(3, "lambda.code.first.slotnames = ", lambda.code.first.slotnames)
+    @dprintln(3, "lambda.code.first.slottypes = ", lambda.code.first.slottypes)
+    @dprintln(3, "lambda.code.first.slotflags = ", lambda.code.first.slotflags)
+    @dprintln(3, "lambda.code.first.ssavaluetypes = ", lambda.code.first.ssavaluetypes)
+    @dprintln(3, "LambdaVarInfoToLambda, lambda = ", lambda)
+    return lambda
+end
+elseif VERSION > v"0.5.0-dev+3260"
 function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkFunc = nothing)
     @assert (length(li.escaping_vars)==0) "LambdaVarInfo has escaping variables, and cannot be converted back to LambdaInfo " * string(li)
     lambda = li.orig_info
@@ -1257,7 +1366,7 @@ end
 
 if VERSION >= v"0.6.0-pre"
 function getBody(lambda :: LambdaInfo)
-  return getBody(lambda.first.code, lambda.second)
+  return getBody(lambda.code.first.code, lambda.code.second)
 end
 elseif VERSION > v"0.5.0-dev+3260"
 function getBody(lambda :: LambdaInfo)
