@@ -333,7 +333,89 @@ function cleanupFunction(linfo, body)
   return linfo, new_body
 end
 
-if VERSION > v"0.5.0-dev+3260"
+if VERSION >= v"0.6.0-pre"
+
+serialize_ast = false
+
+"""
+Makes sure that a newly created function is correctly present in the internal Julia method table.
+"""
+function setCode(func, arg_tuple, ast)
+  assert(isfunctionhead(ast))
+  #tfuncPresent(func, arg_tuple)
+  @dprintln(2, "setCode fields of ast")
+#  CompilerTools.Helper.print_by_field(ast)
+  @dprintln(2, "setCode fields of ast.def")
+#  CompilerTools.Helper.print_by_field(ast.def)
+
+#  info = code_typed(func, arg_tuple)[1]
+  def = ast.meth
+  meth = methods(func, arg_tuple)
+  @dprintln(2, "meth = ", meth, " type = ", typeof(meth))
+  def = meth.ms[1]
+  assert(isa(def,Method))
+  @dprintln(2, "def = ", def, " type = ", typeof(def), " ", fieldnames(def))
+  #CompilerTools.Helper.print_by_field(def)
+  defspec = def.specializations
+  @dprintln(2, "defspec = ", defspec, " type = ", typeof(defspec), " ", fieldnames(defspec))
+  #CompilerTools.Helper.print_by_field(defspec)
+  defspecfunc = defspec.func
+  @dprintln(2, "defspecfunc = ", defspecfunc, " type = ", typeof(defspecfunc), " ", fieldnames(defspecfunc))
+  #CompilerTools.Helper.print_by_field(defspecfunc)
+  mt = meth.mt
+  @dprintln(2, "mt = ", mt, " type = ", typeof(mt), " ", fieldnames(mt))
+  #CompilerTools.Helper.print_by_field(mt)
+  mtdefs = mt.defs
+  @dprintln(2, "mtdefs = ", mtdefs, " type = ", typeof(mtdefs), " ", fieldnames(mtdefs))
+  #CompilerTools.Helper.print_by_field(mtdefs)
+  mdf = mtdefs.func
+  @dprintln(2, "mdf = ", mdf, " type = ", typeof(mdf), " ", fieldnames(mdf))
+  #CompilerTools.Helper.print_by_field(mdf)
+
+  @dprintln(2, "ast slotnames: ", ast.code.first.slotnames)
+#  @dprintln(2, "setCode fields of def")
+#  CompilerTools.Helper.print_by_field(def)
+  @dprintln(2, "typeof(def.specializations) = ", typeof(def.specializations))
+
+  @dprintln(3, "ast.code.first = ", ast.code.first)
+  #CompilerTools.Helper.print_by_field(ast.code.first)
+
+  if serialize_ast
+    (tn, sfile) = mktemp()
+    serialize(sfile, ast)
+    close(sfile)
+    println("setCode for ", func, " is ", tn)
+  end
+
+  for i = 1:length(ast.code.first.slottypes)
+    ast.code.first.slottypes[i] = Any
+  end
+  @dprintln(2, "setCode ast before precompile = ", ast)
+
+  def.specializations = nothing
+  def.source = ast.code.first
+  #def.source = ast.code.first.code
+  #mt.defs.func = ast.code.first.code
+
+  #throw(string("stop here"))
+  defspecfunc.inferred = false
+  precompile(func, arg_tuple)
+
+#  info = code_typed(func, arg_tuple)[1]
+#  CompilerTools.Helper.print_by_field(info)
+  
+  @dprintln(2, "setCode fields of def after")
+#  CompilerTools.Helper.print_by_field(def)
+  @dprintln(2, "setCode fields of def.specializations.func after")
+#  CompilerTools.Helper.print_by_field(def.tfunc.func)
+
+  #@dprintln(2, def.specializations)
+  @dprintln(2, "code typed")
+  @dprintln(2, code_typed(func, arg_tuple))
+  @dprintln(2, "Done precompiling.")
+end
+
+elseif VERSION > v"0.5.0-dev+3260"
 
 serialize_ast = false
 
