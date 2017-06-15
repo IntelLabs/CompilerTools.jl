@@ -87,18 +87,19 @@ function update_node(state, v, w)
     end
   else
     # when a variable is initialized more than once, set to Unknown
-    state.locals[v] = Unknown
-    if haskey(state.revmap, w)
-      for u in state.revmap[w]
-        state.locals[u] = Unknown
-      end
-      pop!(state.revmap, w)
-    end
+    update_unknown(state, v)
   end
 end
 
 function update_unknown(state, v)
+  old = lookup(state, v)
   state.locals[v] = Unknown
+  if old > 0 && haskey(state.revmap, old)
+    for u in state.revmap[old]
+      state.locals[u] = Unknown
+    end
+    pop!(state.revmap, old)
+  end
 end
 
 function update_notarray(state, v)
