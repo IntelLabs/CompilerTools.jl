@@ -497,10 +497,10 @@ function tfuncPresent(func, tt)
   @dprintln(2, "meth_list = ", meth_list, " type = ", typeof(meth_list))
   m = meth_list[1]
   def = m.func.code
-  if is(def.tfunc, nothing)
+  if def.tfunc === nothing
     @dprintln(2, "tfunc NOT present before code_typed")
     code_typed(func, tt)
-    if is(def.tfunc, nothing) 
+    if def.tfunc === nothing
       error("tfunc still NOT present after code_typed")
     else
       @dprintln(2, "tfunc present after code_typed")
@@ -747,7 +747,7 @@ function invoke_to_call(x :: Expr, state, top_level_number, is_top_level, read)
     local args = getCallArguments(x)
 
     if isa(fun, GlobalRef)
-      if is(fun.mod, Core.Intrinsics)
+      if fun.mod === Core.Intrinsics
         return TypedExpr(x.typ, :call, GlobalRef(Base, fun.name), args...)
       end
     end
@@ -824,7 +824,7 @@ When @acc is used at a function's callsite, we use AstWalk to search for callsit
 That updated expression containing trampoline calls is then returned as the generated code from the @acc macro.
 """
 function convert_expr(per_site_opt_set, ast)
-  if is(per_site_opt_set, nothing) && length(optPasses) == 0
+  if per_site_opt_set === nothing && length(optPasses) == 0
     # skip translation since opt_set is empty
     return ast
   else
@@ -932,15 +932,15 @@ function convert_function(per_site_opt_set, opt_set, macros, ast)
 end
 
 function is_function(expr)
-  isa(expr, Expr) && (is(expr.head, :function) || is(expr.head, :(=))) && isa(expr.args[1], Expr) && is(expr.args[1].head, :call)
+  isa(expr, Expr) && expr.head === :function || expr.head === :(=) && isa(expr.args[1], Expr) && expr.args[1].head === :call
 end
 
 function is_block(expr)
-  isa(expr, Expr) && is(expr.head, :block)
+  isa(expr, Expr) && expr.head === :block
 end
 
 function is_macro(expr)
-  isa(expr, Expr) && is(expr.head, :macrocall)
+  isa(expr, Expr) && expr.head === :macrocall
 end
 
 function convert_block(per_site_opt_set, opt_set, macros, ast)
@@ -1060,9 +1060,9 @@ end
 
 function recursive_noacc(ast::Expr)
     start = 1
-    if is(ast.head, :(=))
+    if ast.head === :(=)
       start = 2
-    elseif is(ast.head, :call) && isa(ast.args[1], Symbol)  
+    elseif ast.head === :call && isa(ast.args[1], Symbol)  
       ast.args[1] = recursive_noacc(ast.args[1])
       start = 2
     end

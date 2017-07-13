@@ -104,7 +104,7 @@ function isWritten(sym :: LHSVar, rws :: ReadWriteSetType)
     end
 end
 
-typealias CallbackType Union{Function, Void}
+const CallbackType = Union{Function, Void}
 
 """
 Walk through a lambda expression.

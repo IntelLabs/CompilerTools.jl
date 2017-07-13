@@ -264,10 +264,10 @@ function from_call(state, expr :: Expr, callback, cbdata)
   @dprintln(2, "AA from_call: fun=", fun)
   fun = isa(fun, TopNode) ? fun.name : fun
   fun = isa(fun, GlobalRef) ? fun.name : fun
-  if is(fun, :reshape)
+  if (fun === :reshape)
     # assume reshape's return result to always alias its first argument
     return from_expr(state, args[1], callback, cbdata)
-  elseif is(fun, :arrayref) || is(fun, :arrayset) || is(fun, :getindex) || is(fun, :setindex!)
+  elseif (fun === :arrayref) || (fun === :arrayset) || (fun === :getindex) || (fun === :setindex!)
     # This is actually a conservative answer since arrayref might return
     # an array too, but we don't consider it as a case to handle.
     return Unknown
@@ -289,7 +289,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
           # complicated type
           if isArrayType(typ)
             # an array type!
-            if !is(alias, nothing) # more than one array as input
+            if !(alias === nothing) # more than one array as input
               alias = Unknown
             else
               # remember possible match
@@ -302,7 +302,7 @@ function from_call(state, expr :: Expr, callback, cbdata)
         end
       end
     end
-    alias = is(alias, nothing) ? Unknown : alias
+    alias = (alias === nothing) ? Unknown : alias
     if alias == Unknown
       # if we don't know the result, it could alias any input
       for exp in args
@@ -361,43 +361,43 @@ function from_expr_inner(state, ast::Expr, callback, cbdata)
     local args = ast.args
     local typ  = ast.typ
     @dprintln(2, " --> ", head)
-    if is(head, :lambda)
+    if (head === :lambda)
         return from_innerlambda(state, ast)
-    elseif is(head, :body)
+    elseif (head === :body)
         return from_body(state, ast.args, callback, cbdata)
-    elseif is(head, :(=))
+    elseif (head === :(=))
         return from_assignment(state, ast, callback, cbdata)
-    elseif is(head, :return)
+    elseif (head === :return)
         return from_return(state, ast, callback, cbdata)
-    elseif is(head, :invoke)
+    elseif (head === :invoke)
         return from_call(state, ast, callback, cbdata)
-    elseif is(head, :call)
+    elseif (head === :call)
         return from_call(state, ast, callback, cbdata)
-    elseif is(head, :call1)
+    elseif (head === :call1)
       return from_call(state, ast, callback, cbdata)
-    elseif is(head, :foreigncall)
+    elseif (head === :foreigncall)
         return from_foreigncall(state, ast, callback, cbdata)
-    elseif is(head, :method)
+    elseif (head === :method)
         # skip
-    elseif is(head, :line)
+    elseif (head === :line)
         # skip
-    elseif is(head, :new)
+    elseif (head === :new)
         # skip
-    elseif is(head, :boundscheck) || is(head, :inbounds)
+    elseif (head === :boundscheck) || (head === :inbounds)
         # skip?
-    elseif is(head, :type_goto)
+    elseif (head === :type_goto)
         # skip?
-    elseif is(head, :gotoifnot)
+    elseif (head === :gotoifnot)
         # skip
-    elseif is(head, :loophead)
+    elseif (head === :loophead)
         # skip
-    elseif is(head, :loopend)
+    elseif (head === :loopend)
         # skip
-    elseif is(head, :meta)
+    elseif (head === :meta)
         # skip
-    elseif is(head, :static_parameter)
+    elseif (head === :static_parameter)
         # skip
-    elseif is(head, :simdloop)
+    elseif (head === :simdloop)
         # skip
     else
         throw(string("from_expr: unknown Expr head :", head))
@@ -457,7 +457,7 @@ end
 
 function from_lambda(LambdaVarInfo :: LambdaVarInfo, body, liveness, callback=not_handled, cbdata :: ANY = nothing; noReAssign = false)
   local state = init_state(LambdaVarInfo, liveness, noReAssign)
-  #@dprintln(2, "AA ", isa(body, Expr), " ", is(body.head, :body)) 
+  #@dprintln(2, "AA ", isa(body, Expr), " ", (body.head === :body)) 
   for v in getLocalVariables(LambdaVarInfo)
     vtyp = getType(v, LambdaVarInfo)
     @dprintln(2, "v = ", v, " vtyp = ", vtyp)

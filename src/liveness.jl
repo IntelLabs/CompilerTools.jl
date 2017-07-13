@@ -649,9 +649,9 @@ function typeOfOpr(x::RHSVar, li :: LambdaVarInfo)
         @dprintln(2, "typeOfOpr x.typ and lambda type different")
         @dprintln(2, "x = ", x, " typ1 = ", typ1)
         @dprintln(2, "li = ", li)
-        if (x.typ <: typ1) || is(typ1, Box) 
+        if (x.typ <: typ1) || (typ1 === Box) 
             typ1 = x.typ
-        elseif (typ1 <: x.typ) || is(x.typ, Box) 
+        elseif (typ1 <: x.typ) || (x.typ === Box) 
         else
             throw(string("typeOf Opr ", x, " is incompatible with its type in lambda ", typ1))
         end

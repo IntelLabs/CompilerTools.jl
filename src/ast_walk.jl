@@ -35,7 +35,7 @@ using ..Helper
 
 # Return this value to indicate to AstWalk that you didn't process the current node
 # and that AstWalk should recursively process the given node.
-abstract ASTWALK_DIDNT_MODIFY
+abstract type ASTWALK_DIDNT_MODIFY end
 
 immutable ASTWALK_RECURSE <: ASTWALK_DIDNT_MODIFY
 end
@@ -536,7 +536,7 @@ function from_expr_helper(ast::ANY,
         @dprintln(2,"GlobalRef type ",typeof(ast.mod), " ", ast)  # GlobalRef = mod + name
     elseif isbits(asttyp)
         #skip
-    elseif is(asttyp, LambdaInfo)
+    elseif asttyp === LambdaInfo
         #skip
     else
         println(ast, "ast = ", ast, " type = ", typeof(ast))

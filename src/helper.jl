@@ -51,42 +51,24 @@ type LambdaInfo
   end
 end
 export LambdaInfo
-elseif VERSION > v"0.5.0-dev+3260"
-else
-typealias LambdaInfo LambdaStaticData
-export LambdaInfo
 end
 
-if VERSION > v"0.5.0-dev+3260"
-  if VERSION >= v"0.5.0-dev+3875"
-    typealias GenSym     SSAValue
-    export GenSym
-    if VERSION >= v"0.5.0-dev+4094"
-      immutable TopNode 
-        name :: Symbol
-      end
-      export TopNode
-    end
-  end
-typealias LHSRealVar SlotNumber
-typealias LHSVar     Union{SlotNumber, GenSym}
-typealias RHSVar     Union{SlotNumber, TypedSlot, GenSym}
-typealias TypedVar   TypedSlot
+if VERSION >= v"0.6.0-pre"
+const GenSym = SSAValue
+export GenSym
+immutable TopNode 
+  name :: Symbol
+end
+export TopNode
+const LHSRealVar = SlotNumber
+const LHSVar     = Union{SlotNumber, GenSym}
+const RHSVar     = Union{SlotNumber, TypedSlot, GenSym}
+const TypedVar   = TypedSlot
 toLHSVar(tv::TypedVar) = SlotNumber(tv.id)
 toLHSVar(tv::SlotNumber) = tv
 isequal(x :: TypedVar, y :: TypedVar) = isequal(x.id, y.id) && isequal(x.typ, y.typ)
 hash(x :: TypedVar) = hash(x.id)
 toTypedVar(id::LHSRealVar, typ::DataType) = TypedSlot(id.id, typ)
-else
-typealias LHSRealVar Symbol
-typealias LHSVar     Union{Symbol, GenSym}
-typealias RHSVar     Union{Symbol, SymbolNode, GenSym}
-typealias TypedVar   SymbolNode
-toLHSVar(x :: Symbol) = x
-toLHSVar(tv::TypedVar) = tv.name
-isequal(x :: TypedVar, y :: TypedVar) = isequal(x.name, y.name) && isequal(x.typ, y.typ)
-hash(x :: TypedVar) = hash(x.name)
-toTypedVar(id::LHSRealVar, typ::DataType) = SymbolNode(id, typ)
 end
 
 """

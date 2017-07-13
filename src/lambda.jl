@@ -57,11 +57,7 @@ const ISASSIGNEDONCE = 16
 
 const digits = Char[x for x in "0123456789" ]
 
-if VERSION >= v"0.5.0-dev+3875"
-typealias DescType UInt8
-else
-typealias DescType Int64
-end
+const DescType = UInt8
 getDefaultDesc() = convert(DescType, 0)
 
 const emptyVarName = Symbol("")
@@ -429,7 +425,7 @@ function isInputParameter(x::Union{Symbol,RHSVar}, li :: LambdaVarInfo)
             name = vd.name
         end
     end
-    return !is(name, nothing) && in(name, li.input_params)
+    return !(name === nothing) && in(name, li.input_params)
 end
 
 """
@@ -447,7 +443,7 @@ end
 Return the (fresh copy of) input parameters as array of Any, so vararg parameters are preserved.
 """
 function getInputParametersAsExpr(li :: LambdaVarInfo)
-  params = Array(Any, length(li.input_params))
+  params = Array{Any}(length(li.input_params))
   for i = 1:length(li.input_params)
     p = li.input_params[i]
     if in(p, li.vararg_params)
@@ -1121,9 +1117,9 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
         end
       end
     end
-    lambda.code.first.slotnames = Array(Any, nvars)
-    lambda.code.first.slottypes = Array(Any, nvars)
-    lambda.code.first.slotflags = Array(DescType, nvars)
+    lambda.code.first.slotnames = Array{Any}(nvars)
+    lambda.code.first.slottypes = Array{Any}(nvars)
+    lambda.code.first.slotflags = Array{DescType}(nvars)
     @dprintln(3, "nvars = ", nvars)
     @dprintln(3, "vars = ", vars)
     @dprintln(3, "vars_pending = ", vars_pending)
@@ -1150,7 +1146,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     @dprintln(3, "lambda.meth.nargs = ", lambda.meth.nargs, " nparams = ", nparams)
     lambda.meth.nargs = nparams + 1
     # Julia may try to add a Const to this array during an optimization pass and so this can't be Array of Type.
-    #lambda.code.first.ssavaluetypes = Array(Any, nssas)
+    #lambda.code.first.ssavaluetypes = Array{Any}(nssas)
     lambda.code.first.ssavaluetypes = nssas
     j = 1
     for i = 1:nssas
@@ -1230,9 +1226,9 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
         end
       end
     end
-    lambda.slotnames = Array(Any, nvars)
-    lambda.slottypes = Array(Any, nvars)
-    lambda.slotflags = Array(DescType, nvars)
+    lambda.slotnames = Array{Any}(nvars)
+    lambda.slottypes = Array{Any}(nvars)
+    lambda.slotflags = Array{DescType}(nvars)
     @dprintln(3, "nvars = ", nvars)
     @dprintln(3, "vars = ", vars)
     @dprintln(3, "vars_pending = ", vars_pending)
@@ -1259,7 +1255,7 @@ function LambdaVarInfoToLambda(li :: LambdaVarInfo, body::Array{Any,1}, AstWalkF
     @dprintln(3, "lambda.nargs = ", lambda.nargs, " nparams = ", nparams)
     lambda.nargs = nparams + 1
     # Julia may try to add a Const to this array during an optimization pass and so this can't be Array of Type.
-    lambda.ssavaluetypes = Array(Any, nssas)
+    lambda.ssavaluetypes = Array{Any}(nssas)
     j = 1
     for i = 1:nssas
       if ssas[i] == nothing
@@ -1302,7 +1298,7 @@ function createMeta(li::LambdaVarInfo)
             count+=1
         end
     end
-    gensyms = Array(Any, max_id + 1)
+    gensyms = Array{Any}(max_id + 1)
     for vd in li.var_defs
         if vd.name == emptyVarName
             gensyms[vd.id + 1] = vd.typ
