@@ -46,7 +46,7 @@ function test_liveness_1(x::Int64, y::Int64, s::Int64)
     return n;
 end
 
-ast_lv_1 = code_typed(test_liveness_1, (Int64,Int64,Int64))[1]
+ast_lv_1 = CompilerTools.Helper.LambdaInfo(test_liveness_1, (Int64,Int64,Int64), code_typed(test_liveness_1, (Int64,Int64,Int64))[1])
 # cfg_lv_1 = CompilerTools.CFGs.from_ast(ast_lv_1) :: CompilerTools.CFGs.CFG
 
 linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast_lv_1)

@@ -44,7 +44,7 @@ function test_liveness_2(x::Int64, y::Int64, z::Int64)
 	  end
 end
 
-ast_lv_2 = code_typed(test_liveness_2, (Int64,Int64,Int64))[1]
+ast_lv_2 = CompilerTools.Helper.LambdaInfo(test_liveness_2, (Int64,Int64,Int64), code_typed(test_liveness_2, (Int64,Int64,Int64))[1])
 
 linfo, body = CompilerTools.LambdaHandling.lambdaToLambdaVarInfo(ast_lv_2)
 
