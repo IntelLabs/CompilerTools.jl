@@ -640,7 +640,7 @@ function createWrapperFuncArgWithType(i, arg::Expr)
 end
 
 if VERSION >= v"0.5"
-  gOptFrameworkDictLock = ReentrantLock()
+  gOptFrameworkDictLock = Base.Threads.Mutex()
 
   function lock_check(dict, fs, n)
      lock(gOptFrameworkDictLock)
